@@ -3,6 +3,7 @@ import subprocess
 import time
 
 from .base import InferencePipeline, TaskInputs
+from .tts import MockTTS
 
 logger = logging.getLogger(__name__)
 
@@ -16,33 +17,37 @@ class MockPipeline(InferencePipeline):
     untouched.
     """
 
-    def __init__(self, sleep_seconds: int = 10):
+    def __init__(self, sleep_seconds: int = 10, tts=None):
         self.sleep_seconds = sleep_seconds
+        self.tts = tts or MockTTS()
 
     def run(self, inputs: TaskInputs):
         logger.info("mock inference: sleeping %s seconds", self.sleep_seconds)
         time.sleep(self.sleep_seconds)
 
+        # Voice-clone step: synthesize the script text. The uploaded audio is
+        # the reference timbre; the mock renders the script with an offline
+        # TTS engine so the video contains speech, not the reference itself.
+        tts_wav = self.tts.synthesize(
+            inputs.script_text,
+            inputs.audio_path,
+            inputs.work_dir / "tts_out.wav",
+        )
+
         output = inputs.work_dir / "final_avatar.mp4"
-        self._render(inputs, output)
+        self._render(inputs, tts_wav, output)
         logger.info("mock inference rendered %s", output)
         return output
 
-    def _render(self, inputs: TaskInputs, output) -> None:
-        has_audio = inputs.audio_path is not None and inputs.audio_path.exists()
-
-        # Preferred: composite the uploaded avatar image with the uploaded
-        # voice-clone audio as the video track, so the placeholder video
-        # actually plays the user's material.
+    def _render(self, inputs: TaskInputs, tts_wav, output) -> None:
+        # Preferred: composite the avatar image with the synthesized speech,
+        # producing a talking-avatar style placeholder video.
         if inputs.image_path.exists():
             cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-loop", "1", "-i", str(inputs.image_path),
+                "-i", str(tts_wav),
             ]
-            if has_audio:
-                cmd += ["-i", str(inputs.audio_path)]
-            else:
-                cmd += ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "3"]
             cmd += [
                 "-vf",
                 "scale=640:640:force_original_aspect_ratio=decrease,"

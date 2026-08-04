@@ -10,7 +10,7 @@
              └── /media  ──> MinIO (S3 兼容, 模拟 RustFS)
 
 Python AI Worker ──> Redis 队列 / boto3 下载素材
-                  ──> Mock 推理 (sleep 10s + ffmpeg 合成占位视频)
+                  ──> Mock 推理 (脚本 → 离线 TTS 语音 + 图片合成视频)
                   ──> 上传产物到 S3, 通过 Webhook 回写任务状态
 ```
 
@@ -38,7 +38,7 @@ pnpm dev
 
 1. 前端上传形象图片（必填）与克隆音频（可选），`POST /api/avatars` 直传对象存储，S3 Key 存入 MariaDB。
 2. 提交播报脚本，`POST /api/tasks` 创建任务并把 `{taskId, avatarId, scriptText, imageS3Key, voiceAudioS3Key}` 压入 Redis 队列。
-3. Worker 通过 `boto3` 下载素材到本地 `/tmp`，执行 AI 管线（当前为 Mock：睡眠 10 秒后用 ffmpeg 渲染占位视频）。
+3. Worker 通过 `boto3` 下载素材到本地 `/tmp`，执行 AI 管线（当前为 Mock：睡眠 10 秒后，用 espeak-ng 把脚本文本合成为语音，再与形象图片合成视频；上传的音频仅作为克隆音色的参考输入，不会直接混入视频）。
 4. 产物上传回对象存储，通过 `POST /api/tasks/:id/status` Webhook 将任务标记为 `completed` 并保存视频 URL。
 5. 前端轮询 `GET /api/tasks/:id`，完成后用 `<video>` 播放 S3 返回的 URL。
 
@@ -63,7 +63,7 @@ docker-compose.yml / .env.example
 
 ## 替换为真实 AI 模型
 
-AI 逻辑与 S3/Redis 编排完全解耦：
+AI 逻辑与 S3/Redis 编排完全解耦。当前 Mock 管线包含两个抽象步骤：**TTS 语音合成**（`worker/ai/tts.py`，脚本文本 → 语音，上传音频作为克隆基准）与**视频渲染**（图片 + 语音 → MP4）：
 
 1. 在 `worker/ai/` 下实现 `InferencePipeline`（参考 `MockPipeline`）。
 2. 在 `worker/ai/factory.py` 注册新管线，例如 `{"liveportrait": LivePortraitPipeline}`。
