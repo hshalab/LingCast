@@ -36,12 +36,12 @@ Docker 无法访问 Apple Silicon 的 MPS GPU，因此 **Python AI Worker 在 ma
 ```bash
 cd worker
 uv venv                     # 按 .python-version 使用 CPython 3.11
-uv pip install -r requirements.txt   # 含 PyTorch (macOS MPS wheel)、onnxruntime-silicon 等
-uv pip install -r external/GPT-SoVITS/requirements.txt  # GPT-SoVITS 官方依赖（量大，建议 conda/venv）
+uv sync --all-groups        # 安装全部依赖（含 PyTorch MPS、LivePortrait、GPT-SoVITS）
 ```
 
 > 约定：所有 Python 命令一律通过 `uv run python ...` 执行（在 `worker/` 目录下），
-> 不要直接调用系统 `python`/`python3`，否则会丢失项目依赖与版本管理。
+> 不要直接调用系统 `python`/`python3`，也不要使用 `requirements.txt`——
+> 依赖统一由 `pyproject.toml` + `uv.lock` 管理，新增依赖用 `uv add`。
 
 macOS 还需要带共享库的 FFmpeg（torchcodec 依赖，GPT-SoVITS 官方同样要求）：
 

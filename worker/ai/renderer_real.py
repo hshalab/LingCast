@@ -174,7 +174,7 @@ class LivePortraitRenderer:
             except ImportError as exc:
                 raise RuntimeError(
                     "LIVEPORTRAIT_DEVICE=mps but PyTorch is not installed. "
-                    "Install requirements.txt (or the CUDA build on Linux)."
+                    "Run `uv sync --all-groups` (or install the CUDA PyTorch build on Linux)."
                 ) from exc
             if not (getattr(torch.backends, "mps", None) and torch.backends.mps.is_available()):
                 raise RuntimeError(
