@@ -64,6 +64,11 @@ class LivePortraitRenderer:
     # Renderer interface
     # ------------------------------------------------------------------ #
     def render(self, image_path: Path, tts_wav: Path, work_dir: Path) -> Path:
+        """Animate the avatar image (blink/micro-motion template) and return a
+        silent `base_video.mp4` with the same length as the TTS audio.
+
+        Audio and lip motion are added later by Wav2LipLipSync.
+        """
         if not image_path.exists():
             raise FileNotFoundError(f"avatar image not found: {image_path}")
         if not tts_wav.exists():
@@ -127,29 +132,28 @@ class LivePortraitRenderer:
         if not wfp or not Path(wfp).exists():
             raise RuntimeError(f"LivePortrait did not produce an output video ({wfp})")
 
-        return self._mux_audio(Path(wfp), tts_wav, work_dir)
+        return self._loop_base_video(Path(wfp), tts_wav, work_dir)
 
     # ------------------------------------------------------------------ #
     # Helpers
     # ------------------------------------------------------------------ #
-    def _mux_audio(self, video: Path, tts_wav: Path, work_dir: Path) -> Path:
-        final = work_dir / "final_avatar.mp4"
+    def _loop_base_video(self, video: Path, tts_wav: Path, work_dir: Path) -> Path:
+        """Loop the animation to the TTS length; the output has no audio."""
+        final = work_dir / "base_video.mp4"
         duration = self._audio_duration(tts_wav)
         cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
             # Loop the animation until the synthesized speech ends, so a short
-            # driving template never truncates the audio.
+            # driving template covers the whole speech.
             "-stream_loop", "-1",
             "-i", str(video),
-            "-i", str(tts_wav),
-            "-map", "0:v:0", "-map", "1:a:0",
+            "-t", f"{duration + 0.2:.3f}",
+            "-an",
             "-c:v", "copy",
-            "-c:a", "aac", "-b:a", "128k",
-            "-t", f"{duration:.3f}",
             str(final),
         ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
-        logger.info("LivePortrait renderer wrote %s", final)
+        logger.info("LivePortrait renderer wrote base video %s", final)
         return final
 
     @staticmethod

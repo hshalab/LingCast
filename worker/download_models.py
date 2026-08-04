@@ -44,6 +44,10 @@ REPO_CODE = {
         "https://github.com/KwaiVGI/LivePortrait.git",
         EXTERNAL_DIR / "LivePortrait",
     ),
+    "wav2lip": (
+        "https://github.com/Rudrabha/Wav2Lip.git",
+        EXTERNAL_DIR / "Wav2Lip",
+    ),
 }
 
 HF_WEIGHTS = {
@@ -65,6 +69,14 @@ HF_WEIGHTS = {
             "insightface/models/buffalo_l/*",
         ],
         "dest": MODELS_DIR / "liveportrait",
+    },
+    "wav2lip": {
+        "repo_id": "camenduru/Wav2Lip",
+        "patterns": [
+            "checkpoints/wav2lip_gan.pth",
+            "checkpoints/s3fd-619a316812.pth",
+        ],
+        "dest": MODELS_DIR / "wav2lip",
     },
 }
 
@@ -137,6 +149,9 @@ Layout:
       liveportrait/retargeting_models/  # stitching/retargeting module
       liveportrait/landmark.onnx
       insightface/models/buffalo_l/   # face detection
+    wav2lip/
+      checkpoints/wav2lip_gan.pth     # lip-sync generator
+      checkpoints/s3fd-619a316812.pth # face detector
 
 Optional (Chinese TTS polyphone quality): download G2PWModel.zip from the
 GPT-SoVITS docs and unpack it to
@@ -200,12 +215,25 @@ def patch_g2pw_model_source() -> None:
     print(f"[gpt-sovits] patched G2PW model_source -> {local_bert}")
 
 
+def setup_wav2lip_links() -> None:
+    """Point Wav2Lip's vendored face detector at our downloaded s3fd weights."""
+    weights = MODELS_DIR / "wav2lip" / "checkpoints" / "s3fd-619a316812.pth"
+    if not weights.exists():
+        return
+    target = EXTERNAL_DIR / "Wav2Lip" / "face_detection" / "detection" / "sfd" / "s3fd.pth"
+    if target.is_symlink() or target.exists():
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.symlink_to(weights.resolve())
+    print(f"[wav2lip] linked {target} -> {weights}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--models",
         nargs="+",
-        choices=["gpt-sovits", "liveportrait", "all"],
+        choices=["gpt-sovits", "liveportrait", "wav2lip", "all"],
         default=["all"],
         help="which model weights to download",
     )
@@ -236,6 +264,8 @@ def main() -> None:
         if "gpt-sovits" in names:
             setup_gpt_sovits_links()
             patch_g2pw_model_source()
+        if "wav2lip" in names:
+            setup_wav2lip_links()
         write_models_readme()
         print(
             "\nDone. Install the real-model dependencies (see README Phase 2), then run\n"
