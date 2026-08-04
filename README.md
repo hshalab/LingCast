@@ -1,109 +1,109 @@
-# Talking Avatar Platform (口播数字人系统)
+# Talking Avatar Platform（口播数字人系统）
 
-轻量级端到端 AI 数字人合成平台：管理后台（React + shadcn-admin）、Go (Gin + GORM) API 控制面、Python AI 推理 Worker（boto3 + Redis），以及 S3 兼容对象存储层（开发环境用 MinIO 模拟 RustFS）。
+端到端 AI 口播数字人合成平台：管理后台上传**形象图片**与**克隆音色音频**、填写播报
+脚本，后台依次执行 **GPT-SoVITS 声音克隆 → LivePortrait 面部动画 → Wav2Lip 口型合成**，
+输出带声音的说话视频。
 
 ## 架构
 
 ```text
-浏览器 ──> Nginx (frontend, 唯一对外端口)
-             ├── /api    ──> Go API (Gin) ──> MariaDB / Redis / S3
+浏览器 ──> Nginx (frontend, 唯一对外端口 8080)
+             ├── /api    ──> Go API (Gin) ──> MariaDB 11 / Redis 8.2 / MinIO
              └── /media  ──> MinIO (S3 兼容, 模拟 RustFS)
 
 Python AI Worker ──> Redis 队列 / boto3 下载素材
-                  ──> Mock 推理 (脚本 → 离线 TTS 语音 + 图片合成视频)
-                  ──> 上传产物到 S3, 通过 Webhook 回写任务状态
+                  ──> 真实管线: GPT-SoVITS → LivePortrait → Wav2Lip(ONNX)
+                  ──> 上传成品到 S3, 通过 Webhook 回写任务状态
 ```
 
-MariaDB、Redis、对象存储、API、Worker 均只在内网通信，不对宿主机开放端口。
+- 前端：React + TypeScript + Vite + Tailwind + shadcn/ui（基于
+  [satnaing/shadcn-admin](https://github.com/satnaing/shadcn-admin)）。
+- 后端：Go + Gin + GORM，标准 AWS S3 SDK v2。
+- AI Worker：Python 3.11，uv 管理依赖，boto3 + Redis。
+- 存储：S3 兼容对象存储，开发环境用 MinIO 模拟 RustFS。
+- 部署：Docker Compose 编排基础设施与前端；**真实 AI Worker 在 macOS 宿主机原生
+  运行**（Apple Silicon MPS/CoreML），Docker 仅向宿主机发布 Redis 6379 与
+  MinIO 9000 两个端口。
 
-## 快速开始
+## 已实现功能
+
+- **Avatar Studio 页面**：上传形象图片（必填）+ 克隆音色音频（可选）+ 播报脚本；
+  提交后自动轮询任务状态，完成即内嵌播放成品视频。
+- **GPT-SoVITS 零样本声音克隆**：上传的音频仅作为基础音色参考，脚本文字用克隆
+  音色读出，不会把参考音频混入成片。
+- **LivePortrait 面部动画**：静态头像 → 眨眼/头部微动/耸肩的自然动画（24fps 无声
+  base 视频，铺满语音时长）。
+- **Wav2Lip(ONNX) 口型合成**：嘴部逐帧匹配语音，最终 mux 上克隆语音；ONNX +
+  CoreML 执行器，16 秒视频口型阶段约 10 秒，CPU 线程数受限（默认 4）。
+- **动画节奏可调**：驱动模板可换、播放速度/动作幅度可调（见“动画节奏”）。
+- **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
+
+## 新设备快速开始
+
+### 0. 前置依赖
+
+- Git、Docker Desktop（或 Docker Engine + Compose）
+- Python 3.11 + [uv](https://docs.astral.sh/uv/)
+- 宿主机 macOS 需要 FFmpeg：`brew install ffmpeg`
+- 前端开发需要 pnpm 10：`npm i -g pnpm@10`
+- 后端开发需要 Go 1.22+
+
+### 1. 克隆并启动 Docker 服务
 
 ```bash
+git clone <repo-url> && cd TalkingAvatarPlatform
 cp .env.example .env
 docker compose up --build
 ```
 
-然后访问 <http://localhost:8080>，左侧菜单进入 **Avatar Studio**。
+访问 <http://localhost:8080>，左侧菜单进入 **Avatar Studio**。
 
-## Phase 2：混合部署 + 真实 AI 模型（GPT-SoVITS + LivePortrait）
-
-Docker 无法访问 Apple Silicon 的 MPS GPU，因此 **Python AI Worker 在 macOS 宿主机
-原生运行**（使用 MPS），其余服务仍在 Docker 中。为此 `docker-compose.yml` 向宿主机
-发布了 Redis（6379）和对象存储（9000）两个端口，供宿主机上的 Worker 连接。
-
-### 1. 准备 Python 3.11 环境（uv 管理）
+### 2. 准备 Worker 环境（uv）
 
 ```bash
 cd worker
-uv venv                     # 按 .python-version 使用 CPython 3.11
-uv sync --all-groups        # 安装全部依赖（含 PyTorch MPS、LivePortrait、GPT-SoVITS）
+uv venv                    # 按 .python-version 使用 CPython 3.11
+uv sync --all-groups       # 安装全部依赖（含 PyTorch MPS、LivePortrait、GPT-SoVITS）
+cp .env.local.example .env.local
 ```
 
 > 约定：所有 Python 命令一律通过 `uv run python ...` 执行（在 `worker/` 目录下），
-> 不要直接调用系统 `python`/`python3`，也不要使用 `requirements.txt`——
-> 依赖统一由 `pyproject.toml` + `uv.lock` 管理，新增依赖用 `uv add`。
+> 不要直接调用系统 `python`/`python3`，也不要使用 `requirements.txt`——依赖统一由
+> `pyproject.toml` + `uv.lock` 管理，新增依赖用 `uv add`。
 
-macOS 还需要带共享库的 FFmpeg（torchcodec 依赖，GPT-SoVITS 官方同样要求）：
+### 3. 准备模型（二选一）
 
-```bash
-brew install ffmpeg
-```
-
-Linux/CUDA 生产环境请从 <https://download.pytorch.org> 安装对应的 CUDA 版 PyTorch，
-其余依赖相同。
-
-### 2. 下载模型权重（约 2.6GB）
+**方式 A：新设备下载（约 4GB，需要网络）**
 
 ```bash
 cd worker
 uv run python download_models.py --models all
 ```
 
-脚本会克隆 GPT-SoVITS / LivePortrait / Wav2Lip 代码到 `worker/external/`，并下载权重到
-`worker/models/`（两者均已 gitignore）。可用 `--dry-run` 预览文件清单；国内网络可
-设置 `HF_ENDPOINT=https://hf-mirror.com` 加速。下载完成后脚本会自动创建
-`GPT_SoVITS/pretrained_models` 下的软链接指向 `worker/models`，并在 G2PW 中文前端
-就绪后把它的 BERT 指向本地权重（首次真实 TTS 运行会自动从 ModelScope 下载 G2PW 模型，
-约 1.2GB，需要网络）。Wav2Lip 权重（`wav2lip_gan.pth`，约 416MB）同样由该脚本下载
-（`--models wav2lip`），随后脚本会把 `.pth` **本地导出为 ONNX**（约 145MB）并下载
-轻量 SCRFD 人脸检测 ONNX（约 3MB）——口型阶段完全不需要 torch。
+脚本会克隆 GPT-SoVITS / LivePortrait / Wav2Lip 代码到 `worker/external/`，下载权重
+到 `worker/models/`（两者均已 gitignore），并自动完成：创建 GPT-SoVITS 预训练软链接、
+把 wav2lip_gan.pth 本地导出为 ONNX（约 145MB）、下载 SCRFD 人脸检测 ONNX（约 3MB）。
 
-### 3. 启动宿主机 Worker
+- 国内网络加速：`HF_ENDPOINT=https://hf-mirror.com uv run python download_models.py`
+- GitHub 慢时走代理：`git config --global http.proxy http://127.0.0.1:7897`
+- 首次真实 TTS 会自动从 ModelScope 下载 G2PW 中文前端（约 1.2GB）。
+
+**方式 B：从旧设备拷贝（最快）**
+
+把旧机器的 `worker/models/` 与 `worker/external/` 两个目录整体拷贝到新机器对应
+位置即可，`download_models.py` 会自动跳过已存在的文件。
+
+### 4. 启动 Worker（真实管线）
 
 ```bash
 cd worker
-cp .env.local.example .env.local
 uv run python -u worker.py
 ```
 
-`worker.py` 启动时会自动加载 `worker/.env.local`（已导出的环境变量优先），
-无需手动 source；环境变量缺失时会提示创建该文件。
+`worker.py` 自动加载 `worker/.env.local`（已导出的环境变量优先）。`AI_MODE=real`
+时跑真实模型管线；模型缺失时会有明确提示。
 
-`AI_MODE=real` 时管线为：**GPT-SoVITS 零样本声音克隆 TTS**（参考音频 → 匹配音色的
-脚本语音）→ **LivePortrait 面部动画**（图片 + 眨眼/微动模板 → 无声 base 视频，24fps）→
-**Wav2Lip(ONNX) 音频驱动唇形同步**（base 视频 + 克隆语音 → 嘴型匹配的 `final_avatar.mp4`）。
-口型阶段默认走 ONNX Runtime（macOS 上用 CoreML 执行器，低 CPU 占用），一段 16 秒的
-视频约 10 秒完成；想对比旧实现可设 `WAV2LIP_BACKEND=torch`（很慢，仅作对照）。
-模型权重缺失时会提示运行下载脚本。`AI_MODE=mock` 保持原来的轻量模拟管线，Docker
-Worker 镜像不受影响。
-
-### 调整动画节奏
-
-面部动画由 LivePortrait 的驱动模板（`.pkl`）控制。默认模板为 `d5.pkl`（约 5 秒的
-自然说话动作）；旧默认 `d1.pkl` 只有 0.5 秒，循环播放时眨眼和耸肩会显得过快过密。
-如需微调，在 `worker/.env.local` 中设置：
-
-```bash
-LIVEPORTRAIT_DRIVING=.../assets/examples/driving/d5.pkl   # 换模板
-LIVEPORTRAIT_DRIVING_SPEED=0.5                            # 0.5 = 动作慢一倍（时间插值）
-LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度更含蓄
-```
-
-其他模板参考 `worker/external/LivePortrait/assets/examples/driving/`：
-`talking.pkl`（说话）、`wink.pkl`（眨眼）、`shy.pkl`（害羞）、`shake_face.pkl`（摇头）、
-`laugh.pkl`（笑）等。
-
-### 本地前端开发（Vite，端口 5173）
+### 5. 本地前端开发（Vite，端口 5173）
 
 ```bash
 cd frontend
@@ -114,11 +114,48 @@ pnpm dev
 
 ## 数据流
 
-1. 前端上传形象图片（必填）与克隆音频（可选），`POST /api/avatars` 直传对象存储，S3 Key 存入 MariaDB。
-2. 提交播报脚本，`POST /api/tasks` 创建任务并把 `{taskId, avatarId, scriptText, imageS3Key, voiceAudioS3Key}` 压入 Redis 队列。
-3. Worker 通过 `boto3` 下载素材到本地 `/tmp`，执行 AI 管线（当前为 Mock：睡眠 10 秒后，用 espeak-ng 把脚本文本合成为语音，再与形象图片合成视频；上传的音频仅作为克隆音色的参考输入，不会直接混入视频）。
-4. 产物上传回对象存储，通过 `POST /api/tasks/:id/status` Webhook 将任务标记为 `completed` 并保存视频 URL。
-5. 前端轮询 `GET /api/tasks/:id`，完成后用 `<video>` 播放 S3 返回的 URL。
+1. 前端上传形象图片（必填）与克隆音频（可选），`POST /api/avatars` 直传对象存储，
+   S3 Key 存入 MariaDB。
+2. 提交播报脚本，`POST /api/tasks` 创建任务并把
+   `{taskId, avatarId, scriptText, imageS3Key, voiceAudioS3Key}` 压入 Redis 队列。
+3. Worker 通过 boto3 下载素材到本地 `/tmp`，执行 AI 管线（真实或 Mock），
+   上传成品 MP4 回对象存储。
+4. Worker 通过 `POST /api/tasks/:id/status` Webhook 将任务标记为
+   `processing/completed/failed` 并保存视频 URL。
+5. 前端轮询 `GET /api/tasks/:id`，完成后用 `<video>` 播放返回的 S3 URL。
+
+## 动画节奏调整
+
+面部动画由 LivePortrait 驱动模板（`.pkl`）控制，默认 `d5.pkl`（约 5 秒自然说话
+动作；旧默认 `d1.pkl` 只有 0.5 秒，循环时眨眼/耸肩过快）。在 `worker/.env.local`
+中设置：
+
+```bash
+LIVEPORTRAIT_DRIVING=.../assets/examples/driving/d5.pkl   # 换模板
+LIVEPORTRAIT_DRIVING_SPEED=0.5                            # 0.5 = 动作慢一倍（时间插值）
+LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度更含蓄
+```
+
+可选模板见 `worker/external/LivePortrait/assets/examples/driving/`：
+`talking.pkl`（说话）、`wink.pkl`（眨眼）、`shy.pkl`（害羞）、`shake_face.pkl`（摇头）、
+`laugh.pkl`（笑）等。
+
+## 配置参数
+
+| 参数 | 位置 | 说明 |
+| --- | --- | --- |
+| `AI_MODE` | `.env` / `.env.local` | `mock`（Docker 默认）或 `real`（宿主机） |
+| `S3_*` | `.env` / `.env.local` | 对象存储端点、凭据、桶名、公网前缀 |
+| `REDIS_*` | `.env` / `.env.local` | Redis 地址、密码、队列 Key |
+| `GPT_SOVITS_*` | `worker/.env.local` | 参考音频提示词/语言、设备、端口 |
+| `LIVEPORTRAIT_DEVICE` | `worker/.env.local` | `mps`（默认）或 `cpu` |
+| `LIVEPORTRAIT_DRIVING*` | `worker/.env.local` | 模板、速度、幅度 |
+| `LIVEPORTRAIT_OUTPUT_FPS` | `worker/.env.local` | base 视频帧率（默认 24） |
+| `WAV2LIP_PROVIDER` | `worker/.env.local` | `coreml`（macOS 默认）/ `cpu` / `cuda` |
+| `WAV2LIP_THREADS` | `worker/.env.local` | ONNX 线程数上限（默认 4） |
+| `WAV2LIP_BACKEND` | `worker/.env.local` | `onnx`（默认）/ `torch`（慢，对照） |
+
+完整清单见 `worker/.env.local.example`。
 
 ## API
 
@@ -134,20 +171,30 @@ pnpm dev
 
 ```text
 backend/   Go Gin API（模型、S3、Redis、handlers、Dockerfile）
-worker/    Python 3.10 AI Worker（boto3、Redis、Mock 管线、Dockerfile）
 frontend/  shadcn-admin 前端（Avatar Studio 页面、Dockerfile、nginx.conf）
+worker/    Python 3.11 AI Worker（uv、Redis、boto3、真实/模拟管线）
+  ai/        base/mock/real 管线、TTS、渲染、ONNX 口型
+  external/  gitignore：GPT-SoVITS / LivePortrait / Wav2Lip 克隆代码
+  models/    gitignore：全部权重（GPT-SoVITS / LivePortrait / Wav2Lip ONNX）
 docker-compose.yml / .env.example
+AGENTS.md   开发交接说明（新设备快速接手）
 ```
 
-## 替换为真实 AI 模型
+## 常见问题排查
 
-AI 逻辑与 S3/Redis 编排完全解耦。当前 Mock 管线包含两个抽象步骤：**TTS 语音合成**（`worker/ai/tts.py`，脚本文本 → 语音，上传音频作为克隆基准）与**视频渲染**（图片 + 语音 → MP4）：
-
-1. 在 `worker/ai/` 下实现 `InferencePipeline`（参考 `MockPipeline`）。
-2. 在 `worker/ai/factory.py` 注册新管线，例如 `{"liveportrait": LivePortraitPipeline}`。
-3. 设置环境变量 `AI_MODE=liveportrait` 重启 Worker。
+- **任务一直 processing**：看 `worker` 日志尾部。口型阶段卡住通常是模型缺失，跑
+  `cd worker && uv run python download_models.py --models wav2lip` 补齐。
+- **GitHub/HF 下载慢**：GitHub 走代理，HF 用 `HF_ENDPOINT=https://hf-mirror.com`。
+- **TTS 启动报 NLTK 错误**：确认 `nltk>=3.8,<3.10` 已安装（首次会自动下载数据）。
+- **口型 CPU 打满/极慢**：确认 `WAV2LIP_BACKEND` 为 `onnx`（torch 版仅作对照）。
+- **视频无声音**：成品由 Wav2Lip 阶段 mux 克隆语音；若用 mock 管线且未传参考音频，
+  会以脚本离线 TTS 为音轨。
 
 ## 生产注意事项
 
-- 开发环境通过 MinIO 模拟 RustFS，并开放了 bucket 的公开读权限（便于浏览器直接播放视频）。生产环境应改用真实 RustFS 并使用私有 bucket + 预签名 URL，调整 `S3_PUBLIC_BASE_URL` 与 nginx `/media` 代理。
+- 开发环境用 MinIO 模拟 RustFS 并开放 bucket 公开读（便于浏览器播放）。生产应改用
+  真实 RustFS + 私有 bucket + 预签名 URL，调整 `S3_PUBLIC_BASE_URL` 与 nginx
+  `/media` 代理。
 - 生产环境请收紧 Worker 回调 Webhook 的鉴权。
+- Linux/CUDA 生产部署需替换 PyTorch 为 CUDA 版（见 `worker/pyproject.toml` 注释），
+  Wav2Lip ONNX 可在 NVIDIA 上用 `WAV2LIP_PROVIDER` 选择 GPU provider。

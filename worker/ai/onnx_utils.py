@@ -33,6 +33,7 @@ def build_session(model_path: Path, allow_coreml: bool = True) -> onnxruntime.In
         providers = {
             "coreml": ["CoreMLExecutionProvider", "CPUExecutionProvider"],
             "cpu": ["CPUExecutionProvider"],
+            "cuda": ["CUDAExecutionProvider", "CPUExecutionProvider"],
         }.get(override)
         if providers is None:
             logger.warning("unknown WAV2LIP_PROVIDER=%r, falling back to auto", override)
@@ -41,6 +42,8 @@ def build_session(model_path: Path, allow_coreml: bool = True) -> onnxruntime.In
         available = onnxruntime.get_available_providers()
         if allow_coreml and "CoreMLExecutionProvider" in available:
             providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+        elif "CUDAExecutionProvider" in available:
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         else:
             providers = ["CPUExecutionProvider"]
 
