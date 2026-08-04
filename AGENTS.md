@@ -20,7 +20,13 @@
   Python 用 boto3；服务间只传 S3 Key，不用本地路径。
 - 基础设施：Docker Compose；**MariaDB 11** + **Redis 8.2.2-alpine** + MinIO。
 - 部署模式：Docker 里跑基础设施 + API + 前端 + 轻量 Mock Worker；**真实 AI Worker
-  在 macOS 宿主机原生运行**（MPS/CoreML），Docker 发布 6379/9000 端口供其连接。
+  在宿主机原生运行**：macOS Apple Silicon（MPS/CoreML）、Linux NVIDIA CUDA、
+  Linux **AMD ROCm**（RX 6800 XT 等 RDNA2，见 README 对应章节）。Docker 发布
+  6379/9000 端口供宿主机 Worker 连接。
+- 依赖组（`worker/pyproject.toml`）：`models`（macOS 默认）、`cuda`、
+  `rocm`（仅 `onnxruntime-rocm`，torch 用官方 ROCm 镜像或手动装）——cuda/rocm
+  互斥，Linux 用 `--no-group` 二选一；ROCm 容器里 `uv sync` 必须加 `--inexact`
+  保留镜像预装的 torch。
 
 ## 3. 当前实现状态
 
@@ -98,8 +104,12 @@ uv run python -u worker.py          # 真实管线，AI_MODE=real
   首次 TTS 会自动下载 NLTK 数据。
 - **onnxruntime**：macOS 用官方 wheel（`onnxruntime>=1.17`），不要装
   `onnxruntime-silicon`（1.16.3 的命名空间包不完整）。
+- **onnxruntime-rocm 与 onnxruntime 互斥**：Linux x86_64 装 rocm 组时需
+  `--no-group cuda`；反之亦然，二者都提供 `onnxruntime` 包。
 - **口型别用 torch 后端**：`WAV2LIP_BACKEND` 默认 onnx；torch 版在 Apple Silicon
   上要 8 分钟且打满 CPU，仅作对照。
+- **ROCm 上口型走 CPU 兜底**：`WAV2LIP_PROVIDER=rocm` 时若 LSTM 算子不在 ROCm EP
+  支持集内会自动逐节点回退 CPU，不影响结果。
 - **G2PW 中文前端**：首次真实 TTS 会自动从 ModelScope 下载（约 1.2GB），需要网络。
 - **ffmpeg**：宿主机需 `brew install ffmpeg`（torchcodec/GPT-SoVITS 依赖）。
 - **任务卡在 processing**：先看 worker 日志尾部；口型阶段卡住多半是用了旧 torch

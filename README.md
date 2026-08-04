@@ -21,9 +21,9 @@ Python AI Worker ──> Redis 队列 / boto3 下载素材
 - 后端：Go + Gin + GORM，标准 AWS S3 SDK v2。
 - AI Worker：Python 3.11，uv 管理依赖，boto3 + Redis。
 - 存储：S3 兼容对象存储，开发环境用 MinIO 模拟 RustFS。
-- 部署：Docker Compose 编排基础设施与前端；**真实 AI Worker 在 macOS 宿主机原生
-  运行**（Apple Silicon MPS/CoreML），Docker 仅向宿主机发布 Redis 6379 与
-  MinIO 9000 两个端口。
+- 部署：Docker Compose 编排基础设施与前端；**真实 AI Worker 在宿主机原生运行**
+  （macOS Apple Silicon 用 MPS/CoreML，Linux 用 NVIDIA CUDA 或 AMD ROCm），
+  Docker 仅向宿主机发布 Redis 6379 与 MinIO 9000 两个端口。
 
 ## 已实现功能
 
@@ -112,6 +112,55 @@ pnpm install
 pnpm dev
 ```
 
+## Linux + AMD Radeon 部署（ROCm，如 RX 6800 XT）
+
+6800 XT 是 RDNA2（gfx1030），ROCm 6.x / 7.x 均支持。两种方式任选：
+
+**方式 A：官方 ROCm PyTorch 容器（推荐，torch 已预装）**
+
+```bash
+docker run -it --rm --network=host --ipc=host \
+  --device=/dev/kfd --device=/dev/dri --group-add video \
+  -v /path/to/TalkingAvatarPlatform:/workspace -w /workspace/worker \
+  rocm/pytorch:rocm7.14_ubuntu24.04_py3.13_pytorch_release_2.12.0 bash
+```
+
+容器内（Python 3.13，torch 2.12 ROCm 已就绪）：
+
+```bash
+pip install uv ffmpeg        # 容器通常缺 uv 与 ffmpeg
+uv sync --all-groups --no-group cuda --python python3 --inexact
+cp .env.local.example .env.local
+uv run python -u worker.py
+```
+
+> `--inexact` 很重要：镜像预装的 torch 不在 lock 里，不加这个参数 `uv sync`
+> 会把 torch 剪掉。`--network=host` 让容器直接访问宿主机的 Redis/MinIO。
+
+**方式 B：裸机 Ubuntu + ROCm**
+
+```bash
+cd worker
+uv sync --all-groups --no-group cuda
+uv pip install torch torchvision torchaudio \
+  --index-url https://download.pytorch.org/whl/rocm6.3
+# 以后每次 uv sync 都要加 --inexact，否则上面手动装的 torch 会被移除
+```
+
+验证：`uv run python -c "import torch; print(torch.cuda.is_available(), torch.version.hip)"`
+
+**Worker 环境变量（`worker/.env.local`）**
+
+```bash
+AI_MODE=real
+GPT_SOVITS_DEVICE=cuda
+LIVEPORTRAIT_DEVICE=cuda
+WAV2LIP_PROVIDER=rocm    # ROCm EP 不支持 LSTM 时会自动逐算子回退 CPU，不影响正确性
+```
+
+> 如果 ROCm EP 在你的卡上有问题，`WAV2LIP_PROVIDER=cpu` 同样可用（CPU 推理本身
+> 就有 35fps+）。首次真实 TTS 会自动从 ModelScope 下载 G2PW 中文前端（约 1.2GB）。
+
 ## 数据流
 
 1. 前端上传形象图片（必填）与克隆音频（可选），`POST /api/avatars` 直传对象存储，
@@ -148,10 +197,11 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 | `S3_*` | `.env` / `.env.local` | 对象存储端点、凭据、桶名、公网前缀 |
 | `REDIS_*` | `.env` / `.env.local` | Redis 地址、密码、队列 Key |
 | `GPT_SOVITS_*` | `worker/.env.local` | 参考音频提示词/语言、设备、端口 |
-| `LIVEPORTRAIT_DEVICE` | `worker/.env.local` | `mps`（默认）或 `cpu` |
+| `GPT_SOVITS_DEVICE` | `worker/.env.local` | `mps`（macOS 默认）/ `cuda`（Linux CUDA 或 ROCm） |
+| `LIVEPORTRAIT_DEVICE` | `worker/.env.local` | `mps`（macOS 默认）/ `cuda`（Linux）/ `cpu` |
 | `LIVEPORTRAIT_DRIVING*` | `worker/.env.local` | 模板、速度、幅度 |
 | `LIVEPORTRAIT_OUTPUT_FPS` | `worker/.env.local` | base 视频帧率（默认 24） |
-| `WAV2LIP_PROVIDER` | `worker/.env.local` | `coreml`（macOS 默认）/ `cpu` / `cuda` |
+| `WAV2LIP_PROVIDER` | `worker/.env.local` | `coreml`（macOS 默认）/ `rocm`（AMD）/ `cuda` / `cpu` |
 | `WAV2LIP_THREADS` | `worker/.env.local` | ONNX 线程数上限（默认 4） |
 | `WAV2LIP_BACKEND` | `worker/.env.local` | `onnx`（默认）/ `torch`（慢，对照） |
 

@@ -1,5 +1,8 @@
-"""Device detection for the hybrid worker (Apple Silicon MPS / NVIDIA CUDA /
-CPU fallback)."""
+"""Device detection for the hybrid worker.
+
+Priority: explicit override -> cuda (NVIDIA CUDA or AMD ROCm, both exposed as
+``torch.cuda``) -> mps (Apple Silicon) -> cpu.
+"""
 
 import os
 
@@ -11,6 +14,9 @@ def detect_device(forced: str | None = None) -> str:
     """
     if forced:
         forced = forced.strip().lower()
+        # ROCm builds expose the CUDA API; treat "hip" as an alias.
+        if forced == "hip":
+            forced = "cuda"
         if forced in {"cuda", "mps", "cpu"}:
             return forced
         raise ValueError(f"unsupported device {forced!r} (choose 'cuda', 'mps' or 'cpu')")
@@ -21,6 +27,8 @@ def detect_device(forced: str | None = None) -> str:
         return "cpu"
 
     if torch.cuda.is_available():
+        if getattr(torch.version, "hip", None):
+            print(f"[hardware] AMD ROCm backend detected (HIP {torch.version.hip})")
         return "cuda"
 
     mps = getattr(torch.backends, "mps", None)
@@ -33,3 +41,12 @@ def detect_device(forced: str | None = None) -> str:
 def device_from_env(prefix: str) -> str:
     """Read a per-model device override, e.g. GPT_SOVITS_DEVICE / LIVEPORTRAIT_DEVICE."""
     return detect_device(os.environ.get(f"{prefix}_DEVICE"))
+
+
+def rocm_available() -> bool:
+    """True when the installed PyTorch was built for AMD ROCm."""
+    try:
+        import torch
+    except ImportError:
+        return False
+    return bool(getattr(torch.version, "hip", None)) and torch.cuda.is_available()

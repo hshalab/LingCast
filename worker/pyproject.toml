@@ -2,7 +2,7 @@
 name = "talking-avatar-worker"
 version = "0.1.0"
 description = "Talking Avatar Platform AI worker (GPT-SoVITS voice clone + LivePortrait face animation)"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10,<3.14"
 dependencies = [
     # Base worker (also what the lightweight Docker mock worker installs).
     "boto3>=1.34,<2",
@@ -15,8 +15,16 @@ dependencies = [
 [dependency-groups]
 # Real-model deps (GPT-SoVITS + LivePortrait). Install on the macOS host with:
 #   uv sync --all-groups
-# Linux/CUDA production: add the CUDA PyTorch build from download.pytorch.org
-# after `uv sync --all-groups`.
+# Linux production:
+#   NVIDIA:   uv sync --all-groups --no-group rocm
+#             uv pip install torch torchvision torchaudio \
+#               --index-url https://download.pytorch.org/whl/cu126
+#   AMD ROCm: uv sync --all-groups --no-group cuda   (onnxruntime-rocm from the
+#             rocm group below). PyTorch is NOT in the rocm group: use an
+#             official ROCm PyTorch image (rocm/pytorch) or
+#               uv pip install torch torchvision torchaudio \
+#                 --index-url https://download.pytorch.org/whl/rocm6.3
+#             (keep `--inexact` on later uv sync runs so it survives).
 models = [
     # PyTorch stack (Apple Silicon MPS wheels on macOS)
     "torch>=2.2; sys_platform == 'darwin'",
@@ -36,7 +44,6 @@ models = [
     # onnxruntime-silicon is avoided: its 1.16.3 wheel ships an incomplete
     # `onnxruntime` namespace package (no InferenceSession).
     "onnxruntime>=1.17; sys_platform != 'linux' or platform_machine != 'x86_64'",
-    "onnxruntime-gpu>=1.17; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "scikit-image>=0.22",
     "albumentations>=1.4",
     "pykalman>=0.9.7",
@@ -83,6 +90,21 @@ models = [
     "pydantic<=2.10.6",
     "ctranslate2>=4.0,<5",
     "av>=11",
+]
+
+# NVIDIA GPU runtime (Linux x86_64). Keep separate from `rocm`: the two groups
+# both provide the `onnxruntime` package and must not be installed together.
+#   uv sync --all-groups --no-group rocm
+cuda = [
+    "onnxruntime-gpu>=1.17; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+# AMD Radeon runtime (Linux x86_64, ROCm 6.x; RDNA2 like RX 6800 XT is gfx1030).
+# Installs ROCm PyTorch wheels from download.pytorch.org (see [tool.uv.sources])
+# plus onnxruntime-rocm, which replaces the plain onnxruntime package.
+#   uv sync --all-groups --no-group cuda
+rocm = [
+    "onnxruntime-rocm>=1.20; sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
 
 [tool.uv]
