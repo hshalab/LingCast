@@ -196,6 +196,7 @@ class GPTSoVITSTTS:
         )
 
         self._wait_until_ready()
+        self.api_url = f"http://127.0.0.1:{self.port}"
 
     def _wait_until_ready(self, interval: float = 3.0) -> None:
         deadline = time.monotonic() + self.server_timeout

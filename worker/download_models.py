@@ -145,6 +145,60 @@ worker/external/GPT-SoVITS/GPT_SoVITS/text/G2PWModel.
     )
 
 
+def setup_gpt_sovits_links() -> None:
+    """Point GPT-SoVITS's default relative paths at our downloaded weights.
+
+    Several GPT-SoVITS components (e.g. the G2PW Chinese frontend) reference
+    GPT_SoVITS/pretrained_models/... relatively. Symlinks make those resolve
+    to worker/models without duplicating gigabytes of weights.
+    """
+    weights = MODELS_DIR / "gpt-sovits"
+    if not weights.exists():
+        return
+    repo = EXTERNAL_DIR / "GPT-SoVITS"
+    pretrained = repo / "GPT_SoVITS" / "pretrained_models"
+    pretrained.mkdir(parents=True, exist_ok=True)
+    for name in (
+        "chinese-hubert-base",
+        "chinese-roberta-wwm-ext-large",
+        "gsv-v2final-pretrained",
+    ):
+        target = pretrained / name
+        if target.is_symlink() or target.exists():
+            continue
+        try:
+            target.symlink_to(weights / name, target_is_directory=True)
+            print(f"[gpt-sovits] linked {target} -> {weights / name}")
+        except FileExistsError:
+            pass
+
+
+def patch_g2pw_model_source() -> None:
+    """Make the auto-downloaded G2PW frontend reuse our local BERT weights."""
+    config = EXTERNAL_DIR / "GPT-SoVITS" / "GPT_SoVITS" / "text" / "G2PWModel" / "config.py"
+    if not config.exists():
+        print(
+            "[gpt-sovits] G2PWModel not present yet; it is auto-downloaded from "
+            "ModelScope on the first real TTS run (or download it manually)."
+        )
+        return
+    source = config.read_text(encoding="utf-8")
+    if "worker/models/gpt-sovits" in source:
+        return
+    local_bert = MODELS_DIR / "gpt-sovits" / "chinese-roberta-wwm-ext-large"
+    if not local_bert.exists():
+        return
+    lines = [
+        "model_source = "
+        + repr(str(local_bert))
+        if line.startswith("model_source")
+        else line
+        for line in source.splitlines()
+    ]
+    config.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"[gpt-sovits] patched G2PW model_source -> {local_bert}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -178,6 +232,9 @@ def main() -> None:
         download_weights(name, dry_run=args.dry_run)
 
     if not args.dry_run:
+        if "gpt-sovits" in names:
+            setup_gpt_sovits_links()
+            patch_g2pw_model_source()
         write_models_readme()
         print(
             "\nDone. Install the real-model dependencies (see README Phase 2), then run\n"

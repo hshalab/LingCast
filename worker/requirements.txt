@@ -22,6 +22,9 @@ tyro>=0.8
 onnx>=1.16
 onnxruntime>=1.17; sys_platform != "darwin"
 onnxruntime-silicon>=1.16; sys_platform == "darwin"
+# GPT-SoVITS's torchaudio loads reference audio via torchcodec (requires
+# system FFmpeg shared libs, e.g. `brew install ffmpeg` on macOS).
+torchcodec>=0.15
 scikit-image>=0.22
 albumentations>=1.4
 pykalman>=0.9.7

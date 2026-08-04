@@ -40,6 +40,12 @@ uv pip install -r requirements.txt   # 含 PyTorch (macOS MPS wheel)、onnxrunti
 uv pip install -r external/GPT-SoVITS/requirements.txt  # GPT-SoVITS 官方依赖（量大，建议 conda/venv）
 ```
 
+macOS 还需要带共享库的 FFmpeg（torchcodec 依赖，GPT-SoVITS 官方同样要求）：
+
+```bash
+brew install ffmpeg
+```
+
 Linux/CUDA 生产环境请从 <https://download.pytorch.org> 安装对应的 CUDA 版 PyTorch，
 其余依赖相同。
 
@@ -52,7 +58,10 @@ python download_models.py --models all
 
 脚本会克隆 GPT-SoVITS / LivePortrait 代码到 `worker/external/`，并下载权重到
 `worker/models/`（两者均已 gitignore）。可用 `--dry-run` 预览文件清单；国内网络可
-设置 `HF_ENDPOINT=https://hf-mirror.com` 加速。
+设置 `HF_ENDPOINT=https://hf-mirror.com` 加速。下载完成后脚本会自动创建
+`GPT_SoVITS/pretrained_models` 下的软链接指向 `worker/models`，并在 G2PW 中文前端
+就绪后把它的 BERT 指向本地权重（首次真实 TTS 运行会自动从 ModelScope 下载 G2PW 模型，
+约 1.2GB，需要网络）。
 
 ### 3. 启动宿主机 Worker
 
