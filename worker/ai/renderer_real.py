@@ -85,7 +85,7 @@ class LivePortraitRenderer:
         except ImportError as exc:
             raise RuntimeError(
                 "LivePortrait code is missing or its dependencies are not installed. "
-                "Run: python worker/download_models.py --models all, then install "
+                "Run: cd worker && uv run python download_models.py --models all, then install "
                 "requirements (see README Phase 2)."
             ) from exc
 
@@ -201,5 +201,5 @@ class LivePortraitRenderer:
                 "LivePortrait model weights are missing:\n  "
                 + "\n  ".join(missing)
                 + "\n\nDownload them with:\n"
-                "  python worker/download_models.py --models liveportrait"
+                "  cd worker && uv run python download_models.py --models liveportrait"
             )

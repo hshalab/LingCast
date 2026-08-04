@@ -40,6 +40,9 @@ uv pip install -r requirements.txt   # 含 PyTorch (macOS MPS wheel)、onnxrunti
 uv pip install -r external/GPT-SoVITS/requirements.txt  # GPT-SoVITS 官方依赖（量大，建议 conda/venv）
 ```
 
+> 约定：所有 Python 命令一律通过 `uv run python ...` 执行（在 `worker/` 目录下），
+> 不要直接调用系统 `python`/`python3`，否则会丢失项目依赖与版本管理。
+
 macOS 还需要带共享库的 FFmpeg（torchcodec 依赖，GPT-SoVITS 官方同样要求）：
 
 ```bash

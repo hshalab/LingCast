@@ -16,11 +16,12 @@ Layout (both are gitignored):
       liveportrait/base_models|retargeting_models|landmark.onnx
       insightface/models/buffalo_l/
 
-Usage:
-  python download_models.py --models all            # code + weights
-  python download_models.py --models liveportrait   # only LivePortrait
-  python download_models.py --dry-run               # show what would download
-  HF_ENDPOINT=https://hf-mirror.com python download_models.py   # CN mirror
+Usage (run from the worker directory so `uv` picks up worker/.python-version):
+  cd worker
+  uv run python download_models.py --models all                 # code + weights
+  uv run python download_models.py --models liveportrait        # only LivePortrait
+  uv run python download_models.py --dry-run                    # show what would download
+  HF_ENDPOINT=https://hf-mirror.com uv run python download_models.py   # CN mirror
 """
 
 import argparse
@@ -123,7 +124,7 @@ def write_models_readme() -> None:
 
 Pretrained weights for the hybrid real-model worker. Regenerate with:
 
-    python worker/download_models.py --models all
+    cd worker && uv run python download_models.py --models all
 
 Layout:
 

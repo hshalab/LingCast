@@ -236,7 +236,7 @@ class GPTSoVITSTTS:
                 "GPT-SoVITS model weights are missing:\n  "
                 + "\n  ".join(str(self.models_dir / m) for m in missing)
                 + "\n\nDownload them with:\n"
-                "  python worker/download_models.py --models gpt-sovits"
+                "  cd worker && uv run python download_models.py --models gpt-sovits"
             )
 
     def _write_config(self) -> Path:
@@ -244,7 +244,8 @@ class GPTSoVITSTTS:
         if not repo_config.exists():
             raise RuntimeError(
                 f"GPT-SoVITS repo config not found at {repo_config}. "
-                "Clone the repo with: python worker/download_models.py --models all"
+                "Clone the repo with: "
+                "cd worker && uv run python download_models.py --models all"
             )
 
         with repo_config.open(encoding="utf-8") as fh:
