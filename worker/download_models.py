@@ -4,6 +4,8 @@
 Fetches:
   - GPT-SoVITS  (code: RVC-Boss/GPT-SoVITS, weights: lj1995/GPT-SoVITS)
   - LivePortrait (code: KwaiVGI/LivePortrait, weights: KwaiVGI/LivePortrait HF)
+  - Wav2Lip ONNX (weights: camenduru/Wav2Lip .pth, then exported to .onnx
+    locally; face detector: scrfd_2.5g from zhangziliang04/wav2lip-onnx)
 
 Layout (both are gitignored):
   worker/external/            cloned inference code
@@ -152,6 +154,8 @@ Layout:
     wav2lip/
       checkpoints/wav2lip_gan.pth     # lip-sync generator
       checkpoints/s3fd-619a316812.pth # face detector
+      checkpoints/wav2lip_gan.onnx    # exported from the .pth (fast ONNX path)
+      scrfd/scrfd_2.5g_bnkps.onnx     # ONNX face detector (no torch needed)
 
 Optional (Chinese TTS polyphone quality): download G2PWModel.zip from the
 GPT-SoVITS docs and unpack it to
@@ -228,6 +232,82 @@ def setup_wav2lip_links() -> None:
     print(f"[wav2lip] linked {target} -> {weights}")
 
 
+def export_wav2lip_onnx() -> None:
+    """Export the downloaded wav2lip_gan.pth to ONNX for fast CPU/CoreML runs.
+
+    The PyTorch Wav2Lip stage is pathologically slow on Apple Silicon (MPS
+    LSTM) and pegs every CPU core. The same weights exported to ONNX run at
+    real-time speed through onnxruntime (CoreML EP preferred). This reuses the
+    .pth already on disk, so no extra weight download is needed.
+    """
+    import sys
+    import torch
+
+    pth = MODELS_DIR / "wav2lip" / "checkpoints" / "wav2lip_gan.pth"
+    out = MODELS_DIR / "wav2lip" / "checkpoints" / "wav2lip_gan.onnx"
+    if out.exists():
+        print(f"[wav2lip] onnx already present at {out}")
+        return
+    if not pth.exists():
+        raise RuntimeError(
+            f"{pth} not found - download it first with:\n"
+            "  uv run python download_models.py --models wav2lip"
+        )
+
+    repo = EXTERNAL_DIR / "Wav2Lip"
+    if not (repo / "models" / "wav2lip.py").exists():
+        raise RuntimeError(
+            "Wav2Lip inference code is missing - run without --no-code:\n"
+            "  uv run python download_models.py --models wav2lip"
+        )
+    sys.path.insert(0, str(repo))
+    from models.wav2lip import Wav2Lip
+
+    print(f"[wav2lip] exporting {pth.name} -> {out.name} (takes ~1 min)")
+    model = Wav2Lip()
+    state = torch.load(str(pth), map_location="cpu", weights_only=False)["state_dict"]
+    model.load_state_dict({k.replace("module.", ""): v for k, v in state.items()})
+    model.eval()
+    torch.onnx.export(
+        model,
+        (torch.randn(1, 1, 80, 16), torch.randn(1, 6, 96, 96)),
+        str(out),
+        export_params=True,
+        opset_version=10,
+        input_names=["mel_spectrogram", "video_frames"],
+        output_names=["predicted_frames"],
+        dynamic_axes={
+            "mel_spectrogram": {0: "batch_size"},
+            "video_frames": {0: "batch_size"},
+        },
+        # Torch 2.9+ defaults to the new dynamo exporter, which needs
+        # onnxscript; the legacy exporter needs no extra dependency.
+        dynamo=False,
+    )
+    print(f"[wav2lip] onnx ready at {out} ({out.stat().st_size / 1e6:.0f} MB)")
+
+
+def download_scrfd() -> None:
+    """Fetch the SCRFD-2.5G ONNX face detector used by the ONNX lip-sync stage."""
+    import requests
+
+    dest = MODELS_DIR / "wav2lip" / "scrfd" / "scrfd_2.5g_bnkps.onnx"
+    if dest.exists():
+        print(f"[wav2lip] scrfd already present at {dest}")
+        return
+    url = os.environ.get(
+        "SCRFD_URL",
+        "https://raw.githubusercontent.com/zhangziliang04/wav2lip-onnx/"
+        "master/insightface_func/models/antelope/scrfd_2.5g_bnkps.onnx",
+    )
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[wav2lip] downloading SCRFD face detector -> {dest}")
+    resp = requests.get(url, timeout=120)
+    resp.raise_for_status()
+    dest.write_bytes(resp.content)
+    print(f"[wav2lip] scrfd ready at {dest} ({dest.stat().st_size / 1e6:.1f} MB)")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -264,8 +344,10 @@ def main() -> None:
         if "gpt-sovits" in names:
             setup_gpt_sovits_links()
             patch_g2pw_model_source()
-        if "wav2lip" in names:
-            setup_wav2lip_links()
+    if "wav2lip" in names:
+        setup_wav2lip_links()
+        export_wav2lip_onnx()
+        download_scrfd()
         write_models_readme()
         print(
             "\nDone. Install the real-model dependencies (see README Phase 2), then run\n"

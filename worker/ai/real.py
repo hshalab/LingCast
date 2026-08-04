@@ -2,6 +2,7 @@
 animation). Same InferencePipeline interface as the mock pipeline."""
 
 import logging
+import os
 import time
 
 from .base import InferencePipeline, TaskInputs
@@ -15,12 +16,19 @@ class RealPipeline(InferencePipeline):
         # (e.g. inside the lightweight Docker worker).
         from .renderer_real import LivePortraitRenderer
         from .tts_real import GPTSoVITSTTS
-        from .lipsync_real import Wav2LipLipSync
+        from .lipsync_onnx import Wav2LipOnnxLipSync
 
         self.sleep_seconds = sleep_seconds
         self.tts = tts or GPTSoVITSTTS()
         self.renderer = renderer or LivePortraitRenderer()
-        self.lipsync = lipsync or Wav2LipLipSync()
+        backend = os.environ.get("WAV2LIP_BACKEND", "onnx").strip().lower()
+        if backend == "torch":
+            from .lipsync_real import Wav2LipLipSync
+
+            self.lipsync = lipsync or Wav2LipLipSync()
+            logger.warning("WAV2LIP_BACKEND=torch is slow on Apple Silicon; ONNX is the default")
+        else:
+            self.lipsync = lipsync or Wav2LipOnnxLipSync()
 
     def run(self, inputs: TaskInputs):
         if self.sleep_seconds:

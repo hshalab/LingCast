@@ -1,28 +1,26 @@
-"""Audio-driven lip sync via Wav2Lip.
+"""Audio-driven lip sync via ONNX Wav2Lip (no torch at inference time).
 
-Wav2Lip takes a silent talking-head video plus a speech WAV and replaces the
-mouth region frame by frame so it matches the audio. This class wraps the
-official PyTorch implementation (Rudrabha/Wav2Lip) with a modern-torch
-compatible loader.
+Replaces the PyTorch Wav2Lip stage, which was pathologically slow on Apple
+Silicon (MPS LSTM) and saturated every CPU core. The generator runs as a
+converted `wav2lip_gan.onnx` and face detection uses SCRFD-2.5G ONNX, so both
+steps execute through onnxruntime (CoreML EP preferred on macOS).
 
-Device strategy: prefer MPS on Apple Silicon, fall back to CPU automatically.
-Face detection always runs on CPU for maximum compatibility; only the Wav2Lip
-model itself is placed on MPS/CUDA.
-
-Note: Wav2Lip's LSTM runs pathologically slow on PyTorch's MPS backend, so the
-default device is CPU (the model is small; CPU inference is stable and fast
-enough). Set WAV2LIP_DEVICE=mps/cuda only to experiment.
+Model layout (created by download_models.py):
+  worker/models/wav2lip/
+    checkpoints/wav2lip_gan.onnx   # exported from wav2lip_gan.pth
+    scrfd/scrfd_2.5g_bnkps.onnx    # face detector
 """
 
 import logging
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
-import torch
+
+from .face_detect_onnx import ScrfdFaceDetector
+from .onnx_utils import build_session
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +28,8 @@ WORKER_ROOT = Path(__file__).resolve().parent.parent
 
 MEL_STEP_SIZE = 16
 IMG_SIZE = 96
-# Wav2Lip mel-spectrogram parameters (must match the trained model).
+
+# Wav2Lip mel-spectrogram parameters (must match the trained model exactly).
 SAMPLE_RATE = 16000
 N_FFT = 800
 HOP_SIZE = 200
@@ -38,54 +37,53 @@ WIN_SIZE = 800
 N_MELS = 80
 FMIN = 55
 FMAX = 7600
+PREEMPHASIS = 0.97
+REF_LEVEL_DB = 20.0
+MIN_LEVEL_DB = -100.0
+MAX_ABS_VALUE = 4.0
 
 
-class Wav2LipLipSync:
+class Wav2LipOnnxLipSync:
     """Replace the mouth region of a base video with audio-driven lip motion."""
 
     def __init__(
         self,
-        repo_dir: Path | None = None,
         models_dir: Path | None = None,
         checkpoint: Path | None = None,
-        s3fd_path: Path | None = None,
-        device: str | None = None,
-        wav2lip_batch_size: int = 32,
-        face_det_batch_size: int = 16,
+        scrfd_path: Path | None = None,
+        wav2lip_batch_size: int = 8,
         pads: tuple = (0, 10, 0, 0),
         fps: float | None = None,
+        det_size: tuple[int, int] = (320, 320),
+        face_sample_interval: int | None = None,
     ):
-        self.repo_dir = repo_dir or Path(
-            os.environ.get("WAV2LIP_REPO", WORKER_ROOT / "external" / "Wav2Lip")
-        )
         self.models_dir = models_dir or Path(
             os.environ.get("WAV2LIP_MODELS_DIR", WORKER_ROOT / "models" / "wav2lip")
         )
         self.checkpoint = Path(
             checkpoint
-            or os.environ.get("WAV2LIP_CHECKPOINT")
-            or self._resolve_weight("wav2lip_gan.pth")
+            or os.environ.get("WAV2LIP_ONNX")
+            or self.models_dir / "checkpoints" / "wav2lip_gan.onnx"
         )
-        self.s3fd_path = Path(
-            s3fd_path
-            or os.environ.get("WAV2LIP_S3FD")
-            or self._resolve_weight("s3fd-619a316812.pth")
+        self.scrfd_path = Path(
+            scrfd_path
+            or os.environ.get("WAV2LIP_SCRFD")
+            or self.models_dir / "scrfd" / "scrfd_2.5g_bnkps.onnx"
         )
-        self.device = device or os.environ.get("WAV2LIP_DEVICE") or "cpu"
         self.wav2lip_batch_size = wav2lip_batch_size
-        self.face_det_batch_size = face_det_batch_size
         self.pads = tuple(pads)
         self.fps = fps
-        self._model = None
-        self._model_device = None
-
-    def _resolve_weight(self, name: str) -> Path:
-        """Accept weights under models/wav2lip/checkpoints/ or models/wav2lip/."""
-        for base in (self.models_dir / "checkpoints", self.models_dir):
-            candidate = base / name
-            if candidate.exists():
-                return candidate
-        return self.models_dir / "checkpoints" / name
+        self.det_size = det_size
+        # LivePortrait avatars are near-static talking heads; running SCRFD on
+        # every frame is wasteful. Detect every N frames and reuse the box
+        # (with smoothing) for the frames in between. 1 disables sampling.
+        self.face_sample_interval = (
+            face_sample_interval
+            if face_sample_interval is not None
+            else int(os.environ.get("WAV2LIP_FACE_SAMPLE_INTERVAL", "5"))
+        )
+        self._session = None
+        self._detector = None
 
     # ------------------------------------------------------------------ #
     # Public API
@@ -98,22 +96,18 @@ class Wav2LipLipSync:
             raise FileNotFoundError(f"TTS audio not found: {tts_wav}")
         if not base_video.exists():
             raise FileNotFoundError(f"base video not found: {base_video}")
-
         self._check_models()
-        self._prepare_repo()
 
         frames, video_fps = self._read_frames(base_video)
         fps = self.fps or video_fps or 25.0
-        logger.info("Wav2Lip: %s frames @ %.2f fps", len(frames), fps)
+        logger.info("Wav2Lip(onnx): %s frames @ %.2f fps", len(frames), fps)
 
         mel_chunks = self._mel_chunks(tts_wav, fps)
-        logger.info("Wav2Lip: %s mel chunks from %s", len(mel_chunks), tts_wav.name)
+        logger.info("Wav2Lip(onnx): %s mel chunks from %s", len(mel_chunks), tts_wav.name)
         frames = frames[: len(mel_chunks)]
         if not frames:
-            raise RuntimeError("Wav2Lip: no video frames to process")
+            raise RuntimeError("Wav2Lip(onnx): no video frames to process")
 
-        model = self._load_model()
-        device = self._model_device
         face_det_results = self._face_detect(frames)
         frame_h, frame_w = frames[0].shape[:2]
 
@@ -144,29 +138,33 @@ class Wav2LipLipSync:
 
             if len(img_batch) >= self.wav2lip_batch_size:
                 batch_no += 1
-                logger.info("Wav2Lip inference batch %d/%d", batch_no, total_batches)
+                logger.info(
+                    "Wav2Lip(onnx): inference batch %d/%d (%.0f%%)",
+                    batch_no,
+                    total_batches,
+                    100.0 * batch_no / total_batches,
+                )
                 self._run_batch(
-                    model, device, img_batch, mel_batch, frame_batch, coords_batch, writer
+                    img_batch, mel_batch, frame_batch, coords_batch, writer
                 )
                 img_batch, mel_batch, frame_batch, coords_batch = [], [], [], []
 
         if img_batch:
             batch_no += 1
-            logger.info("Wav2Lip inference batch %d/%d", batch_no, total_batches)
-            self._run_batch(
-                model, device, img_batch, mel_batch, frame_batch, coords_batch, writer
-            )
+            logger.info("Wav2Lip(onnx): final batch %d/%d", batch_no, total_batches)
+            self._run_batch(img_batch, mel_batch, frame_batch, coords_batch, writer)
         writer.release()
 
         final = work_dir / "final_avatar.mp4"
         self._mux_audio(raw_video, tts_wav, final)
-        logger.info("Wav2Lip wrote %s", final)
+        logger.info("Wav2Lip(onnx) wrote %s", final)
         return final
 
     # ------------------------------------------------------------------ #
-    # Inference internals (mirrors the official inference.py)
+    # Inference internals
     # ------------------------------------------------------------------ #
-    def _run_batch(self, model, device, img_batch, mel_batch, frame_batch, coords_batch, writer) -> None:
+    def _run_batch(self, img_batch, mel_batch, frame_batch, coords_batch, writer) -> None:
+        session = self._session or self._load_model()
         img_batch = np.asarray(img_batch)
         mel_batch = np.asarray(mel_batch)
 
@@ -175,19 +173,27 @@ class Wav2LipLipSync:
         img_batch = np.concatenate((img_masked, img_batch), axis=3) / 255.0
         mel_batch = np.reshape(mel_batch, [len(mel_batch), mel_batch.shape[1], mel_batch.shape[2], 1])
 
-        img_t = torch.FloatTensor(np.transpose(img_batch, (0, 3, 1, 2))).to(device)
-        mel_t = torch.FloatTensor(np.transpose(mel_batch, (0, 3, 1, 2))).to(device)
-
-        with torch.no_grad():
-            pred = model(mel_t, img_t)
-
-        pred = pred.cpu().numpy().transpose(0, 2, 3, 1) * 255.0
+        feed = {
+            "mel_spectrogram": np.transpose(mel_batch, (0, 3, 1, 2)).astype(np.float32),
+            "video_frames": np.transpose(img_batch, (0, 3, 1, 2)).astype(np.float32),
+        }
+        pred = session.run(None, feed)[0]
+        pred = pred.transpose(0, 2, 3, 1) * 255.0
         for p, f, c in zip(pred, frame_batch, coords_batch):
             y1, y2, x1, x2 = c
             p = cv2.resize(p.astype(np.uint8), (x2 - x1, y2 - y1))
             f[y1:y2, x1:x2] = p
             writer.write(f)
 
+    def _load_model(self):
+        if self._session is None:
+            self._session = build_session(self.checkpoint)
+            logger.info("Wav2Lip ONNX model loaded via %s", self._session.get_providers())
+        return self._session
+
+    # ------------------------------------------------------------------ #
+    # Preprocessing
+    # ------------------------------------------------------------------ #
     @staticmethod
     def _read_frames(video: Path) -> tuple[list, float]:
         cap = cv2.VideoCapture(str(video))
@@ -203,20 +209,28 @@ class Wav2LipLipSync:
 
     @staticmethod
     def _mel_chunks(wav_path: Path, fps: float) -> list[np.ndarray]:
+        """Compute mel chunks exactly like the official Wav2Lip audio.py."""
+        from scipy import signal as scipy_signal
         import librosa
 
         wav, _ = librosa.load(str(wav_path), sr=SAMPLE_RATE, mono=True)
-        mel = librosa.feature.melspectrogram(
-            y=wav,
-            sr=SAMPLE_RATE,
-            n_fft=N_FFT,
-            hop_length=HOP_SIZE,
-            win_length=WIN_SIZE,
-            n_mels=N_MELS,
-            fmin=FMIN,
-            fmax=FMAX,
+        # Same preemphasis as Wav2Lip training.
+        wav = scipy_signal.lfilter([1, -PREEMPHASIS], [1], wav)
+        stft = librosa.stft(
+            y=wav, n_fft=N_FFT, hop_length=HOP_SIZE, win_length=WIN_SIZE
         )
-        mel = librosa.power_to_db(mel, ref=np.max)
+        mel_basis = librosa.filters.mel(
+            sr=SAMPLE_RATE, n_fft=N_FFT, n_mels=N_MELS, fmin=FMIN, fmax=FMAX
+        )
+        amp = np.dot(mel_basis, np.abs(stft))
+        min_level = np.exp(MIN_LEVEL_DB / 20.0 * np.log(10.0))
+        db = 20.0 * np.log10(np.maximum(min_level, amp)) - REF_LEVEL_DB
+        # Symmetric normalization to [-4, 4] (allow_clipping_in_normalization).
+        mel = np.clip(
+            (2.0 * MAX_ABS_VALUE) * ((db - MIN_LEVEL_DB) / (-MIN_LEVEL_DB)) - MAX_ABS_VALUE,
+            -MAX_ABS_VALUE,
+            MAX_ABS_VALUE,
+        )
         if np.isnan(mel).sum() > 0:
             raise ValueError(
                 "Wav2Lip: mel spectrogram contains NaN. "
@@ -236,21 +250,18 @@ class Wav2LipLipSync:
         return chunks
 
     def _face_detect(self, frames: list) -> list:
-        import face_detection
-
-        det_device = "cuda" if self._model_device == "cuda" else "cpu"
-        detector = face_detection.FaceAlignment(
-            face_detection.LandmarksType._2D, flip_input=False, device=det_device
-        )
-        predictions = []
-        for i in range(0, len(frames), self.face_det_batch_size):
-            predictions.extend(
-                detector.get_detections_for_batch(np.array(frames[i : i + self.face_det_batch_size]))
+        if self._detector is None:
+            self._detector = ScrfdFaceDetector(
+                self.scrfd_path, det_size=self.det_size
             )
+        interval = max(1, self.face_sample_interval)
+        sample_idx = list(range(0, len(frames), interval))
+        sample_frames = [frames[i] for i in sample_idx]
+        sample_boxes = self._detector.detect_batch(sample_frames)
 
         pady1, pady2, padx1, padx2 = self.pads
-        results = []
-        for rect, image in zip(predictions, frames):
+        results: list = []
+        for rect, image in zip(sample_boxes, sample_frames):
             if rect is None:
                 raise RuntimeError(
                     "Wav2Lip: face not detected in a base-video frame. "
@@ -264,9 +275,18 @@ class Wav2LipLipSync:
 
         boxes = np.array(results)
         boxes = self._smoothen_boxes(boxes, T=5)
+        if interval > 1:
+            logger.info(
+                "Wav2Lip(onnx): face detection sampled every %d frames (%d/%d)",
+                interval,
+                len(sample_idx),
+                len(frames),
+            )
         return [
             [frames[i][y1:y2, x1:x2], (y1, y2, x1, x2)]
-            for i, (x1, y1, x2, y2) in enumerate(boxes)
+            for i, (x1, y1, x2, y2) in enumerate(
+                boxes[i // interval] for i in range(len(frames))
+            )
         ]
 
     @staticmethod
@@ -280,68 +300,19 @@ class Wav2LipLipSync:
         return boxes
 
     # ------------------------------------------------------------------ #
-    # Model / repo management
+    # Model management
     # ------------------------------------------------------------------ #
-    def _load_model(self):
-        if self._model is not None:
-            return self._model
-
-        sys.path.insert(0, str(self.repo_dir))
-        from models.wav2lip import Wav2Lip
-
-        attempts = ["cpu"]
-        if self.device != "cpu":
-            attempts.insert(0, self.device)
-
-        last_err: Exception | None = None
-        for dev in attempts:
-            try:
-                model = Wav2Lip()
-                state = torch.load(
-                    str(self.checkpoint), map_location=dev, weights_only=False
-                )["state_dict"]
-                new_s = {k.replace("module.", ""): v for k, v in state.items()}
-                model.load_state_dict(new_s)
-                model.to(dev).eval()
-                # Sanity forward pass to catch unsupported ops early.
-                with torch.no_grad():
-                    model(
-                        torch.zeros(1, 1, N_MELS, MEL_STEP_SIZE, device=dev),
-                        torch.zeros(1, 6, IMG_SIZE, IMG_SIZE, device=dev),
-                    )
-                self._model = model
-                self._model_device = dev
-                logger.info("Wav2Lip model loaded on %s", dev)
-                return model
-            except Exception as exc:
-                last_err = exc
-                logger.warning("Wav2Lip failed on device %s: %s", dev, exc)
-
-        raise RuntimeError(f"Wav2Lip could not run on any device: {last_err}")
-
-    def _prepare_repo(self) -> None:
-        target = self.repo_dir / "face_detection" / "detection" / "sfd" / "s3fd.pth"
-        if not target.exists() and self.s3fd_path.exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.symlink_to(self.s3fd_path.resolve())
-        if not target.exists():
-            raise RuntimeError(
-                "Wav2Lip face detector weights (s3fd) are missing at "
-                f"{target}\nDownload them with:\n"
-                "  cd worker && uv run python download_models.py --models wav2lip"
-            )
-
     def _check_models(self) -> None:
         missing = [
             str(p)
-            for p in (self.checkpoint, self.s3fd_path)
+            for p in (self.checkpoint, self.scrfd_path)
             if not Path(p).exists()
         ]
         if missing:
             raise RuntimeError(
-                "Wav2Lip model weights are missing:\n  "
+                "Wav2Lip ONNX model weights are missing:\n  "
                 + "\n  ".join(missing)
-                + "\n\nDownload them with:\n"
+                + "\n\nGenerate/download them with:\n"
                 "  cd worker && uv run python download_models.py --models wav2lip"
             )
 

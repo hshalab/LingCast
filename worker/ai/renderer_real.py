@@ -50,7 +50,7 @@ class LivePortraitRenderer:
             )
         )
         self.device = device or device_from_env("LIVEPORTRAIT") or "cpu"
-        self.output_fps = output_fps or int(os.environ.get("LIVEPORTRAIT_OUTPUT_FPS", "25"))
+        self.output_fps = output_fps or int(os.environ.get("LIVEPORTRAIT_OUTPUT_FPS", "24"))
         self.half = (
             half
             if half is not None
@@ -148,8 +148,10 @@ class LivePortraitRenderer:
             "-stream_loop", "-1",
             "-i", str(video),
             "-t", f"{duration + 0.2:.3f}",
+            "-r", str(self.output_fps),
             "-an",
-            "-c:v", "copy",
+            "-c:v", "libx264", "-preset", "veryfast",
+            "-pix_fmt", "yuv420p",
             str(final),
         ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)

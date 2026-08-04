@@ -59,13 +59,14 @@ cd worker
 uv run python download_models.py --models all
 ```
 
-脚本会克隆 GPT-SoVITS / LivePortrait 代码到 `worker/external/`，并下载权重到
+脚本会克隆 GPT-SoVITS / LivePortrait / Wav2Lip 代码到 `worker/external/`，并下载权重到
 `worker/models/`（两者均已 gitignore）。可用 `--dry-run` 预览文件清单；国内网络可
 设置 `HF_ENDPOINT=https://hf-mirror.com` 加速。下载完成后脚本会自动创建
 `GPT_SoVITS/pretrained_models` 下的软链接指向 `worker/models`，并在 G2PW 中文前端
 就绪后把它的 BERT 指向本地权重（首次真实 TTS 运行会自动从 ModelScope 下载 G2PW 模型，
-约 1.2GB，需要网络）。Wav2Lip 权重（`wav2lip_gan.pth` + `s3fd.pth`，约 460MB）
-同样由该脚本下载（`--models wav2lip`）。
+约 1.2GB，需要网络）。Wav2Lip 权重（`wav2lip_gan.pth`，约 416MB）同样由该脚本下载
+（`--models wav2lip`），随后脚本会把 `.pth` **本地导出为 ONNX**（约 145MB）并下载
+轻量 SCRFD 人脸检测 ONNX（约 3MB）——口型阶段完全不需要 torch。
 
 ### 3. 启动宿主机 Worker
 
@@ -79,8 +80,10 @@ uv run python -u worker.py
 无需手动 source；环境变量缺失时会提示创建该文件。
 
 `AI_MODE=real` 时管线为：**GPT-SoVITS 零样本声音克隆 TTS**（参考音频 → 匹配音色的
-脚本语音）→ **LivePortrait 面部动画**（图片 + 眨眼/微动模板 → 无声 base 视频）→
-**Wav2Lip 音频驱动唇形同步**（base 视频 + 克隆语音 → 嘴型匹配的 `final_avatar.mp4`）。
+脚本语音）→ **LivePortrait 面部动画**（图片 + 眨眼/微动模板 → 无声 base 视频，24fps）→
+**Wav2Lip(ONNX) 音频驱动唇形同步**（base 视频 + 克隆语音 → 嘴型匹配的 `final_avatar.mp4`）。
+口型阶段默认走 ONNX Runtime（macOS 上用 CoreML 执行器，低 CPU 占用），一段 16 秒的
+视频约 10 秒完成；想对比旧实现可设 `WAV2LIP_BACKEND=torch`（很慢，仅作对照）。
 模型权重缺失时会提示运行下载脚本。`AI_MODE=mock` 保持原来的轻量模拟管线，Docker
 Worker 镜像不受影响。
 
