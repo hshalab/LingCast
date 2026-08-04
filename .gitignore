@@ -14,6 +14,8 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+worker/models/
+worker/external/
 
 # Node / frontend
 frontend/node_modules/

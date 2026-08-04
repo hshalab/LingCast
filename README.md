@@ -25,7 +25,49 @@ docker compose up --build
 
 然后访问 <http://localhost:8080>，左侧菜单进入 **Avatar Studio**。
 
-本地前端开发（Vite，端口 5173）：
+## Phase 2：混合部署 + 真实 AI 模型（GPT-SoVITS + LivePortrait）
+
+Docker 无法访问 Apple Silicon 的 MPS GPU，因此 **Python AI Worker 在 macOS 宿主机
+原生运行**（使用 MPS），其余服务仍在 Docker 中。为此 `docker-compose.yml` 向宿主机
+发布了 Redis（6379）和对象存储（9000）两个端口，供宿主机上的 Worker 连接。
+
+### 1. 准备 Python 3.11 环境（uv 管理）
+
+```bash
+cd worker
+uv venv                     # 按 .python-version 使用 CPython 3.11
+uv pip install -r requirements.txt   # 含 PyTorch (macOS MPS wheel)、onnxruntime-silicon 等
+uv pip install -r external/GPT-SoVITS/requirements.txt  # GPT-SoVITS 官方依赖（量大，建议 conda/venv）
+```
+
+Linux/CUDA 生产环境请从 <https://download.pytorch.org> 安装对应的 CUDA 版 PyTorch，
+其余依赖相同。
+
+### 2. 下载模型权重（约 2.6GB）
+
+```bash
+cd worker
+python download_models.py --models all
+```
+
+脚本会克隆 GPT-SoVITS / LivePortrait 代码到 `worker/external/`，并下载权重到
+`worker/models/`（两者均已 gitignore）。可用 `--dry-run` 预览文件清单；国内网络可
+设置 `HF_ENDPOINT=https://hf-mirror.com` 加速。
+
+### 3. 启动宿主机 Worker
+
+```bash
+cd worker
+cp .env.local.example .env.local
+set -a && . .env.local && set +a
+python -u worker.py
+```
+
+`AI_MODE=real` 时管线为：**GPT-SoVITS 零样本声音克隆 TTS**（参考音频 → 匹配音色的
+脚本语音）→ **LivePortrait 面部动画**（图片 + 语音 → 口播视频）。模型权重缺失时会
+提示运行下载脚本。`AI_MODE=mock` 保持原来的轻量模拟管线，Docker Worker 镜像不受影响。
+
+### 本地前端开发（Vite，端口 5173）
 
 ```bash
 cd frontend

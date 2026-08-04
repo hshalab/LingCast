@@ -20,7 +20,8 @@ logger = logging.getLogger("worker")
 
 
 def load_config() -> dict:
-    addr = os.environ.get("REDIS_ADDR", "redis:6379")
+    # Hybrid deployment: REDIS_URL (host worker) overrides REDIS_ADDR (docker).
+    addr = os.environ.get("REDIS_URL") or os.environ.get("REDIS_ADDR", "redis:6379")
     host, _, port = addr.partition(":")
     return {
         "redis_host": host,

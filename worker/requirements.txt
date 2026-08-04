@@ -1,3 +1,28 @@
+# --- Base dependencies (always installed) ---
 boto3>=1.34,<2
 redis>=5,<7
 requests>=2.31,<3
+PyYAML>=6.0
+
+# --- Real-model inference (Phase 2: GPT-SoVITS + LivePortrait) ---
+# PyTorch is installed on the macOS host (MPS wheels). For Linux/CUDA
+# production install the CUDA build from download.pytorch.org instead
+# (see README "Phase 2"). The platform markers keep the Docker mock worker
+# image light while giving the hybrid host worker everything it needs.
+torch>=2.2; sys_platform == "darwin"
+torchaudio>=2.2; sys_platform == "darwin"
+huggingface_hub>=0.23
+numpy>=1.26,<2
+scipy>=1.11,<1.15
+soundfile>=0.12
+opencv-python>=4.9
+imageio>=2.34
+imageio-ffmpeg>=0.5
+tyro>=0.8
+onnx>=1.16
+onnxruntime>=1.17; sys_platform != "darwin"
+onnxruntime-silicon>=1.16; sys_platform == "darwin"
+scikit-image>=0.22
+albumentations>=1.4
+pykalman>=0.9.7
+matplotlib>=3.8

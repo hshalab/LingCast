@@ -22,3 +22,11 @@ class InferencePipeline(ABC):
     @abstractmethod
     def run(self, inputs: TaskInputs) -> Path:
         """Run inference and return the output MP4 path."""
+
+
+class Renderer(ABC):
+    """Contract for the face-animation step: image + synthesized speech -> MP4."""
+
+    @abstractmethod
+    def render(self, image_path: Path, tts_wav: Path, work_dir: Path) -> Path:
+        """Render the final talking-avatar MP4."""

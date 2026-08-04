@@ -24,6 +24,10 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     command: ["sh", "-c", "exec redis-server --appendonly yes $${REDIS_PASSWORD:+--requirepass $$REDIS_PASSWORD}"]
+    # Exposed for the hybrid deployment: the Python AI Worker runs natively on
+    # the macOS host (MPS) and must reach Redis via localhost.
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -40,6 +44,10 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    # Exposed for the hybrid deployment: the host-native worker needs the
+    # S3-compatible endpoint at localhost:9000.
+    ports:
+      - "${MINIO_HOST_PORT:-9000}:9000"
     volumes:
       - minio-data:/data
     healthcheck:
