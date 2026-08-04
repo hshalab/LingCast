@@ -61,17 +61,13 @@ class Wav2LipLipSync:
         )
         self.checkpoint = Path(
             checkpoint
-            or os.environ.get(
-                "WAV2LIP_CHECKPOINT",
-                self.models_dir / "checkpoints" / "wav2lip_gan.pth",
-            )
+            or os.environ.get("WAV2LIP_CHECKPOINT")
+            or self._resolve_weight("wav2lip_gan.pth")
         )
         self.s3fd_path = Path(
             s3fd_path
-            or os.environ.get(
-                "WAV2LIP_S3FD",
-                self.models_dir / "checkpoints" / "s3fd-619a316812.pth",
-            )
+            or os.environ.get("WAV2LIP_S3FD")
+            or self._resolve_weight("s3fd-619a316812.pth")
         )
         self.device = device or os.environ.get("WAV2LIP_DEVICE") or detect_device()
         self.wav2lip_batch_size = wav2lip_batch_size
@@ -80,6 +76,14 @@ class Wav2LipLipSync:
         self.fps = fps
         self._model = None
         self._model_device = None
+
+    def _resolve_weight(self, name: str) -> Path:
+        """Accept weights under models/wav2lip/checkpoints/ or models/wav2lip/."""
+        for base in (self.models_dir / "checkpoints", self.models_dir):
+            candidate = base / name
+            if candidate.exists():
+                return candidate
+        return self.models_dir / "checkpoints" / name
 
     # ------------------------------------------------------------------ #
     # Public API
