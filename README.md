@@ -71,9 +71,11 @@ uv run python download_models.py --models all
 ```bash
 cd worker
 cp .env.local.example .env.local
-set -a && . .env.local && set +a
 uv run python -u worker.py
 ```
+
+`worker.py` 启动时会自动加载 `worker/.env.local`（已导出的环境变量优先），
+无需手动 source；环境变量缺失时会提示创建该文件。
 
 `AI_MODE=real` 时管线为：**GPT-SoVITS 零样本声音克隆 TTS**（参考音频 → 匹配音色的
 脚本语音）→ **LivePortrait 面部动画**（图片 + 语音 → 口播视频）。模型权重缺失时会

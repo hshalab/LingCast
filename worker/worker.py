@@ -18,6 +18,44 @@ logging.basicConfig(
 )
 logger = logging.getLogger("worker")
 
+WORKER_DIR = Path(__file__).resolve().parent
+
+REQUIRED_ENV = ["S3_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET"]
+
+
+def _load_local_env(env_file: Path | None = None) -> None:
+    """Load worker/.env.local if present.
+
+    Values already set in the real environment always win, so docker-compose
+    and exported vars are never overwritten.
+    """
+    env_file = env_file or WORKER_DIR / ".env.local"
+    if not env_file.exists():
+        return
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip("\"'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def _check_required_env() -> None:
+    missing = [k for k in REQUIRED_ENV if not os.environ.get(k)]
+    if not missing:
+        return
+    print(
+        "Missing required environment variables: " + ", ".join(missing) + "\n"
+        "The worker loads worker/.env.local automatically on startup.\n"
+        "Create it once with:\n"
+        "  cd worker && cp .env.local.example .env.local\n"
+        "Existing environment variables take precedence over .env.local."
+    )
+    raise SystemExit(1)
+
 
 def load_config() -> dict:
     # Hybrid deployment: REDIS_URL (host worker) overrides REDIS_ADDR (docker).
@@ -75,6 +113,8 @@ def process_task(
 
 
 def main() -> None:
+    _load_local_env()
+    _check_required_env()
     cfg = load_config()
     storage = S3Storage()
     pipeline = create_pipeline(os.environ.get("AI_MODE", "mock"))
