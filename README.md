@@ -53,7 +53,7 @@ Linux/CUDA 生产环境请从 <https://download.pytorch.org> 安装对应的 CUD
 
 ```bash
 cd worker
-python download_models.py --models all
+uv run python download_models.py --models all
 ```
 
 脚本会克隆 GPT-SoVITS / LivePortrait 代码到 `worker/external/`，并下载权重到
@@ -69,7 +69,7 @@ python download_models.py --models all
 cd worker
 cp .env.local.example .env.local
 set -a && . .env.local && set +a
-python -u worker.py
+uv run python -u worker.py
 ```
 
 `AI_MODE=real` 时管线为：**GPT-SoVITS 零样本声音克隆 TTS**（参考音频 → 匹配音色的
