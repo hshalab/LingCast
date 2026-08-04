@@ -29,19 +29,26 @@ class MockPipeline(InferencePipeline):
         return output
 
     def _render(self, inputs: TaskInputs, output) -> None:
-        # Preferred: composite the uploaded avatar image with a silent audio
-        # track, producing a realistic-looking placeholder video.
+        has_audio = inputs.audio_path is not None and inputs.audio_path.exists()
+
+        # Preferred: composite the uploaded avatar image with the uploaded
+        # voice-clone audio as the video track, so the placeholder video
+        # actually plays the user's material.
         if inputs.image_path.exists():
             cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-loop", "1", "-i", str(inputs.image_path),
-                "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-                "-t", "3",
+            ]
+            if has_audio:
+                cmd += ["-i", str(inputs.audio_path)]
+            else:
+                cmd += ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "3"]
+            cmd += [
                 "-vf",
                 "scale=640:640:force_original_aspect_ratio=decrease,"
                 "pad=640:640:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
                 "-c:v", "libx264", "-preset", "veryfast",
-                "-c:a", "aac",
+                "-c:a", "aac", "-b:a", "128k",
                 "-shortest",
                 str(output),
             ]
@@ -54,12 +61,16 @@ class MockPipeline(InferencePipeline):
                     exc.stderr[-500:],
                 )
 
-        # Fallback: synthetic test pattern video.
+        # Fallback: synthetic test pattern video with a silent audio track.
         cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-f", "lavfi", "-i", "testsrc=duration=3:size=640x360:rate=25",
+            "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+            "-t", "3",
             "-pix_fmt", "yuv420p",
             "-c:v", "libx264", "-preset", "veryfast",
+            "-c:a", "aac",
+            "-shortest",
             str(output),
         ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
