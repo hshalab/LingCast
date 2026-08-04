@@ -68,6 +68,9 @@ models = [
     "split-lang",
     "fast_langdetect>=0.3.1",
     "wordsegment",
+    # Pin below 3.10: NLTK 3.10's import-security hook blocks `import regex`
+    # when the venv lives inside the project directory (our setup).
+    "nltk>=3.8,<3.10",
     "rotary_embedding_torch",
     "ToJyutping",
     "g2pk2",

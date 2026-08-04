@@ -22,6 +22,33 @@ WORKER_DIR = Path(__file__).resolve().parent
 
 REQUIRED_ENV = ["S3_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET"]
 
+# NLTK 3.10's import-security hook treats the venv (a subdirectory of the
+# project) as "current working directory" and blocks `import regex`, which
+# breaks GPT-SoVITS. Disable the hook before any NLTK import (worker or the
+# spawned GPT-SoVITS server inherit this).
+os.environ.setdefault("NLTK_DISABLE_IMPORT_SECURITY", "1")
+
+
+def _ensure_nltk_resources() -> None:
+    """Download the NLTK resources GPT-SoVITS's text frontend needs."""
+    try:
+        import nltk
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("nltk unavailable (%s); GPT-SoVITS English text may fail", exc)
+        return
+    resources = [
+        "averaged_perceptron_tagger",
+        "averaged_perceptron_tagger_eng",
+        "cmudict",
+        "punkt",
+        "punkt_tab",
+    ]
+    for name in resources:
+        try:
+            nltk.download(name, quiet=True)
+        except Exception as exc:
+            logger.warning("nltk download %s failed: %s", name, exc)
+
 
 def _load_local_env(env_file: Path | None = None) -> None:
     """Load worker/.env.local if present.
@@ -115,6 +142,7 @@ def process_task(
 def main() -> None:
     _load_local_env()
     _check_required_env()
+    _ensure_nltk_resources()
     cfg = load_config()
     storage = S3Storage()
     pipeline = create_pipeline(os.environ.get("AI_MODE", "mock"))
