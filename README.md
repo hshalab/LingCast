@@ -64,7 +64,8 @@ uv run python download_models.py --models all
 设置 `HF_ENDPOINT=https://hf-mirror.com` 加速。下载完成后脚本会自动创建
 `GPT_SoVITS/pretrained_models` 下的软链接指向 `worker/models`，并在 G2PW 中文前端
 就绪后把它的 BERT 指向本地权重（首次真实 TTS 运行会自动从 ModelScope 下载 G2PW 模型，
-约 1.2GB，需要网络）。
+约 1.2GB，需要网络）。Wav2Lip 权重（`wav2lip_gan.pth` + `s3fd.pth`，约 460MB）
+同样由该脚本下载（`--models wav2lip`）。
 
 ### 3. 启动宿主机 Worker
 
@@ -78,8 +79,10 @@ uv run python -u worker.py
 无需手动 source；环境变量缺失时会提示创建该文件。
 
 `AI_MODE=real` 时管线为：**GPT-SoVITS 零样本声音克隆 TTS**（参考音频 → 匹配音色的
-脚本语音）→ **LivePortrait 面部动画**（图片 + 语音 → 口播视频）。模型权重缺失时会
-提示运行下载脚本。`AI_MODE=mock` 保持原来的轻量模拟管线，Docker Worker 镜像不受影响。
+脚本语音）→ **LivePortrait 面部动画**（图片 + 眨眼/微动模板 → 无声 base 视频）→
+**Wav2Lip 音频驱动唇形同步**（base 视频 + 克隆语音 → 嘴型匹配的 `final_avatar.mp4`）。
+模型权重缺失时会提示运行下载脚本。`AI_MODE=mock` 保持原来的轻量模拟管线，Docker
+Worker 镜像不受影响。
 
 ### 本地前端开发（Vite，端口 5173）
 
