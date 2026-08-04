@@ -32,8 +32,10 @@ models = [
     "imageio-ffmpeg>=0.5",
     "tyro>=0.8",
     "onnx>=1.16",
-    "onnxruntime-silicon>=1.16; sys_platform == 'darwin'",
-    "onnxruntime>=1.17; sys_platform == 'linux' and platform_machine != 'x86_64'",
+    # Official onnxruntime (macOS arm64 wheels available since 1.17+);
+    # onnxruntime-silicon is avoided: its 1.16.3 wheel ships an incomplete
+    # `onnxruntime` namespace package (no InferenceSession).
+    "onnxruntime>=1.17; sys_platform != 'linux' or platform_machine != 'x86_64'",
     "onnxruntime-gpu>=1.17; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "scikit-image>=0.22",
     "albumentations>=1.4",
