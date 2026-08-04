@@ -3,6 +3,7 @@
   "private": false,
   "version": "2.2.1",
   "type": "module",
+  "packageManager": "pnpm@10.25.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -91,5 +92,11 @@
     "vite": "^8.0.8",
     "vitest": "^4.1.4",
     "vitest-browser-react": "^2.2.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@clerk/shared",
+      "esbuild"
+    ]
   }
 }

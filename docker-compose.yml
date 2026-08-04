@@ -3,23 +3,23 @@ name: talking-avatar-platform
 services:
   # ---- Infrastructure: intentionally NOT exposed to the host ----
   mysql:
-    image: mysql:8.0
+    image: mariadb:11
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-talking_avatar}
-      MYSQL_USER: ${MYSQL_USER:-talking}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-talking123}
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MARIADB_DATABASE: ${MYSQL_DATABASE:-talking_avatar}
+      MARIADB_USER: ${MYSQL_USER:-talking}
+      MARIADB_PASSWORD: ${MYSQL_PASSWORD:-talking123}
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 20
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.2.2-alpine
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}

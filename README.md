@@ -6,7 +6,7 @@
 
 ```text
 浏览器 ──> Nginx (frontend, 唯一对外端口)
-             ├── /api    ──> Go API (Gin) ──> MySQL / Redis / S3
+             ├── /api    ──> Go API (Gin) ──> MariaDB / Redis / S3
              └── /media  ──> MinIO (S3 兼容, 模拟 RustFS)
 
 Python AI Worker ──> Redis 队列 / boto3 下载素材
@@ -14,7 +14,7 @@ Python AI Worker ──> Redis 队列 / boto3 下载素材
                   ──> 上传产物到 S3, 通过 Webhook 回写任务状态
 ```
 
-MySQL、Redis、对象存储、API、Worker 均只在内网通信，不对宿主机开放端口。
+MariaDB、Redis、对象存储、API、Worker 均只在内网通信，不对宿主机开放端口。
 
 ## 快速开始
 
@@ -36,7 +36,7 @@ pnpm dev
 
 ## 数据流
 
-1. 前端上传形象图片（必填）与克隆音频（可选），`POST /api/avatars` 直传对象存储，S3 Key 存入 MySQL。
+1. 前端上传形象图片（必填）与克隆音频（可选），`POST /api/avatars` 直传对象存储，S3 Key 存入 MariaDB。
 2. 提交播报脚本，`POST /api/tasks` 创建任务并把 `{taskId, avatarId, scriptText, imageS3Key, voiceAudioS3Key}` 压入 Redis 队列。
 3. Worker 通过 `boto3` 下载素材到本地 `/tmp`，执行 AI 管线（当前为 Mock：睡眠 10 秒后用 ffmpeg 渲染占位视频）。
 4. 产物上传回对象存储，通过 `POST /api/tasks/:id/status` Webhook 将任务标记为 `completed` 并保存视频 URL。
