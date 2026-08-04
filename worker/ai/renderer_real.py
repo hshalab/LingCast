@@ -134,19 +134,38 @@ class LivePortraitRenderer:
     # ------------------------------------------------------------------ #
     def _mux_audio(self, video: Path, tts_wav: Path, work_dir: Path) -> Path:
         final = work_dir / "final_avatar.mp4"
+        duration = self._audio_duration(tts_wav)
         cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
+            # Loop the animation until the synthesized speech ends, so a short
+            # driving template never truncates the audio.
+            "-stream_loop", "-1",
             "-i", str(video),
             "-i", str(tts_wav),
             "-map", "0:v:0", "-map", "1:a:0",
             "-c:v", "copy",
             "-c:a", "aac", "-b:a", "128k",
-            "-shortest",
+            "-t", f"{duration:.3f}",
             str(final),
         ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         logger.info("LivePortrait renderer wrote %s", final)
         return final
+
+    @staticmethod
+    def _audio_duration(wav: Path) -> float:
+        probe = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "csv=p=0",
+                str(wav),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return float(probe.stdout.strip())
 
     def _check_environment(self) -> None:
         if self.device == "mps":

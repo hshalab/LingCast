@@ -26,3 +26,5 @@ scikit-image>=0.22
 albumentations>=1.4
 pykalman>=0.9.7
 matplotlib>=3.8
+rich>=13.7
+lmdb>=1.4
