@@ -87,6 +87,22 @@ uv run python -u worker.py
 模型权重缺失时会提示运行下载脚本。`AI_MODE=mock` 保持原来的轻量模拟管线，Docker
 Worker 镜像不受影响。
 
+### 调整动画节奏
+
+面部动画由 LivePortrait 的驱动模板（`.pkl`）控制。默认模板为 `d5.pkl`（约 5 秒的
+自然说话动作）；旧默认 `d1.pkl` 只有 0.5 秒，循环播放时眨眼和耸肩会显得过快过密。
+如需微调，在 `worker/.env.local` 中设置：
+
+```bash
+LIVEPORTRAIT_DRIVING=.../assets/examples/driving/d5.pkl   # 换模板
+LIVEPORTRAIT_DRIVING_SPEED=0.5                            # 0.5 = 动作慢一倍（时间插值）
+LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度更含蓄
+```
+
+其他模板参考 `worker/external/LivePortrait/assets/examples/driving/`：
+`talking.pkl`（说话）、`wink.pkl`（眨眼）、`shy.pkl`（害羞）、`shake_face.pkl`（摇头）、
+`laugh.pkl`（笑）等。
+
 ### 本地前端开发（Vite，端口 5173）
 
 ```bash
