@@ -392,8 +392,6 @@ export function TaskCenter() {
               <CardContent>
                 {loading ? (
                   <p className='py-8 text-center text-sm text-muted-foreground'>加载中…</p>
-                ) : tasks.length === 0 ? (
-                  <p className='py-8 text-center text-sm text-muted-foreground'>暂无播报任务</p>
                 ) : (
                   <>
                     {selectedTasks.size > 0 && (
@@ -456,10 +454,20 @@ export function TaskCenter() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {tasks.map((task) => {
-                          const meta = TASK_STATUS_META[task.status]
-                          return (
-                            <TableRow key={task.id}>
+                        {tasks.length === 0 ? (
+                          <TableRow>
+                            <TableCell
+                              colSpan={7}
+                              className='py-8 text-center text-sm text-muted-foreground'
+                            >
+                              暂无播报任务
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          tasks.map((task) => {
+                            const meta = TASK_STATUS_META[task.status]
+                            return (
+                              <TableRow key={task.id}>
                               <TableCell>
                                 <Checkbox
                                   checked={selectedTasks.has(task.id)}
@@ -512,9 +520,10 @@ export function TaskCenter() {
                                 </Button>
                               </div>
                               </TableCell>
-                            </TableRow>
-                          )
-                        })}
+                              </TableRow>
+                            )
+                          })
+                        )}
                       </TableBody>
                     </Table>
                   </>
