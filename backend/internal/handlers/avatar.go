@@ -285,8 +285,8 @@ func (h *AvatarHandler) Retry(c *gin.Context) {
 		}
 		return
 	}
-	if avatar.Status == models.AvatarStatusReady {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar is already ready"})
+	if avatar.Status == models.AvatarStatusInitializing {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar is already initializing"})
 		return
 	}
 	avatar.Status = models.AvatarStatusInitializing

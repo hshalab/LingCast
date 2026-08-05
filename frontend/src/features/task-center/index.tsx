@@ -202,19 +202,23 @@ export function TaskCenter() {
                                     跳过
                                   </Button>
                                 )}
-                                {(avatar.status === 'failed' || avatar.status === 'skipped') && (
+                                {(avatar.status === 'failed' ||
+                                  avatar.status === 'skipped' ||
+                                  avatar.status === 'ready') && (
                                   <Button
                                     variant='outline'
                                     size='sm'
                                     onClick={() =>
                                       void runAction(
                                         () => api.post(`/avatars/${avatar.id}/retry`),
-                                        `已重新排队「${avatar.name}」`,
+                                        avatar.status === 'ready'
+                                          ? `「${avatar.name}」开始重新生成基础视频`
+                                          : `已重新排队「${avatar.name}」`,
                                       )
                                     }
                                   >
                                     <RotateCcw className='size-3.5' />
-                                    重试
+                                    {avatar.status === 'ready' ? '重新生成' : '重试'}
                                   </Button>
                                 )}
                                 <Button

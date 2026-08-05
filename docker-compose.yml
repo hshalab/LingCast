@@ -105,29 +105,35 @@ services:
       minio:
         condition: service_healthy
 
-  worker:
-    build:
-      context: ./worker
-    restart: unless-stopped
-    environment:
-      REDIS_ADDR: redis:6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      REDIS_DB: "0"
-      TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks}
-      API_BASE_URL: http://api:8080
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      S3_BUCKET: ${S3_BUCKET:-talking-avatar}
-      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
-      AI_MODE: ${AI_MODE:-mock}
-    depends_on:
-      api:
-        condition: service_started
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
+  # ---- Docker mock worker: COMMENTED OUT ----
+  # The real AI worker runs natively on the host (AI_MODE=real) and shares the
+  # same Redis queue; keeping this mock service up makes it race the host
+  # worker and produce espeak male-voice/static-image results. Re-enable only
+  # for a demo without host models:
+  #
+  # worker:
+  #   build:
+  #     context: ./worker
+  #   restart: unless-stopped
+  #   environment:
+  #     REDIS_ADDR: redis:6379
+  #     REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+  #     REDIS_DB: "0"
+  #     TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks}
+  #     API_BASE_URL: http://api:8080
+  #     S3_ENDPOINT: http://minio:9000
+  #     S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  #     S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  #     S3_BUCKET: ${S3_BUCKET:-talking-avatar}
+  #     S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
+  #     AI_MODE: ${AI_MODE:-mock}
+  #   depends_on:
+  #     api:
+  #       condition: service_started
+  #     redis:
+  #       condition: service_healthy
+  #     minio:
+  #       condition: service_healthy
 
   # Real-time streaming gateway (SRS v5). The host-native AI worker pushes
   # RTMP to 1935; HTTP-FLV/API stay on the internal network and are exposed
