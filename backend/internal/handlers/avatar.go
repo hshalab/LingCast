@@ -239,6 +239,28 @@ func (h *AvatarHandler) Delete(c *gin.Context) {
 		_ = h.q.Remove(ctx, h.avatarInitQueueKey, string(raw))
 	}
 	_ = h.q.DeleteKey(ctx, fmt.Sprintf("live_queue:%d", avatar.ID))
+
+	// broadcast_tasks.avatar_id has a foreign key constraint, so delete the
+	// avatar's tasks (and their output videos) before removing the avatar.
+	var tasks []models.BroadcastTask
+	if err := h.db.Where("avatar_id = ?", avatar.ID).Find(&tasks).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	for _, t := range tasks {
+		if t.OutputVideoS3URL != nil {
+			_ = h.s3.Delete(ctx, *t.OutputVideoS3URL)
+		}
+	}
+	if err := h.db.Where("avatar_id = ?", avatar.ID).Delete(&models.BroadcastTask{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete tasks failed: " + err.Error()})
+		return
+	}
+	if err := h.db.Where("avatar_id = ?", avatar.ID).Delete(&models.LiveSession{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete live session failed: " + err.Error()})
+		return
+	}
+
 	if err := h.db.Delete(&avatar).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
