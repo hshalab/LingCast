@@ -64,6 +64,11 @@
   设定拼进 system prompt（有单测 `live_test.go`）；无 `OPENAI_API_KEY` 时原样回读输入。
 - ✅ Go API：`POST /api/avatars`、`GET /api/avatars`、`POST /api/tasks`、
   `GET /api/tasks/:id`、`POST /api/tasks/:id/status`（Worker 回调）。
+- ✅ 管理员登录：`POST /api/admin/login` 校验 `ADMIN_USERNAME`/`ADMIN_PASSWORD`
+  （默认 admin/admin123，务必修改），Redis 存 24h 会话 + HttpOnly cookie
+  `admin_token`；`GET /api/admin/me` 校验、`POST /api/admin/logout` 退出。前端
+  `/login` 登录页 + `_authenticated` 路由 `beforeLoad` 守卫；管理端写操作与
+  `/api/users` 走 `RequireAdmin()` 中间件，观众端接口与 Worker Webhook 保持公开。
 - ✅ 两段式管线：创建时 `avatar_init` 队列 → LivePortrait 生成静音 24fps base 视频
   上传 S3 并回写 `base_video_s3_key`/`status`；使用时 **Edge-TTS**（`TTS_ENGINE=edge`，
   零 GPU，默认）或 GPT-SoVITS（`TTS_ENGINE=gpt-sovits`）→ Wav2Lip ONNX（CoreML 优先）

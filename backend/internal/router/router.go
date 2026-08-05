@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"talkingavatar/backend/internal/config"
@@ -38,32 +39,31 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		db, q, s3, cfg.LiveControlQueueKey,
 		cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel,
 	)
+	adminHandler := handlers.NewAdminHandler(
+		redis.NewClient(&redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+			DB:       cfg.RedisDB,
+		}),
+		cfg.AdminUsername,
+		cfg.AdminPassword,
+	)
 
 	api := r.Group("/api")
 	{
-		api.POST("/tts/preview", handlers.PreviewTTS)
-		api.POST("/avatars", avatarHandler.Create)
-		api.GET("/avatars", avatarHandler.List)
+		// ---- Admin auth (login/me/logout are public by design) ----
+		api.POST("/admin/login", adminHandler.Login)
+		api.GET("/admin/me", adminHandler.Me)
+		api.POST("/admin/logout", adminHandler.Logout)
+
+		// ---- Public: audience client + worker webhooks ----
 		api.GET("/avatars/:id", avatarHandler.Get)
-		api.PUT("/avatars/:id", avatarHandler.Update)
-		api.DELETE("/avatars/:id", avatarHandler.Delete)
-		api.POST("/avatars/:id/retry", avatarHandler.Retry)
-		api.POST("/avatars/:id/skip", avatarHandler.Skip)
-		api.PUT("/avatars/:id/live-settings", avatarHandler.UpdateLiveSettings)
 		// Internal webhook: worker persists the pre-processed base video key.
 		api.POST("/avatars/:id/base-video", avatarHandler.UpdateBaseVideo)
-		api.POST("/tasks", taskHandler.Create)
-		api.GET("/tasks", taskHandler.List)
-		api.GET("/tasks/:id", taskHandler.Get)
-		api.DELETE("/tasks/:id", taskHandler.Delete)
-		api.POST("/tasks/:id/retry", taskHandler.Retry)
 		// Internal webhook used by the Python AI worker.
 		api.POST("/tasks/:id/status", taskHandler.UpdateStatus)
-		// Live streaming: session lifecycle, per-avatar text intake and status.
+		// Live streaming: audience-facing read + chat intake.
 		api.GET("/live", liveHandler.ListSessions)
-		api.POST("/live/:avatarID/start", liveHandler.Start)
-		api.POST("/live/:avatarID/stop", liveHandler.Stop)
-		api.POST("/live/:avatarID/push", liveHandler.Push)
 		api.POST("/live/:avatarID/message", liveHandler.Message)
 		api.GET("/live/:avatarID/status", liveHandler.Status)
 		// Audience chat identity + persisted room history.
@@ -71,7 +71,28 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		api.POST("/chat/register", chatHandler.Register)
 		api.POST("/chat/login", chatHandler.Login)
 		api.GET("/chat/history", chatHandler.History)
-		api.GET("/users", chatHandler.ListUsers)
+
+		// ---- Protected: admin-only operations ----
+		protected := api.Group("", adminHandler.RequireAdmin())
+		{
+			protected.POST("/tts/preview", handlers.PreviewTTS)
+			protected.POST("/avatars", avatarHandler.Create)
+			protected.GET("/avatars", avatarHandler.List)
+			protected.PUT("/avatars/:id", avatarHandler.Update)
+			protected.DELETE("/avatars/:id", avatarHandler.Delete)
+			protected.POST("/avatars/:id/retry", avatarHandler.Retry)
+			protected.POST("/avatars/:id/skip", avatarHandler.Skip)
+			protected.PUT("/avatars/:id/live-settings", avatarHandler.UpdateLiveSettings)
+			protected.POST("/tasks", taskHandler.Create)
+			protected.GET("/tasks", taskHandler.List)
+			protected.GET("/tasks/:id", taskHandler.Get)
+			protected.DELETE("/tasks/:id", taskHandler.Delete)
+			protected.POST("/tasks/:id/retry", taskHandler.Retry)
+			protected.POST("/live/:avatarID/start", liveHandler.Start)
+			protected.POST("/live/:avatarID/stop", liveHandler.Stop)
+			protected.POST("/live/:avatarID/push", liveHandler.Push)
+			protected.GET("/users", chatHandler.ListUsers)
+		}
 	}
 
 	r.GET("/healthz", func(c *gin.Context) {

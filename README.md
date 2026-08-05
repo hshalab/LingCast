@@ -98,6 +98,10 @@ docker compose up --build
 
 访问 <http://localhost:8080>，左侧菜单进入 **Avatar Studio**。
 
+> **管理员登录**：管理后台现在需要登录后才能访问（默认 `admin` / `admin123`，
+> 请在 `.env` 中修改 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 并重启 API 容器）。
+> 观众端（:3000）不受影响，仍可直接进入直播间。
+
 ### 2. 准备 Worker 环境（uv）
 
 ```bash
@@ -310,6 +314,7 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 | `OPENAI_BASE_URL` | `.env` | LLM 端点（默认 `https://api.deepseek.com`） |
 | `OPENAI_API_KEY` | `.env` | DeepSeek API Key；不设则消息原样回读 |
 | `OPENAI_MODEL` | `.env` | Responses 模型（默认 `deepseek-v4-flash`） |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `.env` | 管理后台登录账号（默认 admin/admin123） |
 | `STREAM_SUBTITLE_FONT` | `worker/.env.local` | 字幕回退字体（未配或字体缺失时用） |
 
 完整清单见 `worker/.env.local.example`。
