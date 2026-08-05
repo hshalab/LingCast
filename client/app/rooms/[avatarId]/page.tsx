@@ -63,8 +63,8 @@ export default function RoomPage() {
   }
 
   return (
-    <main className='mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-5 sm:px-6'>
-      <header className='mb-4 flex items-center gap-3'>
+    <main className='mx-auto flex h-dvh w-full max-w-6xl flex-col overflow-hidden px-4 py-4 sm:px-6'>
+      <header className='mb-3 flex shrink-0 flex-wrap items-center gap-3'>
         <Link
           href='/'
           className='rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-600'
@@ -89,24 +89,24 @@ export default function RoomPage() {
         </span>
       </header>
 
-      {/* 左右结构：桌面端画面在左、聊天在右，两边同时可见，无需滚动 */}
-      <div className='flex flex-col gap-4 lg:flex-row lg:items-stretch'>
-        <div className='flex flex-1 justify-center rounded-2xl border border-zinc-800 bg-black p-3'>
+      {/* 左右结构：桌面端画面在左、聊天在右，整页 100% 视口高，内容超高时各区域内部滚动 */}
+      <div className='flex min-h-0 flex-1 flex-col gap-3 lg:flex-row'>
+        <div className='flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-2xl border border-zinc-800 bg-black p-2 sm:p-3'>
           {started ? (
             <XgFlvPlayer
               url={streamUrl}
-              className='aspect-[9/16] w-full max-w-[420px] overflow-hidden rounded-xl'
+              className='aspect-[9/16] w-full max-w-[420px] overflow-hidden rounded-xl lg:h-full lg:w-auto lg:max-w-full'
             />
           ) : (
-            <div className='flex aspect-[9/16] w-full max-w-[420px] flex-col items-center justify-center gap-2 text-sm text-zinc-500'>
+            <div className='flex aspect-[9/16] w-full max-w-[420px] flex-col items-center justify-center gap-2 text-sm text-zinc-500 lg:h-full lg:w-auto lg:max-w-full'>
               <span className='text-4xl'>📺</span>
               主播暂未开播，请稍候…
             </div>
           )}
         </div>
 
-        <section className='flex w-full flex-col rounded-2xl border border-zinc-800 bg-zinc-900/50 lg:w-[380px] lg:shrink-0'>
-          <div className='border-b border-zinc-800 px-4 py-3'>
+        <section className='flex min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 lg:h-full lg:w-[380px]'>
+          <div className='shrink-0 border-b border-zinc-800 px-4 py-3'>
             <h2 className='font-medium'>互动聊天</h2>
             <p className='text-xs text-zinc-500'>
               发送消息，数字人会通过 AI 回复并开口说话。
@@ -115,29 +115,31 @@ export default function RoomPage() {
 
           <div
             ref={chatRef}
-            className='flex min-h-56 flex-1 flex-col gap-2 overflow-y-auto px-4 py-3'
+            className='min-h-0 flex-1 overflow-y-auto px-4 py-3'
           >
             {messages.length === 0 ? (
               <p className='py-10 text-center text-sm text-zinc-500'>
                 还没有消息，说点什么吧
               </p>
             ) : (
-              messages.map((m, i) => (
-                <div
-                  key={i}
-                  className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
-                    m.role === 'user'
-                      ? 'self-end rounded-br-sm bg-blue-600 text-white'
-                      : 'self-start rounded-bl-sm bg-zinc-800 text-zinc-100'
-                  }`}
-                >
-                  {m.text}
-                </div>
-              ))
+              <div className='flex flex-col gap-2'>
+                {messages.map((m, i) => (
+                  <div
+                    key={i}
+                    className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+                      m.role === 'user'
+                        ? 'self-end rounded-br-sm bg-blue-600 text-white'
+                        : 'self-start rounded-bl-sm bg-zinc-800 text-zinc-100'
+                    }`}
+                  >
+                    {m.text}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
-          <div className='flex gap-2 border-t border-zinc-800 p-3'>
+          <div className='flex shrink-0 gap-2 border-t border-zinc-800 p-3'>
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}

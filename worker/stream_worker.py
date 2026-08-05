@@ -161,9 +161,13 @@ class LiveAvatarSession:
     # ------------------------------------------------------------------ #
     def tick(self, r: redis.Redis) -> None:
         """Advance one 0.5s block: take text, switch states, feed the pipe."""
-        # 1) Pull new text from the per-avatar queue when we have no chunk and
-        #    no TTS in flight (LPOP keeps the chunk atomic for this worker).
-        if self.talking is None and not self._tts_results.qsize():
+        # 1) Pull new text from the per-avatar queue when no TTS is in flight
+        #    (LPOP keeps the chunk atomic for this worker). We pop both while
+        #    idle and while talking, so the next sentence is pre-fetched during
+        #    playback; a busy TTS thread never drops the popped chunk.
+        if not self._tts_results.qsize() and (
+            self._tts_thread is None or not self._tts_thread.is_alive()
+        ):
             new_text = r.lpop(self.queue_key)
             if new_text:
                 self.maybe_start_tts(new_text)
