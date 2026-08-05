@@ -1,6 +1,6 @@
 import Player from 'xgplayer'
 import 'xgplayer/dist/index.min.css'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -15,11 +15,13 @@ export function VideoPlayerDialog({
   open,
   url,
   title,
+  actions,
   onClose,
 }: {
   open: boolean
   url?: string
   title?: string
+  actions?: ReactNode
   onClose: () => void
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -57,8 +59,9 @@ export function VideoPlayerDialog({
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className='sm:max-w-3xl'>
-        <DialogHeader>
+        <DialogHeader className='flex-row items-center justify-between space-y-0'>
           <DialogTitle>{title ?? '视频预览'}</DialogTitle>
+          {actions}
         </DialogHeader>
         {failed ? (
           <p className='py-10 text-center text-sm text-muted-foreground'>

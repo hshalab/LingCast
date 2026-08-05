@@ -338,7 +338,7 @@ export function Broadcast({
           </CardHeader>
           <CardContent ref={historyRef}>
             {history.length === 0 ? (
-              <p className='py-6 text-center text-sm text-muted-foreground'>
+              <p className='text-center text-sm text-muted-foreground'>
                 暂无制作历史
               </p>
             ) : (

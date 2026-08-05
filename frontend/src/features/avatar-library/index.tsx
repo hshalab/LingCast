@@ -1,7 +1,8 @@
 import axios from 'axios'
-import { ImageIcon, Play, Plus, RadioTower, RefreshCw, Sparkles } from 'lucide-react'
+import { ImageIcon, Play, Plus, RadioTower, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
+import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
@@ -58,6 +59,30 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
   useEffect(() => {
     void loadAvatars()
   }, [loadAvatars])
+
+  const regenerate = async (avatar: Avatar) => {
+    try {
+      await api.post(`/avatars/${avatar.id}/retry`)
+      toast.success(`「${avatar.name}」开始重新生成基础视频`)
+      setPreview(null)
+      void loadAvatars()
+    } catch (error) {
+      toast.error(showApiError(error))
+    }
+  }
+
+  const removeAvatar = async (avatar: Avatar) => {
+    if (!window.confirm(`确定删除数字人「${avatar.name}」？将同时删除其任务、直播会话与视频文件。`)) {
+      return
+    }
+    try {
+      await api.delete(`/avatars/${avatar.id}`)
+      toast.success(`已删除「${avatar.name}」`)
+      void loadAvatars()
+    } catch (error) {
+      toast.error(showApiError(error))
+    }
+  }
 
   // When arriving from the task center (?avatarId=...), highlight and scroll
   // the matching avatar card into view.
@@ -169,6 +194,18 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                   )}
                 </div>
 
+                <div className='absolute end-2 top-2'>
+                  <Button
+                    size='icon'
+                    variant='ghost'
+                    className='h-8 w-8 bg-black/40 text-white hover:bg-red-600/80 hover:text-white'
+                    title='删除数字人'
+                    onClick={() => void removeAvatar(avatar)}
+                  >
+                    <Trash2 className='size-3.5' />
+                  </Button>
+                </div>
+
                 <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-3 text-white'>
                   <div className='flex items-center justify-between gap-2'>
                     <p className='truncate font-semibold'>{avatar.name}</p>
@@ -212,7 +249,9 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                         </Button>
                       </>
                     ) : (
-                      <p className='text-xs text-white/80'>基础视频生成中，请稍候</p>
+                      <p className='flex h-8 items-center text-xs text-white/80'>
+                        基础视频生成中，请稍候
+                      </p>
                     )}
                   </div>
                 </div>
@@ -226,6 +265,14 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
           url={preview?.baseVideoS3Url}
           title={`${preview?.name ?? ''} · 默认驱动视频`}
           onClose={() => setPreview(null)}
+          actions={
+            preview ? (
+              <Button size='sm' variant='outline' onClick={() => void regenerate(preview)}>
+                <RefreshCw className='size-3.5' />
+                重新生成
+              </Button>
+            ) : undefined
+          }
         />
       </Main>
     </>
