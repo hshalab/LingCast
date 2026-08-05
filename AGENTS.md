@@ -34,11 +34,28 @@
   默认 zh-CN-XiaoxiaoNeural），提交后轮询 `GET /api/avatars/:id` 直到 ready。
 - ✅ Broadcast（离线播报）页面：选数字人 + 脚本 → 任务轮询 → 播放成品。
 - ✅ 客户端直播间（观众端）：**独立 Next.js + TailwindCSS 项目**（`client/`，端口
-  **3000**，不属于管理后台）——`app/page.tsx` 列出开播机器人（`GET /api/live`，
-  3s 轮询），`app/rooms/[avatarId]/page.tsx` 用 xgplayer 拉 HTTP-FLV + 聊天输入
-  `POST /api/live/:id/message`；`app/api/[...path]` 与 `app/live/[...path]` 路由
-  处理器在**服务端**代理（`API_ORIGIN` / `LIVE_ORIGIN` 运行时读取，docker 内为
-  `http://api:8080` / `http://srs:8080`，本地默认 `http://localhost:8080`）。
+  **3000**，不属于管理后台）——首页有导航头（身份/注册/登录/退出）与**分类筛选**
+  （`GET /api/live` 携带 avatar 的 `category`），`app/rooms/[avatarId]/page.tsx`
+  用 xgplayer 拉 HTTP-FLV + 聊天输入 `POST /api/live/:id/message`；`app/api/[...path]`
+  与 `app/live/[...path]` 路由处理器在**服务端**代理（`API_ORIGIN` / `LIVE_ORIGIN`
+  运行时读取，docker 内为 `http://api:8080` / `http://srs:8080`，本地默认
+  `http://localhost:8080`）。
+- ✅ 聊天身份与记录持久化：`chat_users`（游客/账号，bcrypt）与 `chat_messages`
+  （user/bot）两张表；`POST /api/chat/guest` 发临时身份，`register` 原地升级游客行
+  （同一 userId 保住历史），`login` 把当前游客的消息合并进账号，退出后重新取新游客
+  ID；`GET /api/chat/history?avatarId=` 拉持久化聊天记录；客户端身份存
+  localStorage（`tav_chat_identity`），由 `IdentityProvider` 全局管理，注册/登录弹窗
+  首页与直播间共用。`POST /api/live/:id/message` 会同时入库用户消息与机器人完整回复。
+- ✅ 字幕配置：Avatar 表新增 JSON 字段 `live_settings`
+  （`subtitleEnabled/subtitleFont/subtitlePosition/subtitleBorder/subtitleSize`），
+  `PUT /api/avatars/:id/live-settings` 读写；start 控制消息与 `GET /api/live` 都会带
+  上配置；worker 的 `SubtitleRenderer` 支持顶部/底部、描边宽度、字号，字体按文件名
+  从 `worker/fonts/` 解析（缺失回退系统默认）；Live Studio「字幕设置」卡片保存后自动
+  重启直播生效。
+- ✅ 管理端用户列表：`GET /api/users`（游客+账号，含消息数），侧边栏「用户相关 →
+  用户列表」（/users）展示真实数据。
+- ✅ Live Studio 悬浮监看：页内播放器已移除，改为右下角圆形 FAB，点击弹出可拖动的
+  9:16 浮窗（默认不渲染，按需开启）。
 - ✅ LLM 回复链路：Go 后端用 `github.com/openai/openai-go` Responses API 调 DeepSeek
   （`OPENAI_BASE_URL=https://api.deepseek.com`、`OPENAI_MODEL=deepseek-v4-flash`，
   该模型是 DeepSeek 唯一支持 Responses 的模型），回复 `splitSentences` 入
@@ -75,6 +92,8 @@ backend/   Go API（Dockerfile）
 frontend/  React 管理后台（Dockerfile + nginx.conf）
   src/components/xg-video.tsx   内联 xgplayer 封装（播报预览 720x1080 用）
 client/    Next.js 观众端（独立项目）：app/page.tsx 列表 + app/rooms/[avatarId] 直播间
+  lib/identity.tsx      全局聊天身份（游客/注册/登录/退出）
+  components/auth-modal.tsx  注册/登录弹窗
 worker/
   worker.py              Worker 入口（Redis 队列、S3、Webhook 回调）
   download_models.py     一键克隆代码 + 下载/导出模型
@@ -90,6 +109,8 @@ worker/
   external/  gitignore，外部推理仓库克隆（GPT-SoVITS/LivePortrait/Wav2Lip）
   models/    gitignore，权重（见下方“模型目录”）
   streaming/ffmpeg_pipe.py   ffmpeg 子进程管道（双输入，音频走 /dev/fd/3）
+  streaming/subtitle.py      Pillow 字幕渲染（位置/边框/字号可配）
+  fonts/                     gitignore：用户下载的免费字体（见 fonts/README.md）
   stream_worker.py       流式 Worker 入口（闲置/说话循环，与 worker.py 并存）
 ```
 
@@ -101,6 +122,10 @@ worker/
 - AI 逻辑与 S3/Redis 编排解耦：新模型实现 `InferencePipeline`，在
   `worker/ai/factory.py` 注册，通过 `AI_MODE` 切换。
 - 权重/外部代码永不入库（`worker/models/`、`worker/external/` 已 gitignore）。
+- 直播字幕字体放 `worker/fonts/`（gitignore，仅 README 入库）；设置里存的是文件名，
+  换新设备需连同字体一起拷贝。
+- 直播相关配置（如字幕）持久化为 Avatar 的 JSON 字段 `live_settings`，worker 通过
+  start 控制消息获取；改配置后需重新 start 直播（Live Studio 保存时会自动重启）。
 - 提交信息沿用仓库现有风格：`feat:` / `fix:` / `docs:` / `refactor:` 前缀 + 中文或
   英文描述。
 - 修改涉及外部仓库（GPT-SoVITS/LivePortrait/Wav2Lip）时优先在 `worker/ai/` 里做
@@ -149,5 +174,7 @@ uv run python -u worker.py          # 真实管线，AI_MODE=real
 - **直播推流没画面**：先确认 `docker compose up` 里 srs 健康、`/live/<id>.flv`
   可拉流；ffmpeg 日志在 `stream-<id>/ffmpeg.log`。音频必须与视频交错写（见
   ffmpeg_pipe.py 顶部说明），否则双管道死锁。
+- **字幕字体不生效**：确认文件名与 `worker/fonts/` 里的文件一致（含扩展名），
+  缺文件会自动回退系统默认字体并打 warning 日志。
 - **闲置/说话切换崩溃**：两种状态的帧率与分辨率必须一致（都来自同一 base 片段）；
   视频输入带 `-re` 实时节流，勿删除。

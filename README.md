@@ -45,10 +45,22 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
 - **Broadcast（离线播报）**：选择已就绪数字人 + 输入脚本 → 提交任务 → 轮询 →
   状态卡片内嵌 **xgplayer** 播放成品（9:16 竖版，最大 720×1080，模态窗播放）。
 - **客户端直播间（观众端）**：独立 Next.js + TailwindCSS 项目（`client/`，端口
-  **3000**，不属于管理后台）：首页列出所有开播机器人（`GET /api/live`），进入
-  `/rooms/:avatarId` 后 xgplayer 拉 HTTP-FLV 观看，底部输入框可直接向数字人发消息
-  （`POST /api/live/:id/message`）。`/api` 与 `/live` 由 Next 路由处理器在服务端
-  代理，浏览器无 CORS 负担。
+  **3000**，不属于管理后台）：首页有导航头（游客/账号身份、注册/登录/退出）与
+  **分类筛选**，列出所有开播机器人（`GET /api/live`）；进入 `/rooms/:avatarId`
+  后 xgplayer 拉 HTTP-FLV 观看，聊天面板按用户展示 `用户名 #ID`，可直接向数字人
+  发消息（`POST /api/live/:id/message`）。`/api` 与 `/live` 由 Next 路由处理器在
+  服务端代理，浏览器无 CORS 负担。
+- **聊天身份与记录持久化**：游客自动分配临时 ID+用户名（`POST /api/chat/guest`）；
+  注册把当前游客身份原地升级为账号（聊天记录不丢），登录把游客消息合并进账号，
+  退出后重新获取新游客身份。用户消息与机器人回复全部入库（`chat_users` /
+  `chat_messages`），`GET /api/chat/history` 供两端拉取历史。
+- **直播字幕配置**：每个数字人可在 Live Studio「字幕设置」里配置是否显示字幕、
+  字体（`worker/fonts/` 下的文件名）、位置（顶部/底部）、描边宽度与字号，持久化为
+  Avatar 的 JSON 字段 `live_settings`；保存后自动重启直播生效。
+- **管理端用户列表**：侧边栏「用户相关 → 用户列表」展示全部聊天用户
+  （游客/账号 + 消息数），数据来自 `GET /api/users`。
+- **悬浮画面监看**：Live Studio 右下角圆形 FAB，点击弹出可拖动的 9:16 视频浮窗，
+  默认不渲染播放器，按需开启。
 - **LLM 消息回复**：客户端消息 → OpenAI Go SDK 调 DeepSeek Responses API
   （`base_url=https://api.deepseek.com`，模型 `deepseek-v4-flash`）→ 回复按句切块
   入直播队列 → TTS → 口型 → 推流；未配置 `OPENAI_API_KEY` 时原样回读输入（测试模式）。
@@ -60,6 +72,8 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
 - **动画节奏可调**：驱动模板可换、播放速度/动作幅度可调（见“动画节奏”）。
 - **基础视频去眨眼**：驱动模板眼部表情通道已冻结（不眨眼），保留耸肩/身体微晃，
   约 3 秒一次（`LIVEPORTRAIT_DRIVING_SPEED=0.2`）。
+- **数字人分类**：Avatar 创建时可选「直播分类」（闲聊/知识/娱乐/游戏/带货/其他），
+  观众端首页按分类筛选直播。
 - **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
 
 ## 新设备快速开始
@@ -201,14 +215,17 @@ Nginx 拉 HTTP-FLV 播放，全程不落盘 MP4。
     `live_queue:{avatarID}`。
   - `POST /api/live/{avatarID}/message`：把聊天文本交给 LLM（DeepSeek Responses，
     OpenAI SDK），回复切句入队 → TTS → 口型 → 推流；无 `OPENAI_API_KEY` 时回显
-    原文（直播台“发送文字”仅测试用）。
+    原文（直播台“发送文字”仅测试用）；同时把用户消息与机器人完整回复写入
+    `chat_messages`。
   - `GET /api/live/{avatarID}/status`：返回会话状态、队列长度与待渲染句子，
     供前端每秒轮询。
+- **字幕**：默认开启，按 Avatar 的 `live_settings` 渲染（Pillow，非 ffmpeg
+  drawtext——brew 版 ffmpeg 无此滤镜）；字体放 `worker/fonts/`，文件名需与设置一致。
 - **`stream_worker.py`**（闲置/说话循环）：
-  - 闲置态：循环喂 base 动画帧 + numpy 生成的静音音频（数字人自然眨眼/微动）。
-  - 说话态：从 `live_queue:{avatarID}` 弹出句子 → GPT-SoVITS 异步 TTS →
-    Wav2Lip(ONNX) 内存出帧 → 口型帧 + TTS 音频替换推流；句子结束立即回到闲置态，
-    **管道全程不关闭**。
+  - 闲置态：循环喂 base 动画帧 + numpy 生成的静音音频（数字人自然耸肩/微动）。
+  - 说话态：从 `live_queue:{avatarID}` 弹出句子 → Edge-TTS 异步 TTS → Wav2Lip(ONNX)
+    内存出帧 → 口型帧 + TTS 音频替换推流（可选叠加字幕）；句子结束立即回到闲置态，
+    **管道全程不关闭**。TTS 飞行期间不会丢弃队列里的后续句子（预取下一句）。
   - 帧率/分辨率两种状态完全一致（口型帧来自同一 base 片段）；视频输入带 ffmpeg
     `-re` 实时节流，音频按每 0.5s 切片与帧交错，A/V 同步且不超前。
 
@@ -291,6 +308,7 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 | `OPENAI_BASE_URL` | `.env` | LLM 端点（默认 `https://api.deepseek.com`） |
 | `OPENAI_API_KEY` | `.env` | DeepSeek API Key；不设则消息原样回读 |
 | `OPENAI_MODEL` | `.env` | Responses 模型（默认 `deepseek-v4-flash`） |
+| `STREAM_SUBTITLE_FONT` | `worker/.env.local` | 字幕回退字体（未配或字体缺失时用） |
 
 完整清单见 `worker/.env.local.example`。
 
@@ -299,7 +317,10 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `POST` | `/api/avatars` | multipart 上传 `name` + `image`(必填) + `voice_id`(可选) |
+| `POST` | `/api/avatars` | 另可传 `category`（闲聊/知识/娱乐/游戏/带货/其他） |
 | `GET` | `/api/avatars` | 素材列表 |
+| `GET` | `/api/avatars/:id` | 单个素材（含 `liveSettings`） |
+| `PUT` | `/api/avatars/:id/live-settings` | 保存直播字幕等配置（JSON） |
 | `POST` | `/api/tasks` | `{avatarId, scriptText}`，入队并返回任务 |
 | `GET` | `/api/tasks/:id` | 轮询任务状态与输出 URL |
 | `POST` | `/api/tasks/:id/status` | Worker 内部 Webhook（processing/completed/failed） |
@@ -308,6 +329,11 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 | `POST` | `/api/live/:id/push` | 直接按句入队（直播台测试用） |
 | `GET` | `/api/live/:id/status` | 会话状态与队列 |
 | `GET` | `/api/live` | 当前开播机器人列表 |
+| `POST` | `/api/chat/guest` | 获取临时游客身份（userId + username） |
+| `POST` | `/api/chat/register` | 注册（升级当前游客行，保留历史） |
+| `POST` | `/api/chat/login` | 登录（合并游客消息进账号） |
+| `GET` | `/api/chat/history` | 房间持久化聊天记录（`?avatarId=`） |
+| `GET` | `/api/users` | 用户列表（游客/账号 + 消息数） |
 
 ## 目录结构
 
@@ -315,8 +341,10 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 backend/   Go Gin API（模型、S3、Redis、handlers、Dockerfile）
 frontend/  shadcn-admin 前端（Avatar Studio 页面、Dockerfile、nginx.conf）
 client/    Next.js + TailwindCSS 观众端（独立项目，:3000）
+  lib/identity.tsx + components/auth-modal.tsx   聊天身份与登录/注册
 worker/    Python 3.11 AI Worker（uv、Redis、boto3、真实/模拟管线）
   ai/        base/mock/real 管线、TTS、渲染、ONNX 口型
+  fonts/     字幕字体目录（gitignore，见 fonts/README.md）
   external/  gitignore：GPT-SoVITS / LivePortrait / Wav2Lip 克隆代码
   models/    gitignore：全部权重（GPT-SoVITS / LivePortrait / Wav2Lip ONNX）
 docker-compose.yml / .env.example
