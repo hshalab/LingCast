@@ -83,7 +83,8 @@ AMD GPUs using ROCm.
 3. [x] `POST /api/live/{id}/start|push|status` 已落地；LLM 链路由
    `POST /api/live/{id}/message` 完成（OpenAI Go SDK → DeepSeek Responses
    `deepseek-v4-flash` → 回复切句入 `live_queue:{id}`；无 key 时回显原文）。
-   观众端页面（`/rooms` 列表 + `/rooms/:avatarId` 直播间）已上线。
+   观众端已拆为**独立 Next.js + TailwindCSS 项目**（`client/`，:3000）：
+   `/` 开播列表 + `/rooms/:avatarId` 直播间（xgplayer + 服务端代理）。
 
 ### Step 3.3: 7x24 Long-form Broadcast（长时直播）— [~]
 

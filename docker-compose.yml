@@ -99,7 +99,7 @@ services:
       S3_BUCKET: ${S3_BUCKET:-talking-avatar}
       S3_USE_SSL: "false"
       S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000,http://localhost:8080}
     depends_on:
       mysql:
         condition: service_healthy
@@ -159,6 +159,20 @@ services:
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8080}:80"
+    depends_on:
+      - api
+
+  # ---- 观众端（独立 Next.js 客户端，不属于管理后台） ----
+  client:
+    build:
+      context: ./client
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_PORT:-3000}:3000"
+    environment:
+      # Server-side proxy target: browser only talks to :3000, no CORS needed.
+      API_ORIGIN: http://api:8080
+      LIVE_ORIGIN: http://srs:8080
     depends_on:
       - api
 

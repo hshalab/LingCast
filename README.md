@@ -44,9 +44,11 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
   localStorage，默认中文女声晓晓）；提交后显示「基础视频生成中…」并轮询状态。
 - **Broadcast（离线播报）**：选择已就绪数字人 + 输入脚本 → 提交任务 → 轮询 →
   状态卡片内嵌 **xgplayer** 播放成品（9:16 竖版，最大 720×1080，模态窗播放）。
-- **客户端直播间（观众端）**：侧边栏「观众端 → 直播间」查看所有开播机器人
-  （`GET /api/live`），进入房间后 xgplayer 拉 HTTP-FLV 观看，底部输入框可直接
-  向数字人发消息（`POST /api/live/:id/message`）。
+- **客户端直播间（观众端）**：独立 Next.js + TailwindCSS 项目（`client/`，端口
+  **3000**，不属于管理后台）：首页列出所有开播机器人（`GET /api/live`），进入
+  `/rooms/:avatarId` 后 xgplayer 拉 HTTP-FLV 观看，底部输入框可直接向数字人发消息
+  （`POST /api/live/:id/message`）。`/api` 与 `/live` 由 Next 路由处理器在服务端
+  代理，浏览器无 CORS 负担。
 - **LLM 消息回复**：客户端消息 → OpenAI Go SDK 调 DeepSeek Responses API
   （`base_url=https://api.deepseek.com`，模型 `deepseek-v4-flash`）→ 回复按句切块
   入直播队列 → TTS → 口型 → 推流；未配置 `OPENAI_API_KEY` 时原样回读输入（测试模式）。
@@ -217,8 +219,10 @@ docker compose up --build            # 基础设施 + API + 前端 + SRS
 cd worker
 uv run python -u stream_worker.py    # 流式 Worker（与离线 worker.py 并存）
 
-# 观众端：侧边栏「观众端 → 直播间」选择开播机器人进入房间，输入消息自动触发
-# LLM 回复；或命令行示例：
+# 观众端（独立 Next.js 项目）：http://localhost:3000
+cd client && pnpm dev                # 或 docker compose up -d client
+
+# 命令行示例：
 curl -X POST http://localhost:8080/api/live/9/start
 curl -X POST http://localhost:8080/api/live/9/message \
   -H 'Content-Type: application/json' \
@@ -310,6 +314,7 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 ```text
 backend/   Go Gin API（模型、S3、Redis、handlers、Dockerfile）
 frontend/  shadcn-admin 前端（Avatar Studio 页面、Dockerfile、nginx.conf）
+client/    Next.js + TailwindCSS 观众端（独立项目，:3000）
 worker/    Python 3.11 AI Worker（uv、Redis、boto3、真实/模拟管线）
   ai/        base/mock/real 管线、TTS、渲染、ONNX 口型
   external/  gitignore：GPT-SoVITS / LivePortrait / Wav2Lip 克隆代码

@@ -164,19 +164,21 @@ class LiveAvatarSession:
         # 1) Pull new text from the per-avatar queue when we have no chunk and
         #    no TTS in flight (LPOP keeps the chunk atomic for this worker).
         if self.talking is None and not self._tts_results.qsize():
-            text = r.lpop(self.queue_key)
-            if text:
-                self.maybe_start_tts(text)
+            new_text = r.lpop(self.queue_key)
+            if new_text:
+                self.maybe_start_tts(new_text)
 
         # 2) A finished TTS chunk switches the pipe from idle to talking.
         if self.talking is None:
+            text = None
+            wav = None
             try:
                 text, wav = self._tts_results.get_nowait()
             except queue_mod.Empty:
-                wav = None
+                pass
             if wav is not None:
                 self._begin_talking(wav, text)
-            elif wav is None and text is not None:
+            elif text is not None:
                 logger.warning("avatar %s chunk skipped (TTS failed)", self.avatar_id)
 
         # 3) Feed exactly one block. `-re` on the video input paces everything.

@@ -4,7 +4,6 @@ import {
   Images,
   ListChecks,
   RadioTower,
-  Tv,
   Video,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
@@ -50,16 +49,6 @@ export const sidebarData: SidebarData = {
           title: '任务中心',
           url: '/task-center',
           icon: ListChecks,
-        },
-      ],
-    },
-    {
-      title: '观众端',
-      items: [
-        {
-          title: '直播间',
-          url: '/rooms',
-          icon: Tv,
         },
       ],
     },

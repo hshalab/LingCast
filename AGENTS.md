@@ -33,9 +33,12 @@
 - ✅ Avatar Studio（创建）：形象名称/图片/Edge-TTS 音色（localStorage 缓存，
   默认 zh-CN-XiaoxiaoNeural），提交后轮询 `GET /api/avatars/:id` 直到 ready。
 - ✅ Broadcast（离线播报）页面：选数字人 + 脚本 → 任务轮询 → 播放成品。
-- ✅ 客户端直播间（观众端）：侧边栏「观众端 → 直播间」→ `GET /api/live` 列出开播
-  机器人 → `room.tsx` 用 xgplayer 拉 HTTP-FLV，聊天输入走
-  `POST /api/live/:id/message`。
+- ✅ 客户端直播间（观众端）：**独立 Next.js + TailwindCSS 项目**（`client/`，端口
+  **3000**，不属于管理后台）——`app/page.tsx` 列出开播机器人（`GET /api/live`，
+  3s 轮询），`app/rooms/[avatarId]/page.tsx` 用 xgplayer 拉 HTTP-FLV + 聊天输入
+  `POST /api/live/:id/message`；`app/api/[...path]` 与 `app/live/[...path]` 路由
+  处理器在**服务端**代理（`API_ORIGIN` / `LIVE_ORIGIN` 运行时读取，docker 内为
+  `http://api:8080` / `http://srs:8080`，本地默认 `http://localhost:8080`）。
 - ✅ LLM 回复链路：Go 后端用 `github.com/openai/openai-go` Responses API 调 DeepSeek
   （`OPENAI_BASE_URL=https://api.deepseek.com`、`OPENAI_MODEL=deepseek-v4-flash`，
   该模型是 DeepSeek 唯一支持 Responses 的模型），回复 `splitSentences` 入
@@ -70,8 +73,8 @@
 ```text
 backend/   Go API（Dockerfile）
 frontend/  React 管理后台（Dockerfile + nginx.conf）
-  src/features/rooms/   观众端：rooms-list.tsx（开播列表）+ room.tsx（直播间）
-  src/components/xg-video.tsx   内联 xgplayer 封装（播报预览/直播间共用）
+  src/components/xg-video.tsx   内联 xgplayer 封装（播报预览 720x1080 用）
+client/    Next.js 观众端（独立项目）：app/page.tsx 列表 + app/rooms/[avatarId] 直播间
 worker/
   worker.py              Worker 入口（Redis 队列、S3、Webhook 回调）
   download_models.py     一键克隆代码 + 下载/导出模型
