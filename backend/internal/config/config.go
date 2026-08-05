@@ -84,7 +84,7 @@ func Load() Config {
 		AvatarInitQueueKey:  env("AVATAR_INIT_QUEUE_KEY", "talking_avatar:avatar_init"),
 		OpenAIAPIKey:        os.Getenv("OPENAI_API_KEY"),
 		OpenAIBaseURL:       env("OPENAI_BASE_URL", "https://api.deepseek.com"),
-		OpenAIModel:         env("OPENAI_MODEL", "deepseek-chat"),
+		OpenAIModel:         env("OPENAI_MODEL", "deepseek-v4-flash"),
 
 		S3Endpoint:      env("S3_ENDPOINT", "http://127.0.0.1:9000"),
 		S3AccessKey:     env("S3_ACCESS_KEY", "minioadmin"),

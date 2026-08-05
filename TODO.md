@@ -80,8 +80,10 @@ AMD GPUs using ROCm.
    s16le 音频 /dev/fd/3，视频输入 `-re` 实时节流）推流
    `rtmp://localhost:1935/live/avatar_<id>`；闲置态喂静音音频 + base 动画，
    说话态喂口型帧 + TTS 音频，管道全程不关闭。离线 MP4 逻辑保留。
-3. [~] `POST /api/live/{id}/start|push|status` 已落地；`POST /api/chat`
-   （LLM 响应切句入队）留待下一步。
+3. [x] `POST /api/live/{id}/start|push|status` 已落地；LLM 链路由
+   `POST /api/live/{id}/message` 完成（OpenAI Go SDK → DeepSeek Responses
+   `deepseek-v4-flash` → 回复切句入 `live_queue:{id}`；无 key 时回显原文）。
+   观众端页面（`/rooms` 列表 + `/rooms/:avatarId` 直播间）已上线。
 
 ### Step 3.3: 7x24 Long-form Broadcast（长时直播）— [~]
 

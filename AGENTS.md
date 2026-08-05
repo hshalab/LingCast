@@ -33,6 +33,13 @@
 - ✅ Avatar Studio（创建）：形象名称/图片/Edge-TTS 音色（localStorage 缓存，
   默认 zh-CN-XiaoxiaoNeural），提交后轮询 `GET /api/avatars/:id` 直到 ready。
 - ✅ Broadcast（离线播报）页面：选数字人 + 脚本 → 任务轮询 → 播放成品。
+- ✅ 客户端直播间（观众端）：侧边栏「观众端 → 直播间」→ `GET /api/live` 列出开播
+  机器人 → `room.tsx` 用 xgplayer 拉 HTTP-FLV，聊天输入走
+  `POST /api/live/:id/message`。
+- ✅ LLM 回复链路：Go 后端用 `github.com/openai/openai-go` Responses API 调 DeepSeek
+  （`OPENAI_BASE_URL=https://api.deepseek.com`、`OPENAI_MODEL=deepseek-v4-flash`，
+  该模型是 DeepSeek 唯一支持 Responses 的模型），回复 `splitSentences` 入
+  `live_queue:{id}` + `live_history:{id}`；无 `OPENAI_API_KEY` 时原样回读输入。
 - ✅ Go API：`POST /api/avatars`、`GET /api/avatars`、`POST /api/tasks`、
   `GET /api/tasks/:id`、`POST /api/tasks/:id/status`（Worker 回调）。
 - ✅ 两段式管线：创建时 `avatar_init` 队列 → LivePortrait 生成静音 24fps base 视频
@@ -50,6 +57,11 @@
 - ✅ 性能：16 秒视频口型阶段约 10 秒；CPU 线程数受限（`WAV2LIP_THREADS`，默认 4）。
 - ✅ 动画节奏可调：默认驱动模板 d5.pkl，另有 `LIVEPORTRAIT_DRIVING_SPEED` /
   `LIVEPORTRAIT_DRIVING_MULTIPLIER` 两个旋钮。
+- ✅ 基础视频默认去眨眼：`renderer_real.py` 冻结眼部表情通道（`EYE_EXP_DIMS`
+  取首帧值，`c_eyes/c_d_eyes_lst` 全帧复制首帧），保留耸肩/身体微晃；
+  `.env.local` 设 `LIVEPORTRAIT_DRIVING_SPEED=0.2`（约 3s 一次耸肩）。
+- ✅ 播报成品预览：`broadcast/index.tsx` 状态卡片用内联 `XgVideo`（xgplayer），
+  9:16 竖版最大 720×1080，模态窗播放。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
 - ⬜ Linux/CUDA 生产部署未实测（代码路径已预留）。
 
@@ -58,6 +70,8 @@
 ```text
 backend/   Go API（Dockerfile）
 frontend/  React 管理后台（Dockerfile + nginx.conf）
+  src/features/rooms/   观众端：rooms-list.tsx（开播列表）+ room.tsx（直播间）
+  src/components/xg-video.tsx   内联 xgplayer 封装（播报预览/直播间共用）
 worker/
   worker.py              Worker 入口（Redis 队列、S3、Webhook 回调）
   download_models.py     一键克隆代码 + 下载/导出模型

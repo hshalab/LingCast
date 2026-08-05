@@ -43,13 +43,21 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
 - **Avatar Studio（创建）**：形象名称 + 图片上传 + Edge-TTS 音色选择（列表缓存于
   localStorage，默认中文女声晓晓）；提交后显示「基础视频生成中…」并轮询状态。
 - **Broadcast（离线播报）**：选择已就绪数字人 + 输入脚本 → 提交任务 → 轮询 →
-  内嵌播放成品 MP4。
+  状态卡片内嵌 **xgplayer** 播放成品（9:16 竖版，最大 720×1080，模态窗播放）。
+- **客户端直播间（观众端）**：侧边栏「观众端 → 直播间」查看所有开播机器人
+  （`GET /api/live`），进入房间后 xgplayer 拉 HTTP-FLV 观看，底部输入框可直接
+  向数字人发消息（`POST /api/live/:id/message`）。
+- **LLM 消息回复**：客户端消息 → OpenAI Go SDK 调 DeepSeek Responses API
+  （`base_url=https://api.deepseek.com`，模型 `deepseek-v4-flash`）→ 回复按句切块
+  入直播队列 → TTS → 口型 → 推流；未配置 `OPENAI_API_KEY` 时原样回读输入（测试模式）。
 - **Edge-TTS 语音合成**：GPU-free 云端神经音色，按 avatar 的 `voice_id` 选声，
   一条句子约 1-2 秒（`TTS_ENGINE=gpt-sovits` 可切回旧克隆模型）。
 - **LivePortrait 基础视频预处理**：创建数字人时生成静音 24fps 驱动视频，仅此一次。
 - **Wav2Lip(ONNX) 口型合成**：基于预生成 base 视频，嘴部逐帧匹配语音；ONNX +
   CoreML 执行器，CPU 线程数受限（默认 4），短 base 自动循环覆盖任意脚本长度。
 - **动画节奏可调**：驱动模板可换、播放速度/动作幅度可调（见“动画节奏”）。
+- **基础视频去眨眼**：驱动模板眼部表情通道已冻结（不眨眼），保留耸肩/身体微晃，
+  约 3 秒一次（`LIVEPORTRAIT_DRIVING_SPEED=0.2`）。
 - **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
 
 ## 新设备快速开始
@@ -189,6 +197,9 @@ Nginx 拉 HTTP-FLV 播放，全程不落盘 MP4。
     打开常驻管道（闲置态：base 动画 + 静音）。
   - `POST /api/live/{avatarID}/push`：按 `。！？!?；;`/换行切句，逐条压入
     `live_queue:{avatarID}`。
+  - `POST /api/live/{avatarID}/message`：把聊天文本交给 LLM（DeepSeek Responses，
+    OpenAI SDK），回复切句入队 → TTS → 口型 → 推流；无 `OPENAI_API_KEY` 时回显
+    原文（直播台“发送文字”仅测试用）。
   - `GET /api/live/{avatarID}/status`：返回会话状态、队列长度与待渲染句子，
     供前端每秒轮询。
 - **`stream_worker.py`**（闲置/说话循环）：
@@ -206,12 +217,12 @@ docker compose up --build            # 基础设施 + API + 前端 + SRS
 cd worker
 uv run python -u stream_worker.py    # 流式 Worker（与离线 worker.py 并存）
 
-# 前端：Avatar Library → 卡片「开启直播」进入 Live Studio（自动调 start + 播放器）
-# 或命令行示例：
+# 观众端：侧边栏「观众端 → 直播间」选择开播机器人进入房间，输入消息自动触发
+# LLM 回复；或命令行示例：
 curl -X POST http://localhost:8080/api/live/9/start
-curl -X POST http://localhost:8080/api/live/9/push \
+curl -X POST http://localhost:8080/api/live/9/message \
   -H 'Content-Type: application/json' \
-  -d '{"text": "大家好！欢迎来到直播间。今天聊聊数字人。"}'
+  -d '{"text": "你好，在吗？"}'
 curl http://localhost:8080/api/live/9/status
 ```
 
@@ -225,7 +236,7 @@ curl http://localhost:8080/api/live/9/status
   TTS 在闲置期间异步预取，说话切换无明显等待。
 - 闲置 base 动画按 `LIVEPORTRAIT_IDLE_BASE_SECONDS`（默认 10s）渲染并循环取帧，
   头部动作每 10s 重复一次；逐 chunk 重新生成 base（更生动的头部动作）留作后续优化。
-- `POST /api/chat`（LLM 响应切句入队）与多机/断流重连属下一阶段。
+- 多机/断流重连属下一阶段（LLM 消息链路已由 `POST /api/live/:id/message` 落地）。
 
 ## 数据流
 
@@ -247,9 +258,12 @@ curl http://localhost:8080/api/live/9/status
 
 ```bash
 LIVEPORTRAIT_DRIVING=.../assets/examples/driving/d5.pkl   # 换模板
-LIVEPORTRAIT_DRIVING_SPEED=0.5                            # 0.5 = 动作慢一倍（时间插值）
+LIVEPORTRAIT_DRIVING_SPEED=0.2                            # 0.2 = 动作更慢，约 3s 一次耸肩
 LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度更含蓄
 ```
+
+基础视频默认**冻结眼部表情通道**（`EYE_EXP_DIMS` 取首帧值），因此不眨眼；耸肩等
+身体动作保留。
 
 可选模板见 `worker/external/LivePortrait/assets/examples/driving/`：
 `talking.pkl`（说话）、`wink.pkl`（眨眼）、`shy.pkl`（害羞）、`shake_face.pkl`（摇头）、
@@ -270,6 +284,9 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 | `WAV2LIP_PROVIDER` | `worker/.env.local` | `coreml`（macOS 默认）/ `rocm`（AMD）/ `cuda` / `cpu` |
 | `WAV2LIP_THREADS` | `worker/.env.local` | ONNX 线程数上限（默认 4） |
 | `WAV2LIP_BACKEND` | `worker/.env.local` | `onnx`（默认）/ `torch`（慢，对照） |
+| `OPENAI_BASE_URL` | `.env` | LLM 端点（默认 `https://api.deepseek.com`） |
+| `OPENAI_API_KEY` | `.env` | DeepSeek API Key；不设则消息原样回读 |
+| `OPENAI_MODEL` | `.env` | Responses 模型（默认 `deepseek-v4-flash`） |
 
 完整清单见 `worker/.env.local.example`。
 
@@ -282,6 +299,11 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 | `POST` | `/api/tasks` | `{avatarId, scriptText}`，入队并返回任务 |
 | `GET` | `/api/tasks/:id` | 轮询任务状态与输出 URL |
 | `POST` | `/api/tasks/:id/status` | Worker 内部 Webhook（processing/completed/failed） |
+| `POST` | `/api/live/:id/start` | 开启直播（登记会话 + 通知 Worker 开管道） |
+| `POST` | `/api/live/:id/message` | 聊天消息 → LLM 回复切句入队（观众端用） |
+| `POST` | `/api/live/:id/push` | 直接按句入队（直播台测试用） |
+| `GET` | `/api/live/:id/status` | 会话状态与队列 |
+| `GET` | `/api/live` | 当前开播机器人列表 |
 
 ## 目录结构
 
