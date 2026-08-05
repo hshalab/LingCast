@@ -164,6 +164,11 @@ class Wav2LipOnnxLipSync:
     # Inference internals
     # ------------------------------------------------------------------ #
     def _run_batch(self, img_batch, mel_batch, frame_batch, coords_batch, writer) -> None:
+        for frame in self._run_batch_frames(img_batch, mel_batch, frame_batch, coords_batch):
+            writer.write(frame)
+
+    def _run_batch_frames(self, img_batch, mel_batch, frame_batch, coords_batch) -> list:
+        """Run one Wav2Lip inference batch and return the patched BGR frames."""
         session = self._session or self._load_model()
         img_batch = np.asarray(img_batch)
         mel_batch = np.asarray(mel_batch)
@@ -179,11 +184,53 @@ class Wav2LipOnnxLipSync:
         }
         pred = session.run(None, feed)[0]
         pred = pred.transpose(0, 2, 3, 1) * 255.0
+        out_frames = []
         for p, f, c in zip(pred, frame_batch, coords_batch):
             y1, y2, x1, x2 = c
             p = cv2.resize(p.astype(np.uint8), (x2 - x1, y2 - y1))
             f[y1:y2, x1:x2] = p
-            writer.write(f)
+            out_frames.append(f)
+        return out_frames
+
+    def iter_frames(self, tts_wav: Path, base_frames: list, fps: float | None = None):
+        """Yield lip-synced BGR frames for `base_frames` + TTS audio (streaming).
+
+        Unlike :meth:`sync`, nothing is written to disk: frames are generated
+        in memory so the stream worker can pipe them straight into FFmpeg.
+        """
+        fps = fps or self.fps or 25.0
+        self._check_models()
+        mel_chunks = self._mel_chunks(tts_wav, fps)
+        frames = list(base_frames[: len(mel_chunks)])
+        if not frames:
+            return
+        face_det_results = self._face_detect(frames)
+
+        img_batch, mel_batch, frame_batch, coords_batch = [], [], [], []
+        for i, m in enumerate(mel_chunks):
+            idx = i % len(frames)
+            face, coords = face_det_results[idx]
+            img_batch.append(cv2.resize(face, (IMG_SIZE, IMG_SIZE)))
+            mel_batch.append(m)
+            frame_batch.append(frames[idx].copy())
+            coords_batch.append(coords)
+            if len(img_batch) >= self.wav2lip_batch_size:
+                yield from self._run_batch_frames(
+                    img_batch, mel_batch, frame_batch, coords_batch
+                )
+                img_batch, mel_batch, frame_batch, coords_batch = [], [], [], []
+        if img_batch:
+            yield from self._run_batch_frames(
+                img_batch, mel_batch, frame_batch, coords_batch
+            )
+
+    @staticmethod
+    def audio_pcm16(tts_wav: Path) -> bytes:
+        """Resample a TTS wav to 16kHz mono s16le for the FFmpeg audio pipe."""
+        import librosa
+
+        wav, _ = librosa.load(str(tts_wav), sr=SAMPLE_RATE, mono=True)
+        return (np.clip(wav, -1.0, 1.0) * 32767.0).astype(np.int16).tobytes()
 
     def _load_model(self):
         if self._session is None:

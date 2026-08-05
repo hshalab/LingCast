@@ -19,6 +19,18 @@ type TaskPayload struct {
 	VoiceAudioS3Key string `json:"voiceAudioS3Key,omitempty"`
 }
 
+// StreamPayload is one sentence-level chunk of a live stream, pushed to the
+// streaming queue and consumed by stream_worker.py. All chunks of a stream
+// share the StreamID so the worker can keep a single FFmpeg pipe per stream.
+type StreamPayload struct {
+	StreamID        string `json:"streamId"`
+	AvatarID        uint   `json:"avatarId"`
+	ChunkIndex      int    `json:"chunkIndex"`
+	Text            string `json:"text"`
+	ImageS3Key      string `json:"imageS3Key"`
+	VoiceAudioS3Key string `json:"voiceAudioS3Key,omitempty"`
+}
+
 // Queue wraps a Redis list used as a FIFO task queue.
 type Queue struct {
 	client *redis.Client
@@ -44,4 +56,14 @@ func (q *Queue) Push(ctx context.Context, payload TaskPayload) error {
 		return err
 	}
 	return q.client.RPush(ctx, q.key, data).Err()
+}
+
+// PushTo appends an arbitrary JSON value to a named Redis list. Used by the
+// streaming queue (talking_avatar:stream_tasks) alongside the task queue.
+func (q *Queue) PushTo(ctx context.Context, key string, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return q.client.RPush(ctx, key, data).Err()
 }

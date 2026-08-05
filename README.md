@@ -161,6 +161,50 @@ WAV2LIP_PROVIDER=rocm    # ROCm EP 不支持 LSTM 时会自动逐算子回退 CP
 > 如果 ROCm EP 在你的卡上有问题，`WAV2LIP_PROVIDER=cpu` 同样可用（CPU 推理本身
 > 就有 35fps+）。首次真实 TTS 会自动从 ModelScope 下载 G2PW 中文前端（约 1.2GB）。
 
+## 实时直播（流式架构）
+
+平台内置实时直播能力：长文本按句子切块后，由 `stream_worker.py` 逐块合成并
+**内存直推 RTMP** 到 SRS，浏览器经 Nginx 拉 HTTP-FLV 播放，全程不落盘 MP4。
+
+### 组件
+
+- **SRS v5**（`docker-compose.yml` 中的 `srs` 服务）：RTMP 推流 1935、HTTP API
+  1985、HTTP-FLV 8081（Nginx `/live/` 代理到 `srs:8081`，不与前端 8080 冲突）。
+- **`POST /api/stream`**：接收 `{avatarId, text}`（或 `streamId` 可选），按
+  `。！？!?；;` 与换行切句，按序推入 `talking_avatar:stream_tasks` 队列，
+  返回 `{streamId, chunkCount, playbackUrl}`。
+- **`stream_worker.py`**：消费队列 → GPT-SoVITS 分句 TTS（异步预取：Chunk N
+  推流时 N+1 已在合成）→ 复用缓存的 LivePortrait base 动画 → Wav2Lip ONNX
+  内存推理 → BGR24 帧 + 16k PCM 音频交错写入单个 ffmpeg 进程 →
+  `rtmp://localhost:1935/live/<stream_id>`。
+
+### 启动与使用
+
+```bash
+docker compose up --build            # 基础设施 + API + 前端 + SRS
+cd worker
+uv run python -u stream_worker.py    # 流式 Worker（与离线 worker.py 并存）
+
+# 发起一场直播（示例）
+curl -X POST http://localhost:8080/api/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"avatarId": 9, "text": "大家好！欢迎来到直播间。今天聊聊数字人。"}'
+```
+
+播放地址：`http://localhost:8080/live/<stream_id>.flv`（`<video>` 标签直接可用）。
+
+### 设计说明与当前限制
+
+- 音视频同步：ffmpeg 需要每个输入的“首个包”才开始消费，且一次性写完整段音频会
+  撑爆其预缓冲——因此实现为**每 0.5 秒交错写音频切片**（先写首片再写帧）。
+- 稳定性优先：base 动画每个流只渲染一次（按首个 chunk 时长缓存并循环取帧）；
+  每个 chunk 重新生成 base 动画（更生动的头部动作）留作后续优化
+  （`STREAM_REGENERATE_BASE`）。
+- 并发：TTS 与推流解耦（每流一个生产者线程 + 有界结果队列），帧生成与音频写入
+  在推流线程内交错，不丢帧。`STREAM_ASYNC=0` 可退回串行。
+- `POST /api/chat`（接 LLM 再入队）与 7x24 会话保持属下一阶段，当前 `/api/stream`
+  直接接收整段文本。
+
 ## 数据流
 
 1. 前端上传形象图片（必填）与克隆音频（可选），`POST /api/avatars` 直传对象存储，

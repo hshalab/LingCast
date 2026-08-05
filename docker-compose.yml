@@ -88,6 +88,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_DB: "0"
       TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks}
+      STREAM_TASK_QUEUE_KEY: ${STREAM_TASK_QUEUE_KEY:-talking_avatar:stream_tasks}
       S3_ENDPOINT: http://minio:9000
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
@@ -127,6 +128,21 @@ services:
       minio:
         condition: service_healthy
 
+  # Real-time streaming gateway (SRS v5). The host-native AI worker pushes
+  # RTMP to 1935; HTTP-FLV/API stay on the internal network and are exposed
+  # to the browser through the nginx /live proxy (port 8081 is host-only for
+  # debugging).
+  srs:
+    image: ossrs/srs:5
+    restart: unless-stopped
+    command: ["/usr/local/srs/srs", "-c", "/usr/local/srs/conf/srs.conf"]
+    ports:
+      - "1935:1935"   # RTMP ingest (host worker -> rtmp://localhost:1935/live/<id>)
+      - "1985:1985"   # SRS HTTP API
+      - "8081:8080"   # HTTP-FLV / HLS (nginx proxies /live to srs:8081)
+    volumes:
+      - srs-data:/usr/local/srs/objs
+
   # ---- Public entry point (the only host-published service) ----
   frontend:
     build:
@@ -138,6 +154,7 @@ services:
       - api
 
 volumes:
+  srs-data:
   mysql-data:
   redis-data:
   minio-data:

@@ -33,6 +33,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 
 	avatarHandler := handlers.NewAvatarHandler(db, s3)
 	taskHandler := handlers.NewTaskHandler(db, q)
+	streamHandler := handlers.NewStreamHandler(db, q, cfg.StreamQueueKey)
 
 	api := r.Group("/api")
 	{
@@ -42,6 +43,8 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		api.GET("/tasks/:id", taskHandler.Get)
 		// Internal webhook used by the Python AI worker.
 		api.POST("/tasks/:id/status", taskHandler.UpdateStatus)
+		// Live streaming: chunks a long text into the stream queue.
+		api.POST("/stream", streamHandler.Create)
 	}
 
 	r.GET("/healthz", func(c *gin.Context) {
