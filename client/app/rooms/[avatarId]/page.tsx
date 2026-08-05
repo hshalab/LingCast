@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { Bot, Eye, Heart, Tv } from 'lucide-react'
+import { Bot, Heart, Tv } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import NavHeader from '@/components/nav-header'
 import XgFlvPlayer from '@/components/xg-player'
@@ -55,9 +55,6 @@ export default function RoomPage() {
 
   const colorFor = (uid: number) => AVATAR_COLORS[Math.abs(uid) % AVATAR_COLORS.length]
   const initialFor = (name: string) => name.trim().slice(0, 1).toUpperCase() || '?'
-  // 人气（占位）：由房间 id 派生一个稳定的观看数
-  const viewers = avatar ? 100 + ((avatar.id * 137) % 900) : 0
-
   const like = () => {
     const hid = ++likeId.current
     const x = 15 + Math.random() * 70
@@ -208,55 +205,63 @@ export default function RoomPage() {
           )}
         </div>
 
-        {/* 左右结构：画面在左、聊天在右 */}
+        {/* 抖音直播式布局：左画面铺满 + 模糊背景，右聊天固定 400 */}
         <div className='flex min-h-0 flex-1 flex-col gap-3 lg:flex-row'>
-          {/* 视频列：显式宽度，避免 w-full 在自动宽度父级下塌陷 */}
-          <div className='flex min-h-0 w-full shrink-0 flex-col items-center justify-center overflow-y-auto rounded-3xl border border-zinc-800 bg-gradient-to-b from-zinc-900 to-black p-2 lg:w-[336px]'>
-            <div className='relative w-full shrink-0 overflow-hidden rounded-2xl'>
-              {started ? (
-                <XgFlvPlayer
-                  url={streamUrl}
-                  className='aspect-[9/16] w-full overflow-hidden'
-                />
-              ) : (
-                <div className='flex aspect-[9/16] w-full flex-col items-center justify-center gap-2 text-sm text-zinc-500'>
-                  <Tv className='size-10 text-zinc-600' />
-                  主播暂未开播，请稍候…
-                </div>
-              )}
+          {/* 左：画面区铺满，9:16 视频居中、高度撑满，两侧模糊背景 */}
+          <div className='relative min-h-0 flex-1 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950'>
+            {/* 模糊背景层（根据画面） */}
+            {avatar?.imageS3Url && (
+              <img
+                src={avatar.imageS3Url}
+                alt=''
+                aria-hidden
+                className='absolute inset-0 h-full w-full scale-110 object-cover opacity-70 blur-2xl'
+              />
+            )}
+            <div className='absolute inset-0 bg-gradient-to-b from-zinc-950/50 via-transparent to-black/60' />
 
-              {/* 直播间徽标与人气 */}
-              {started && (
-                <>
+            {/* 视频居中、高度撑满 */}
+            <div className='relative z-10 flex h-full w-full items-center justify-center overflow-hidden'>
+              <div className='relative h-full shrink-0'>
+                {started ? (
+                  <XgFlvPlayer
+                    url={streamUrl}
+                    className='aspect-[9/16] h-full max-h-full w-auto max-w-full overflow-hidden'
+                  />
+                ) : (
+                  <div className='flex aspect-[9/16] h-full flex-col items-center justify-center gap-2 text-sm text-zinc-400'>
+                    <Tv className='size-10 text-zinc-500' />
+                    主播暂未开播，请稍候…
+                  </div>
+                )}
+
+                {/* 直播间徽标 */}
+                {started && (
                   <span className='absolute left-2 top-2 flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-red-500 px-2 py-0.5 text-xs font-medium text-white shadow-lg shadow-red-600/30'>
                     <span className='size-1.5 animate-pulse rounded-full bg-white' />
                     直播中
                   </span>
-                  <span className='absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white/90 backdrop-blur'>
-                    <Eye className='mr-1 inline size-3' />
-                    {viewers}
-                  </span>
-                </>
-              )}
+                )}
 
-              {/* 点赞爱心动画 */}
-              <div className='pointer-events-none absolute inset-0 overflow-hidden'>
-                {hearts.map((h) => (
-                  <span
-                    key={h.id}
-                    className='absolute bottom-10 animate-[float-up_1.2s_ease-out_forwards] text-2xl'
-                    style={{ left: `${h.x}%` }}
-                  >
-                    <Heart className='size-5 fill-rose-500 text-rose-500 drop-shadow' />
-                  </span>
-                ))}
+                {/* 点赞爱心动画 */}
+                <div className='pointer-events-none absolute inset-0 overflow-hidden'>
+                  {hearts.map((h) => (
+                    <span
+                      key={h.id}
+                      className='absolute bottom-12 animate-[float-up_1.2s_ease-out_forwards] text-2xl'
+                      style={{ left: `${h.x}%` }}
+                    >
+                      <Heart className='size-5 fill-rose-500 text-rose-500 drop-shadow' />
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
 
             {/* 点赞按钮 */}
             <button
               onClick={like}
-              className='mt-3 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-rose-500 hover:text-rose-400'
+              className='absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-4 py-1.5 text-sm text-zinc-200 backdrop-blur transition hover:border-rose-500 hover:text-rose-400'
             >
               <Heart
                 className={`size-4 ${likes > 0 ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'}`}
@@ -265,8 +270,8 @@ export default function RoomPage() {
             </button>
           </div>
 
-          {/* 聊天面板 */}
-          <section className='flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/50 backdrop-blur'>
+          {/* 右：聊天面板，固定 400 宽 */}
+          <section className='flex h-80 min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/70 backdrop-blur lg:h-auto lg:w-[400px]'>
             <div className='flex shrink-0 items-center justify-between border-b border-zinc-800 px-4 py-3'>
               <div>
                 <h2 className='font-semibold text-zinc-100'>互动聊天</h2>
@@ -274,10 +279,6 @@ export default function RoomPage() {
                   数字人通过 AI 回复并开口说话
                 </p>
               </div>
-              <span className='flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-950/60 px-2.5 py-1 text-xs text-zinc-400'>
-                <span className='size-1.5 animate-pulse rounded-full bg-emerald-500' />
-                在线 {viewers}
-              </span>
             </div>
 
             <div ref={chatRef} className='min-h-0 flex-1 overflow-y-auto px-3 py-3'>
@@ -289,15 +290,27 @@ export default function RoomPage() {
                 <div className='flex flex-col gap-3'>
                   {messages.map((m) => (
                     <div key={m.id} className='flex items-start gap-2'>
-                      <span
-                        className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white ${colorFor(m.userId)}`}
-                      >
-                        {m.role === 'bot' ? (
-                          <Bot className='size-4' />
+                      {m.role === 'bot' ? (
+                        avatar?.imageS3Url ? (
+                          <img
+                            src={avatar.imageS3Url}
+                            alt={avatar.name}
+                            className='size-7 shrink-0 rounded-full border border-zinc-700 object-cover'
+                          />
                         ) : (
-                          initialFor(m.username)
-                        )}
-                      </span>
+                          <span
+                            className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white ${colorFor(m.userId)}`}
+                          >
+                            <Bot className='size-4' />
+                          </span>
+                        )
+                      ) : (
+                        <span
+                          className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white ${colorFor(m.userId)}`}
+                        >
+                          {initialFor(m.username)}
+                        </span>
+                      )}
                       <div className='min-w-0 max-w-[88%]'>
                         <p className='text-[11px] text-zinc-500'>
                           <span
