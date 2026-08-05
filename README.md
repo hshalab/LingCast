@@ -1,5 +1,9 @@
 # 灵播 LingCast
 
+<p align="center">
+  <img src="frontend/public/images/logo.svg" alt="灵播 LingCast" width="128">
+</p>
+
 端到端 AI 数字人直播平台：创建数字人（形象 + 音色 + 人物设定）→ LivePortrait 生成
 基础视频 → **Edge-TTS 语音 + Wav2Lip 口型** → **DeepSeek LLM 实时回复** → SRS 直播推流。
 
