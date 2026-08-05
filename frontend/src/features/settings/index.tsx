@@ -1,7 +1,6 @@
 import { Outlet } from '@tanstack/react-router'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Separator } from '@/components/ui/separator'
 
@@ -11,7 +10,6 @@ export function Settings() {
       <Header>
         <div className='me-auto' />
         <ThemeSwitch />
-        <ProfileDropdown />
       </Header>
 
       <Main fixed>

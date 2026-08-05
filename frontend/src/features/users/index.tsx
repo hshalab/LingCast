@@ -2,7 +2,6 @@ import { RefreshCw, UserRound, UsersRound } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -44,7 +43,6 @@ export function Users() {
       <Header fixed>
         <div className='me-auto' />
         <ThemeSwitch />
-        <ProfileDropdown />
       </Header>
 
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
