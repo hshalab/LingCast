@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { ImageIcon, Plus, RadioTower, RefreshCw, Sparkles } from 'lucide-react'
+import { ImageIcon, Play, Plus, RadioTower, RefreshCw, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Header } from '@/components/layout/header'
@@ -15,14 +15,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api, type Avatar } from '@/lib/api'
+import { VideoPlayerDialog } from '@/components/video-player-dialog'
 
 function formatDate(iso: string): string {
   const date = new Date(iso)
@@ -170,8 +165,16 @@ export function AvatarLibrary() {
                   </CardTitle>
                   <CardDescription className='flex flex-wrap items-center gap-2'>
                     <span>{formatDate(avatar.createdAt)}</span>
-                    {avatar.baseVideoS3Key ? (
-                      <Badge variant='outline'>基础视频就绪</Badge>
+                    {avatar.status === 'ready' ? (
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        className='h-6 px-2 text-xs'
+                        onClick={() => setPreview(avatar)}
+                      >
+                        <Play className='me-1 size-3' />
+                        预览默认视频
+                      </Button>
                     ) : avatar.status === 'failed' ? (
                       <Badge variant='destructive'>生成失败</Badge>
                     ) : (
@@ -224,22 +227,12 @@ export function AvatarLibrary() {
           </div>
         )}
 
-        <Dialog open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
-          <DialogContent className='sm:max-w-2xl'>
-            <DialogHeader>
-              <DialogTitle>{preview?.name} · 默认驱动视频</DialogTitle>
-            </DialogHeader>
-            {preview?.baseVideoS3Url && (
-              <video
-                src={preview.baseVideoS3Url}
-                controls
-                autoPlay
-                playsInline
-                className='aspect-video w-full rounded-lg border bg-black'
-              />
-            )}
-          </DialogContent>
-        </Dialog>
+        <VideoPlayerDialog
+          open={preview !== null}
+          url={preview?.baseVideoS3Url}
+          title={`${preview?.name ?? ''} · 默认驱动视频`}
+          onClose={() => setPreview(null)}
+        />
       </Main>
     </>
   )

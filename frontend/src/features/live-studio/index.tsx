@@ -1,5 +1,7 @@
 import axios from 'axios'
-import mpegts from 'mpegts.js'
+import Player from 'xgplayer'
+import 'xgplayer/dist/index.min.css'
+import FlvPlugin from 'xgplayer-flv'
 import { LoaderCircle, Send, Video } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -30,8 +32,8 @@ function showApiError(error: unknown) {
 
 export function LiveStudio({ avatarId }: { avatarId: string }) {
   const id = Number(avatarId)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const playerRef = useRef<mpegts.Player | null>(null)
+  const playerHostRef = useRef<HTMLDivElement>(null)
+  const playerRef = useRef<Player | null>(null)
   const [status, setStatus] = useState<LiveStatus | null>(null)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -47,19 +49,18 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
 
   // HTTP-FLV player (SRS via nginx /live proxy).
   useEffect(() => {
-    if (!id || !videoRef.current || !mpegts.isSupported()) return
+    if (!id || !playerHostRef.current) return
     const base = `${import.meta.env.VITE_API_BASE_URL ?? ''}`
     const url = `${base}/live/avatar_${id}.flv`
-    const player = mpegts.createPlayer(
-      { type: 'flv', isLive: true, url },
-      {
-        enableWorker: true,
-        liveBufferLatencyChasing: true,
-      },
-    )
-    player.attachMediaElement(videoRef.current)
-    player.load()
-    player.play()
+    const player = new Player({
+      el: playerHostRef.current,
+      url,
+      type: 'flv',
+      isLive: true,
+      autoplay: true,
+      fluid: true,
+      plugins: [FlvPlugin],
+    })
     playerRef.current = player
     return () => {
       player.destroy()
@@ -144,13 +145,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
               </Badge>
             </CardHeader>
             <CardContent>
-              <video
-                ref={videoRef}
-                controls
-                playsInline
-                muted
-                className='aspect-video w-full rounded-lg border bg-black'
-              />
+              <div ref={playerHostRef} className='aspect-video w-full rounded-lg border bg-black' />
             </CardContent>
           </Card>
 

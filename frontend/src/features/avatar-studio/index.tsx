@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { CheckCircle2, LoaderCircle, Upload, Volume2, XCircle } from 'lucide-react'
+import { CheckCircle2, LoaderCircle, Play, Upload, Volume2, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { api, type Avatar } from '@/lib/api'
+import { VideoPlayerDialog } from '@/components/video-player-dialog'
 import {
   cacheVoices,
   DEFAULT_VOICE_ID,
@@ -55,6 +56,7 @@ export function AvatarStudio() {
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID)
   const [submitting, setSubmitting] = useState(false)
   const [previewing, setPreviewing] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [created, setCreated] = useState<Avatar | null>(null)
   const [initFailed, setInitFailed] = useState(false)
 
@@ -288,12 +290,14 @@ export function AvatarStudio() {
               </CardHeader>
               <CardContent className='flex flex-col gap-3'>
                 {created.baseVideoS3Url && (
-                  <video
-                    src={created.baseVideoS3Url}
-                    controls
-                    playsInline
-                    className='aspect-video w-full rounded-lg border bg-black'
-                  />
+                  <Button
+                    type='button'
+                    variant='outline'
+                    onClick={() => setPreviewOpen(true)}
+                  >
+                    <Play className='size-4' />
+                    播放默认视频
+                  </Button>
                 )}
                 <div className='flex gap-2'>
                   <Button asChild>
@@ -323,6 +327,13 @@ export function AvatarStudio() {
             </Card>
           )}
         </div>
+
+        <VideoPlayerDialog
+          open={previewOpen}
+          url={created?.baseVideoS3Url}
+          title={`${created?.name ?? ''} · 默认驱动视频`}
+          onClose={() => setPreviewOpen(false)}
+        />
       </Main>
     </>
   )
