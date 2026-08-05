@@ -140,104 +140,82 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
               <Card
                 key={avatar.id}
                 id={`avatar-card-${avatar.id}`}
-                className={`overflow-hidden ${
+                className={`group relative overflow-hidden ${
                   initialAvatarId === String(avatar.id)
                     ? 'ring-2 ring-primary/60'
                     : ''
                 }`}
               >
                 {avatar.imageS3Url ? (
-                  <button
-                    type='button'
-                    className='group relative block w-full'
-                    disabled={avatar.status !== 'ready'}
-                    onClick={() => setPreview(avatar)}
-                  >
-                    <img
-                      src={avatar.imageS3Url}
-                      alt={avatar.name}
-                      className='aspect-[9/16] w-full border-b object-cover'
-                      loading='lazy'
-                    />
-                    {avatar.status === 'ready' && (
-                      <span className='absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30'>
-                        <span className='rounded-full bg-black/60 px-3 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100'>
-                          ▶ 预览默认视频
-                        </span>
-                      </span>
-                    )}
-                  </button>
+                  <img
+                    src={avatar.imageS3Url}
+                    alt={avatar.name}
+                    className='aspect-[9/16] w-full object-cover'
+                    loading='lazy'
+                  />
                 ) : (
                   <div className='flex aspect-[9/16] w-full items-center justify-center border-b bg-muted'>
                     <ImageIcon className='size-8 text-muted-foreground' />
                   </div>
                 )}
-                <CardHeader className='gap-1.5'>
-                  <CardTitle className='flex items-center justify-between gap-2 text-base'>
-                    <span className='truncate'>{avatar.name}</span>
+
+                <div className='absolute start-2 top-2'>
+                  {avatar.status === 'ready' ? (
+                    <Badge className='border-0 bg-black/60 text-white'>就绪</Badge>
+                  ) : avatar.status === 'failed' ? (
+                    <Badge variant='destructive'>失败</Badge>
+                  ) : (
+                    <Badge className='border-0 bg-black/60 text-white'>生成中</Badge>
+                  )}
+                </div>
+
+                <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-3 text-white'>
+                  <div className='flex items-center justify-between gap-2'>
+                    <p className='truncate font-semibold'>{avatar.name}</p>
                     <Badge variant='secondary' className='shrink-0'>
                       #{avatar.id}
                     </Badge>
-                  </CardTitle>
-                  <CardDescription className='flex flex-wrap items-center gap-2'>
-                    <span>{formatDate(avatar.createdAt)}</span>
+                  </div>
+                  <p className='mt-0.5 text-xs text-white/70'>{formatDate(avatar.createdAt)}</p>
+                  <div className='mt-2 flex items-center gap-1.5'>
                     {avatar.status === 'ready' ? (
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        className='h-6 px-2 text-xs'
-                        onClick={() => setPreview(avatar)}
-                      >
-                        <Play className='me-1 size-3' />
-                        预览默认视频
-                      </Button>
-                    ) : avatar.status === 'failed' ? (
-                      <Badge variant='destructive'>生成失败</Badge>
+                      <>
+                        <Button
+                          asChild
+                          size='sm'
+                          className='h-8 flex-1 border-0 bg-white/20 text-white backdrop-blur hover:bg-white/30 hover:text-white'
+                        >
+                          <Link to='/broadcast' search={{ avatarId: String(avatar.id) }}>
+                            <Sparkles className='size-3.5' />
+                            播报制作
+                          </Link>
+                        </Button>
+                        <Button
+                          asChild
+                          size='sm'
+                          variant='outline'
+                          className='h-8 flex-1 border-white/30 bg-white/20 text-white backdrop-blur hover:bg-white/30 hover:text-white'
+                        >
+                          <Link to='/live-studio' search={{ avatarId: String(avatar.id) }}>
+                            <RadioTower className='size-3.5' />
+                            直播
+                          </Link>
+                        </Button>
+                        <Button
+                          size='icon'
+                          variant='outline'
+                          className='h-8 w-8 shrink-0 border-white/30 bg-white/20 text-white backdrop-blur hover:bg-white/30 hover:text-white'
+                          onClick={() => setPreview(avatar)}
+                          title='预览默认视频'
+                        >
+                          <Play className='size-3.5' />
+                        </Button>
+                      </>
                     ) : (
-                      <Badge variant='destructive'>基础视频生成中</Badge>
+                      <p className='text-xs text-white/80'>基础视频生成中，请稍候</p>
                     )}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className='flex gap-2'>
-                  {avatar.status === 'ready' ? (
-                    <>
-                      <Button asChild size='sm' className='flex-1'>
-                        <Link to='/broadcast' search={{ avatarId: String(avatar.id) }}>
-                          <Sparkles className='size-4' />
-                          播报制作
-                        </Link>
-                      </Button>
-                      <Button asChild size='sm' variant='outline' className='flex-1'>
-                        <Link to='/live-studio' search={{ avatarId: String(avatar.id) }}>
-                          <RadioTower className='size-4' />
-                          开启直播
-                        </Link>
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        size='sm'
-                        className='flex-1'
-                        disabled
-                        title='基础视频生成中，请稍候'
-                      >
-                        <Sparkles className='size-4' />
-                        播报制作
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        className='flex-1'
-                        disabled
-                        title='基础视频生成中，请稍候'
-                      >
-                        <RadioTower className='size-4' />
-                        开启直播
-                      </Button>
-                    </>
-                  )}
-                </CardContent>
+                  </div>
+                </div>
               </Card>
             ))}
           </div>
