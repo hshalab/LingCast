@@ -53,6 +53,7 @@ type liveStatusResponse struct {
 	Status      string   `json:"status"`
 	QueueLength int64    `json:"queueLength"`
 	Pending     []string `json:"pending"`
+	History     []string `json:"history"`
 }
 
 type liveSessionItem struct {
@@ -69,6 +70,10 @@ func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControl
 
 func liveQueueKey(avatarID uint) string {
 	return fmt.Sprintf("live_queue:%d", avatarID)
+}
+
+func liveHistoryKey(avatarID uint) string {
+	return fmt.Sprintf("live_history:%d", avatarID)
 }
 
 // Start handles POST /api/live/:avatarID/start. It upserts a LiveSession in
@@ -211,12 +216,15 @@ func (h *LiveHandler) Push(c *gin.Context) {
 
 	chunks := splitSentences(req.Text)
 	key := liveQueueKey(avatar.ID)
+	historyKey := liveHistoryKey(avatar.ID)
 	for _, text := range chunks {
 		if err := h.q.RPushList(c.Request.Context(), key, text); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "push chunk failed: " + err.Error()})
 			return
 		}
+		_ = h.q.RPushList(c.Request.Context(), historyKey, text)
 	}
+	_ = h.q.TrimList(c.Request.Context(), historyKey, -200, -1)
 	length, _ := h.q.ListLen(c.Request.Context(), key)
 	c.JSON(http.StatusAccepted, gin.H{"accepted": len(chunks), "queueLength": length})
 }
@@ -247,6 +255,14 @@ func (h *LiveHandler) Status(c *gin.Context) {
 	if pending == nil {
 		pending = []string{}
 	}
+	history, _ := h.q.ListRange(c.Request.Context(), liveHistoryKey(uint(avatarID)), 0, -1)
+	if history == nil {
+		history = []string{}
+	}
+	// Newest first for display.
+	for i, j := 0, len(history)-1; i < j; i, j = i+1, j-1 {
+		history[i], history[j] = history[j], history[i]
+	}
 
 	c.JSON(http.StatusOK, liveStatusResponse{
 		AvatarID:    session.AvatarID,
@@ -254,6 +270,7 @@ func (h *LiveHandler) Status(c *gin.Context) {
 		Status:      session.Status,
 		QueueLength: length,
 		Pending:     pending,
+		History:     history,
 	})
 }
 

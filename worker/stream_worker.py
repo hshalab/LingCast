@@ -80,6 +80,8 @@ class LiveAvatarSession:
         self._feed_thread: threading.Thread | None = None
         self._running = False
         self.talking = None  # dict with audio/frames/iter state
+        self._subtitle = None
+        self._subtitle_text = ""
 
     # ------------------------------------------------------------------ #
     # Setup
@@ -172,7 +174,7 @@ class LiveAvatarSession:
             except queue_mod.Empty:
                 wav = None
             if wav is not None:
-                self._begin_talking(wav)
+                self._begin_talking(wav, text)
             elif wav is None and text is not None:
                 logger.warning("avatar %s chunk skipped (TTS failed)", self.avatar_id)
 
@@ -215,10 +217,13 @@ class LiveAvatarSession:
         for _ in range(half_sec_frames):
             frame = self.base_frames[self.cursor % len(self.base_frames)]
             self.cursor += 1
-            self.pipe.write_frame(frame)
+            self._write_frame(frame)
 
-    def _begin_talking(self, tts_wav: Path) -> None:
+    def _begin_talking(self, tts_wav: Path, text: str) -> None:
         from streaming.ffmpeg_pipe import AUDIO_SAMPLE_RATE
+
+        # The spoken sentence stays on screen as a subtitle until the next one.
+        self._subtitle_text = text
 
         audio = self.lipsync.audio_pcm16(tts_wav)
         half_sec_bytes = AUDIO_SAMPLE_RATE * 2 // 2
@@ -259,7 +264,7 @@ class LiveAvatarSession:
                 frame = next(t["frames"])
             except StopIteration:
                 break
-            self.pipe.write_frame(frame)
+            self._write_frame(frame)
             t["written"] += 1
 
         # One audio slice per half-second of video keeps A/V interleaved.
@@ -276,6 +281,16 @@ class LiveAvatarSession:
         if t["audio_pos"] < len(t["audio"]):
             self.pipe.write_audio(t["audio"][t["audio_pos"] : end])
             t["audio_pos"] = end
+
+    def _write_frame(self, frame) -> None:
+        """Apply the subtitle overlay then push the frame into the pipe."""
+        if self._subtitle_text:
+            if self._subtitle is None:
+                from streaming.subtitle import SubtitleRenderer
+
+                self._subtitle = SubtitleRenderer()
+            frame = self._subtitle.draw(frame, self._subtitle_text)
+        self.pipe.write_frame(frame)
 
     def _slice_base(self, n: int) -> list:
         if not self.base_frames:

@@ -327,6 +327,18 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                 <CardDescription>按句子切块后进入队列，数字人将依次播报。</CardDescription>
               </CardHeader>
               <CardContent className='flex flex-col gap-3'>
+                {status && status.history.length > 0 && (
+                  <div className='flex flex-col gap-1'>
+                    <p className='text-xs text-muted-foreground'>已发送文字：</p>
+                    <ol className='max-h-32 list-decimal space-y-1 overflow-y-auto border rounded-md bg-muted/40 p-2 ps-6 text-xs text-muted-foreground'>
+                      {status.history.map((item, i) => (
+                        <li key={`${i}-${item}`} className='break-all'>
+                          {item}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
                 <Textarea
                   value={text}
                   onChange={(event) => setText(event.target.value)}

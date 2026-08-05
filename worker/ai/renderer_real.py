@@ -143,6 +143,9 @@ class LivePortraitRenderer:
             device_id=0,
             flag_force_cpu=(self.device == "cpu"),
             flag_use_half_precision=self.half,
+            # Retarget eyes from the combined eye-open ratio so both eyes blink
+            # symmetrically (driving templates can be one-eye asymmetric).
+            flag_eye_retargeting=True,
         )
 
         inference_cfg = partial_fields(InferenceConfig, args.__dict__)
@@ -284,9 +287,20 @@ class LivePortraitRenderer:
     # Helpers
     # ------------------------------------------------------------------ #
     def _loop_base_video(self, video: Path, tts_wav: Path, work_dir: Path) -> Path:
-        """Loop the animation to the TTS length; the output has no audio."""
+        """Loop the animation to the TTS length; output is silent, 720x1280.
+
+        The vertical 9:16 canvas is produced by scaling the LivePortrait
+        output with `force_original_aspect_ratio=increase` then center-cropping,
+        so the face stays centered regardless of the source image aspect.
+        """
         final = work_dir / "base_video.mp4"
         duration = self._audio_duration(tts_wav)
+        width = int(os.environ.get("LIVEPORTRAIT_OUTPUT_WIDTH", "720"))
+        height = int(os.environ.get("LIVEPORTRAIT_OUTPUT_HEIGHT", "1280"))
+        vf = (
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height}"
+        )
         cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
             # Loop the animation until the synthesized speech ends, so a short
@@ -296,6 +310,7 @@ class LivePortraitRenderer:
             "-t", f"{duration + 0.2:.3f}",
             "-r", str(self.output_fps),
             "-an",
+            "-vf", vf,
             "-c:v", "libx264", "-preset", "veryfast",
             "-pix_fmt", "yuv420p",
             str(final),

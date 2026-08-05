@@ -33,6 +33,7 @@ export type LiveStatus = {
   status: 'idle' | 'active' | 'pending'
   queueLength: number
   pending: string[]
+  history: string[]
 }
 
 export type LiveSessionItem = {

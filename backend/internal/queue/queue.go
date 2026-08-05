@@ -90,6 +90,11 @@ func (q *Queue) ListRange(ctx context.Context, key string, start, stop int64) ([
 	return q.client.LRange(ctx, key, start, stop).Result()
 }
 
+// TrimList keeps only the given slice of a Redis list (used to cap history).
+func (q *Queue) TrimList(ctx context.Context, key string, start, stop int64) error {
+	return q.client.LTrim(ctx, key, start, stop).Err()
+}
+
 // Remove deletes an exact string value from a Redis list (LRem, count 1).
 func (q *Queue) Remove(ctx context.Context, key, value string) error {
 	return q.client.LRem(ctx, key, 1, value).Err()
