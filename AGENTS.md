@@ -74,8 +74,9 @@
   username + displayName，侧边栏显示 displayName）。
 - ✅ 两段式管线：创建时 `avatar_init` 队列 → LivePortrait 生成静音 24fps base 视频
   上传 S3 并回写 `base_video_s3_key`/`status`；使用时 **Edge-TTS**（`TTS_ENGINE=edge`，
-  零 GPU，默认）或 GPT-SoVITS（`TTS_ENGINE=gpt-sovits`）→ Wav2Lip ONNX（CoreML 优先）
-  → mux/推流。LivePortrait 不再出现在广播/直播循环里。
+  零 GPU，默认）→ Wav2Lip ONNX（CoreML 优先）→ mux/推流。GPT-SoVITS 为**遗留可选**
+  引擎（代码仍在 `ai/tts_real.py`，权重不入库需自行下载）。LivePortrait 不再出现在
+  广播/直播循环里。
 - ✅ 直播管线 `stream_worker.py`（闲置/说话循环）：`POST /api/live/{id}/start`
   通知 Worker 打开**常驻 FFmpeg 管道**（闲置态喂 base 动画 + numpy 静音音频）；
   `POST /api/live/{id}/push` 按句切块入 `live_queue:{id}` → 异步 TTS → Wav2Lip
@@ -165,8 +166,8 @@ uv run python -u worker.py          # 真实管线，AI_MODE=real
 - **GitHub 慢**：本机可走代理，例如
   `git -c http.proxy=http://127.0.0.1:7897 clone ...`；HF 慢可用
   `HF_ENDPOINT=https://hf-mirror.com`。
-- **NLTK 版本**：必须 <3.10（已 pin），否则 GPT-SoVITS 文本前端 import 会挂；
-  首次 TTS 会自动下载 NLTK 数据。
+- **NLTK 版本**：必须 <3.10（已 pin）；仅在 `TTS_ENGINE=gpt-sovits` 时才下载数据
+  （默认 Edge-TTS 不需要）。
 - **onnxruntime**：macOS 用官方 wheel（`onnxruntime>=1.17`），不要装
   `onnxruntime-silicon`（1.16.3 的命名空间包不完整）。
 - **onnxruntime-rocm 与 onnxruntime 互斥**：Linux x86_64 装 rocm 组时需
@@ -175,10 +176,9 @@ uv run python -u worker.py          # 真实管线，AI_MODE=real
   上要 8 分钟且打满 CPU，仅作对照。
 - **ROCm 上口型走 CPU 兜底**：`WAV2LIP_PROVIDER=rocm` 时若 LSTM 算子不在 ROCm EP
   支持集内会自动逐节点回退 CPU，不影响结果。
-- **Edge-TTS 需要外网**：语音合成走微软在线服务；离线/断网环境改
-  `TTS_ENGINE=gpt-sovits`（需参考音频 + GPU）。
-- **G2PW 中文前端**：首次真实 TTS 会自动从 ModelScope 下载（约 1.2GB），需要网络。
-- **ffmpeg**：宿主机需 `brew install ffmpeg`（torchcodec/GPT-SoVITS 依赖）。
+- **Edge-TTS 需要外网**：语音合成走微软在线服务（默认引擎）；离线环境不可用。
+- **G2PW 中文前端**（仅 gpt-sovits 引擎）：首次使用会从 ModelScope 下载约 1.2GB。
+- **ffmpeg**：宿主机需 `brew install ffmpeg`（torchcodec 依赖）。
 - **任务卡在 processing**：先看 worker 日志尾部；口型阶段卡住多半是用了旧 torch
   后端或模型缺失（`download_models.py --models wav2lip` 可补齐）。
 - **直播推流没画面**：先确认 `docker compose up` 里 srs 健康、`/live/<id>.flv`

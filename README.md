@@ -84,7 +84,7 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
   入直播队列 → TTS → 口型 → 推流；未配置 `OPENAI_API_KEY` 时原样回读输入（测试模式）。
   创建时的人物设定会作为**内置提示词**注入，观众问年龄/身高/感情状态等时按设定回答。
 - [x] **Edge-TTS 语音合成**：GPU-free 云端神经音色，按 avatar 的 `voice_id` 选声，
-  一条句子约 1-2 秒（`TTS_ENGINE=gpt-sovits` 可切回旧克隆模型）。
+  一条句子约 1-2 秒。
 - [x] **LivePortrait 基础视频预处理**：创建数字人时生成静音 24fps 驱动视频，仅此一次。
 - [x] **Wav2Lip(ONNX) 口型合成**：基于预生成 base 视频，嘴部逐帧匹配语音；ONNX +
   CoreML 执行器，CPU 线程数受限（默认 4），短 base 自动循环覆盖任意脚本长度。
@@ -141,7 +141,7 @@ docker compose up --build
 ```bash
 cd worker
 uv venv                    # 按 .python-version 使用 CPython 3.11
-uv sync --all-groups       # 安装全部依赖（含 PyTorch MPS、LivePortrait、GPT-SoVITS）
+uv sync --all-groups       # 安装全部依赖（含 PyTorch MPS、LivePortrait、Wav2Lip）
 cp .env.local.example .env.local
 ```
 
@@ -158,13 +158,12 @@ cd worker
 uv run python download_models.py --models all
 ```
 
-脚本会克隆 GPT-SoVITS / LivePortrait / Wav2Lip 代码到 `worker/external/`，下载权重
-到 `worker/models/`（两者均已 gitignore），并自动完成：创建 GPT-SoVITS 预训练软链接、
-把 wav2lip_gan.pth 本地导出为 ONNX（约 145MB）、下载 SCRFD 人脸检测 ONNX（约 3MB）。
+脚本会克隆 LivePortrait / Wav2Lip 代码到 `worker/external/`，下载权重到
+`worker/models/`（两者均已 gitignore），并自动完成：把 wav2lip_gan.pth 本地导出为
+ONNX（约 145MB）、下载 SCRFD 人脸检测 ONNX（约 3MB）。
 
 - 国内网络加速：`HF_ENDPOINT=https://hf-mirror.com uv run python download_models.py`
 - GitHub 慢时走代理：`git config --global http.proxy http://127.0.0.1:7897`
-- 首次真实 TTS 会自动从 ModelScope 下载 G2PW 中文前端（约 1.2GB）。
 
 **方式 B：从旧设备拷贝（最快）**
 
@@ -231,13 +230,12 @@ uv pip install torch torchvision torchaudio \
 
 ```bash
 AI_MODE=real
-GPT_SOVITS_DEVICE=cuda
 LIVEPORTRAIT_DEVICE=cuda
 WAV2LIP_PROVIDER=rocm    # ROCm EP 不支持 LSTM 时会自动逐算子回退 CPU，不影响正确性
 ```
 
 > 如果 ROCm EP 在你的卡上有问题，`WAV2LIP_PROVIDER=cpu` 同样可用（CPU 推理本身
-> 就有 35fps+）。首次真实 TTS 会自动从 ModelScope 下载 G2PW 中文前端（约 1.2GB）。
+> 就有 35fps+）。
 
 ## 实时直播（流式架构）
 
@@ -337,8 +335,6 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 | `AI_MODE` | `.env` / `.env.local` | `mock`（Docker 默认）或 `real`（宿主机） |
 | `S3_*` | `.env` / `.env.local` | 对象存储端点、凭据、桶名、公网前缀 |
 | `REDIS_*` | `.env` / `.env.local` | Redis 地址、密码、队列 Key |
-| `GPT_SOVITS_*` | `worker/.env.local` | 参考音频提示词/语言、设备、端口 |
-| `GPT_SOVITS_DEVICE` | `worker/.env.local` | `mps`（macOS 默认）/ `cuda`（Linux CUDA 或 ROCm） |
 | `LIVEPORTRAIT_DEVICE` | `worker/.env.local` | `mps`（macOS 默认）/ `cuda`（Linux）/ `cpu` |
 | `LIVEPORTRAIT_DRIVING*` | `worker/.env.local` | 模板、速度、幅度 |
 | `LIVEPORTRAIT_OUTPUT_FPS` | `worker/.env.local` | base 视频帧率（默认 24） |
@@ -400,8 +396,8 @@ client/    Next.js + TailwindCSS 观众端（独立项目，:3000）
 worker/    Python 3.11 AI Worker（uv、Redis、boto3、真实/模拟管线）
   ai/        base/mock/real 管线、TTS、渲染、ONNX 口型
   fonts/     字幕字体目录（gitignore，见 fonts/README.md）
-  external/  gitignore：GPT-SoVITS / LivePortrait / Wav2Lip 克隆代码
-  models/    gitignore：全部权重（GPT-SoVITS / LivePortrait / Wav2Lip ONNX）
+  external/  gitignore：LivePortrait / Wav2Lip 克隆代码
+  models/    gitignore：全部权重（LivePortrait / Wav2Lip ONNX）
 docker-compose.yml / .env.example
 AGENTS.md   开发交接说明（新设备快速接手）
 docs/       架构文档 + Roadmap（TODO.md）+ 界面截图（images/）
@@ -412,7 +408,6 @@ docs/       架构文档 + Roadmap（TODO.md）+ 界面截图（images/）
 - **任务一直 processing**：看 `worker` 日志尾部。口型阶段卡住通常是模型缺失，跑
   `cd worker && uv run python download_models.py --models wav2lip` 补齐。
 - **GitHub/HF 下载慢**：GitHub 走代理，HF 用 `HF_ENDPOINT=https://hf-mirror.com`。
-- **TTS 启动报 NLTK 错误**：确认 `nltk>=3.8,<3.10` 已安装（首次会自动下载数据）。
 - **口型 CPU 打满/极慢**：确认 `WAV2LIP_BACKEND` 为 `onnx`（torch 版仅作对照）。
 - **视频无声音**：成品由 Wav2Lip 阶段 mux Edge-TTS 语音；若用 mock 管线则以其
   离线 TTS 为音轨。
