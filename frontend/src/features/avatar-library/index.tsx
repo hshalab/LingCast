@@ -36,7 +36,7 @@ function showApiError(error: unknown): string {
   return '加载失败，请稍后重试'
 }
 
-export function AvatarLibrary() {
+export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string }) {
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -58,6 +58,14 @@ export function AvatarLibrary() {
   useEffect(() => {
     void loadAvatars()
   }, [loadAvatars])
+
+  // When arriving from the task center (?avatarId=...), highlight and scroll
+  // the matching avatar card into view.
+  useEffect(() => {
+    if (!initialAvatarId) return
+    const row = document.getElementById(`avatar-card-${initialAvatarId}`)
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [avatars, initialAvatarId])
 
   return (
     <>
@@ -129,7 +137,15 @@ export function AvatarLibrary() {
         ) : (
           <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
             {avatars.map((avatar) => (
-              <Card key={avatar.id} className='overflow-hidden'>
+              <Card
+                key={avatar.id}
+                id={`avatar-card-${avatar.id}`}
+                className={`overflow-hidden ${
+                  initialAvatarId === String(avatar.id)
+                    ? 'ring-2 ring-primary/60'
+                    : ''
+                }`}
+              >
                 {avatar.imageS3Url ? (
                   <button
                     type='button'

@@ -321,6 +321,15 @@ export function TaskCenter() {
                             </TableCell>
                             <TableCell className='text-right'>
                               <div className='flex justify-end gap-1'>
+                                <Button asChild variant='ghost' size='sm'>
+                                  <Link
+                                    to='/avatar-library'
+                                    search={{ avatarId: String(avatar.id) }}
+                                  >
+                                    <Eye className='size-3.5' />
+                                    查看
+                                  </Link>
+                                </Button>
                                 {avatar.status === 'initializing' && (
                                   <Button
                                     variant='outline'
