@@ -1,6 +1,7 @@
 import axios from 'axios'
-import { ListChecks, RefreshCw, RotateCcw, SkipForward, Trash2 } from 'lucide-react'
+import { Clapperboard, ListChecks, RefreshCw, RotateCcw, SkipForward, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -487,6 +488,18 @@ export function TaskCenter() {
                             </TableCell>
                             <TableCell className='text-right'>
                               <div className='flex justify-end gap-1'>
+                                <Button asChild variant='ghost' size='sm'>
+                                  <Link
+                                    to='/broadcast'
+                                    search={{
+                                      avatarId: String(task.avatarId),
+                                      taskId: String(task.id),
+                                    }}
+                                  >
+                                    <Clapperboard className='size-3.5' />
+                                    去制作
+                                  </Link>
+                                </Button>
                                 {task.status === 'failed' && (
                                   <Button
                                     variant='outline'

@@ -4,6 +4,7 @@ import { Broadcast } from '@/features/broadcast'
 
 const broadcastSearchSchema = z.object({
   avatarId: z.string().optional(),
+  taskId: z.string().optional(),
 })
 
 export const Route = createFileRoute('/_authenticated/broadcast')({
@@ -12,6 +13,6 @@ export const Route = createFileRoute('/_authenticated/broadcast')({
 })
 
 function BroadcastRoute() {
-  const { avatarId } = Route.useSearch()
-  return <Broadcast initialAvatarId={avatarId} />
+  const { avatarId, taskId } = Route.useSearch()
+  return <Broadcast initialAvatarId={avatarId} initialTaskId={taskId} />
 }

@@ -1,6 +1,6 @@
 import axios from 'axios'
-import { LoaderCircle, Send, Video } from 'lucide-react'
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { LoaderCircle, Play, Send, Video } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
@@ -17,6 +17,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Select,
   SelectContent,
@@ -35,6 +43,22 @@ function showApiError(error: unknown) {
     return
   }
   toast.error('请求失败，请稍后重试')
+}
+
+const TASK_STATUS_META: Record<
+  BroadcastTask['status'],
+  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
+> = {
+  pending: { label: '排队中', variant: 'secondary' },
+  processing: { label: '合成中', variant: 'default' },
+  completed: { label: '已完成', variant: 'secondary' },
+  failed: { label: '失败', variant: 'destructive' },
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString('zh-CN', { hour12: false })
 }
 
 function useTaskPolling(taskId: number | null) {
@@ -71,14 +95,22 @@ function useTaskPolling(taskId: number | null) {
   return task
 }
 
-export function Broadcast({ initialAvatarId }: { initialAvatarId?: string }) {
+export function Broadcast({
+  initialAvatarId,
+  initialTaskId,
+}: {
+  initialAvatarId?: string
+  initialTaskId?: string
+}) {
   const [avatars, setAvatars] = useState<Avatar[]>([])
+  const [history, setHistory] = useState<BroadcastTask[]>([])
   const [selectedAvatarId, setSelectedAvatarId] = useState('')
   const [script, setScript] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [taskId, setTaskId] = useState<number | null>(null)
 
   const task = useTaskPolling(taskId)
+  const historyRef = useRef<HTMLDivElement>(null)
   const selectedAvatar = avatars.find((a) => String(a.id) === selectedAvatarId)
   const readyAvatars = avatars.filter((avatar) => avatar.status === 'ready')
   const selectedVoiceLabel =
@@ -101,6 +133,29 @@ export function Broadcast({ initialAvatarId }: { initialAvatarId?: string }) {
     void loadAvatars()
   }, [loadAvatars])
 
+  const loadHistory = useCallback(async () => {
+    try {
+      const { data } = await api.get<{ data: BroadcastTask[] }>('/tasks')
+      setHistory(data.data)
+    } catch {
+      // ignore: history is a secondary panel
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadHistory()
+    const timer = window.setInterval(() => void loadHistory(), 3000)
+    return () => window.clearInterval(timer)
+  }, [loadHistory])
+
+  // Scroll the highlighted history row into view when arriving from the task
+  // center (?taskId=...).
+  useEffect(() => {
+    if (!initialTaskId) return
+    const row = document.getElementById(`history-row-${initialTaskId}`)
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [history, initialTaskId])
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     if (!selectedAvatarId) {
@@ -118,6 +173,7 @@ export function Broadcast({ initialAvatarId }: { initialAvatarId?: string }) {
         scriptText: script.trim(),
       })
       setTaskId(data.id)
+      void loadHistory()
     } catch (error) {
       showApiError(error)
     } finally {
@@ -270,6 +326,80 @@ export function Broadcast({ initialAvatarId }: { initialAvatarId?: string }) {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader className='gap-1'>
+            <CardTitle>制作历史</CardTitle>
+            <CardDescription>
+              本数字人（及全部头像）的历史播报任务，3 秒自动刷新。
+            </CardDescription>
+          </CardHeader>
+          <CardContent ref={historyRef}>
+            {history.length === 0 ? (
+              <p className='py-6 text-center text-sm text-muted-foreground'>
+                暂无制作历史
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>头像</TableHead>
+                    <TableHead>脚本</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>创建时间</TableHead>
+                    <TableHead className='text-right'>成品</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {history.map((item) => {
+                    const meta = TASK_STATUS_META[item.status]
+                    const highlighted = initialTaskId === String(item.id)
+                    return (
+                      <TableRow
+                        key={item.id}
+                        id={`history-row-${item.id}`}
+                        className={
+                          highlighted
+                            ? 'bg-primary/10 ring-2 ring-primary/50'
+                            : undefined
+                        }
+                      >
+                        <TableCell>#{item.id}</TableCell>
+                        <TableCell>{item.avatarName ?? `#${item.avatarId}`}</TableCell>
+                        <TableCell className='max-w-[280px] truncate' title={item.scriptText}>
+                          {item.scriptText}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={meta.variant}>{meta.label}</Badge>
+                        </TableCell>
+                        <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
+                          {formatTime(item.createdAt)}
+                        </TableCell>
+                        <TableCell className='text-right'>
+                          {item.status === 'completed' && item.outputVideoS3Url ? (
+                            <Button asChild variant='outline' size='sm'>
+                              <a
+                                href={item.outputVideoS3Url}
+                                target='_blank'
+                                rel='noreferrer'
+                              >
+                                <Play className='size-3.5' />
+                                播放
+                              </a>
+                            </Button>
+                          ) : (
+                            <span className='text-xs text-muted-foreground'>-</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </Main>
     </>
   )
