@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { LoaderCircle, Play, Send, Video } from 'lucide-react'
+import { LoaderCircle, Play, Send } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -18,7 +18,6 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { VideoPlayerDialog } from '@/components/video-player-dialog'
-import { XgVideo } from '@/components/xg-video'
 import {
   Table,
   TableBody,
@@ -63,40 +62,6 @@ function formatTime(iso: string): string {
   return d.toLocaleString('zh-CN', { hour12: false })
 }
 
-function useTaskPolling(taskId: number | null) {
-  const [task, setTask] = useState<BroadcastTask | null>(null)
-
-  useEffect(() => {
-    if (!taskId) return
-    let stopped = false
-    let timer: number | undefined
-    let attempts = 0
-    const MAX_ATTEMPTS = 300
-
-    const poll = async () => {
-      if (stopped || attempts >= MAX_ATTEMPTS) return
-      attempts += 1
-      try {
-        const { data } = await api.get<BroadcastTask>(`/tasks/${taskId}`)
-        if (stopped) return
-        setTask(data)
-        if (data.status === 'completed' || data.status === 'failed') return
-        timer = window.setTimeout(poll, 2500)
-      } catch {
-        if (!stopped) timer = window.setTimeout(poll, 2500)
-      }
-    }
-
-    void poll()
-    return () => {
-      stopped = true
-      if (timer !== undefined) window.clearTimeout(timer)
-    }
-  }, [taskId])
-
-  return task
-}
-
 export function Broadcast({
   initialAvatarId,
   initialTaskId,
@@ -109,10 +74,8 @@ export function Broadcast({
   const [selectedAvatarId, setSelectedAvatarId] = useState('')
   const [script, setScript] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [taskId, setTaskId] = useState<number | null>(null)
   const [playUrl, setPlayUrl] = useState<string | null>(null)
 
-  const task = useTaskPolling(taskId)
   const historyRef = useRef<HTMLDivElement>(null)
   const selectedAvatar = avatars.find((a) => String(a.id) === selectedAvatarId)
   const readyAvatars = avatars.filter((avatar) => avatar.status === 'ready')
@@ -171,11 +134,10 @@ export function Broadcast({
     }
     setSubmitting(true)
     try {
-      const { data } = await api.post<BroadcastTask>('/tasks', {
+      await api.post<BroadcastTask>('/tasks', {
         avatarId: Number(selectedAvatarId),
         scriptText: script.trim(),
       })
-      setTaskId(data.id)
       void loadHistory()
     } catch (error) {
       showApiError(error)
@@ -183,15 +145,6 @@ export function Broadcast({
       setSubmitting(false)
     }
   }
-
-  const statusVariant =
-    task?.status === 'completed'
-      ? 'default'
-      : task?.status === 'failed'
-        ? 'destructive'
-        : task
-          ? 'secondary'
-          : 'outline'
 
   return (
     <>
@@ -209,131 +162,98 @@ export function Broadcast({
           </p>
         </div>
 
-        <div className='grid gap-4 lg:grid-cols-2'>
-          {readyAvatars.length === 0 ? (
-            <Card>
-              <CardHeader className='items-center text-center'>
-                <CardTitle>还没有可用的数字人</CardTitle>
-                <CardDescription>
-                  播报需要已完成基础视频生成的数字人（状态为「就绪」）。
-                  请先到 Avatar Studio 创建。
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='flex justify-center'>
-                <Button asChild>
-                  <Link to='/avatar-studio'>去创建数字人</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>任务配置</CardTitle>
-                <CardDescription>
-                  数字人需已完成基础视频生成（状态为「就绪」）。
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className='flex flex-col gap-5'>
-                <div className='flex flex-col gap-2'>
-                  <Label htmlFor='avatar-select'>选择数字人</Label>
-                  <Select value={selectedAvatarId} onValueChange={setSelectedAvatarId}>
-                    <SelectTrigger id='avatar-select' className='w-full'>
-                      <SelectValue placeholder='选择数字人' />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {avatars.map((avatar) => (
-                        <SelectItem
-                          key={avatar.id}
-                          value={String(avatar.id)}
-                          disabled={avatar.status !== 'ready'}
-                        >
-                          {avatar.name} (#{avatar.id})
-                          {avatar.status !== 'ready' ? ' · 生成中' : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedAvatar && (
-                    <div className='mt-1 flex items-center gap-3 rounded-lg border p-3'>
-                      <img
-                        src={selectedAvatar.imageS3Url}
-                        alt={selectedAvatar.name}
-                        className='h-16 w-16 rounded-lg border object-cover'
-                      />
-                      <div className='min-w-0 text-sm'>
-                        <p className='truncate font-medium'>{selectedAvatar.name} (#{selectedAvatar.id})</p>
-                        <p className='truncate text-muted-foreground'>音色：{selectedVoiceLabel}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className='flex flex-col gap-2'>
-                  <Label htmlFor='script'>播报脚本</Label>
-                  <Textarea
-                    id='script'
-                    value={script}
-                    onChange={(event) => setScript(event.target.value)}
-                    placeholder='输入播报内容，例如：大家好，欢迎收听今天的新闻摘要。'
-                    rows={6}
-                  />
-                </div>
-
-                <Button type='submit' disabled={submitting || !selectedAvatarId || !script.trim()}>
-                  {submitting ? <LoaderCircle className='size-4 animate-spin' /> : <Send className='size-4' />}
-                  提交任务
-                </Button>
-                </form>
-              </CardContent>
-            </Card>
-          )}
-
+        {readyAvatars.length === 0 ? (
           <Card>
-            <CardHeader className='flex-row items-center justify-between space-y-0'>
-              <CardTitle>任务状态</CardTitle>
-              {task && (
-                <Badge variant={statusVariant}>
-                  {task.status === 'completed'
-                    ? '已完成'
-                    : task.status === 'failed'
-                      ? '失败'
-                      : task.status === 'processing'
-                        ? '合成中'
-                        : '排队中'}
-                </Badge>
-              )}
+            <CardHeader className='items-center text-center'>
+              <CardTitle>还没有可用的数字人</CardTitle>
+              <CardDescription>
+                播报需要已完成基础视频生成的数字人（状态为「就绪」）。
+                请先到 Avatar Studio 创建。
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              {!task ? (
-                <div className='flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground'>
-                  <Video className='size-8' />
-                  <span>提交任务后，这里会显示合成进度与成品视频。</span>
-                </div>
-              ) : task.status === 'completed' && task.outputVideoS3Url ? (
-                <div className='flex justify-center'>
-                  <XgVideo
-                    url={task.outputVideoS3Url}
-                    className='aspect-[2/3] w-full max-w-[720px] rounded-lg border bg-black'
-                  />
-                </div>
-              ) : task.status === 'failed' ? (
-                <p className='py-8 text-center text-sm text-destructive'>
-                  合成失败：{task.errorMessage ?? '未知错误'}
-                </p>
-              ) : (
-                <div className='flex flex-col items-center gap-2 py-10 text-sm text-muted-foreground'>
-                  <LoaderCircle className='size-8 animate-spin' />
-                  <span>
-                    {task.status === 'processing'
-                      ? '正在合成口播视频（Edge-TTS + Wav2Lip）…'
-                      : '任务排队中…'}
-                  </span>
-                </div>
-              )}
+            <CardContent className='flex justify-center'>
+              <Button asChild>
+                <Link to='/avatar-studio'>去创建数字人</Link>
+              </Button>
             </CardContent>
           </Card>
-        </div>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>任务配置</CardTitle>
+              <CardDescription>
+                数字人需已完成基础视频生成（状态为「就绪」）；任务状态请在下方制作历史查看。
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className='flex flex-col gap-5'>
+                {/* 横向平铺：左 = 选择数字人，右 = 播报脚本 */}
+                <div className='grid gap-5 lg:grid-cols-2'>
+                  <div className='flex flex-col gap-2'>
+                    <Label htmlFor='avatar-select'>选择数字人</Label>
+                    <Select value={selectedAvatarId} onValueChange={setSelectedAvatarId}>
+                      <SelectTrigger id='avatar-select' className='w-full'>
+                        <SelectValue placeholder='选择数字人' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {avatars.map((avatar) => (
+                          <SelectItem
+                            key={avatar.id}
+                            value={String(avatar.id)}
+                            disabled={avatar.status !== 'ready'}
+                          >
+                            {avatar.name} (#{avatar.id})
+                            {avatar.status !== 'ready' ? ' · 生成中' : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedAvatar && (
+                      <div className='mt-1 flex items-center gap-3 rounded-lg border p-3'>
+                        <img
+                          src={selectedAvatar.imageS3Url}
+                          alt={selectedAvatar.name}
+                          className='h-16 w-16 rounded-lg border object-cover'
+                        />
+                        <div className='min-w-0 text-sm'>
+                          <p className='truncate font-medium'>
+                            {selectedAvatar.name} (#{selectedAvatar.id})
+                          </p>
+                          <p className='truncate text-muted-foreground'>
+                            音色：{selectedVoiceLabel}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className='flex flex-col gap-2'>
+                    <Label htmlFor='script'>播报脚本</Label>
+                    <Textarea
+                      id='script'
+                      value={script}
+                      onChange={(event) => setScript(event.target.value)}
+                      placeholder='输入播报内容，例如：大家好，欢迎收听今天的新闻摘要。'
+                      rows={6}
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  type='submit'
+                  disabled={submitting || !selectedAvatarId || !script.trim()}
+                >
+                  {submitting ? (
+                    <LoaderCircle className='size-4 animate-spin' />
+                  ) : (
+                    <Send className='size-4' />
+                  )}
+                  提交任务
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className='gap-1'>
