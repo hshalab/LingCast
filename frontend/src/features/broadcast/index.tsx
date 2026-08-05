@@ -18,6 +18,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { VideoPlayerDialog } from '@/components/video-player-dialog'
+import { XgVideo } from '@/components/xg-video'
 import {
   Table,
   TableBody,
@@ -310,7 +311,12 @@ export function Broadcast({
                   <span>提交任务后，这里会显示合成进度与成品视频。</span>
                 </div>
               ) : task.status === 'completed' && task.outputVideoS3Url ? (
-                <video src={task.outputVideoS3Url} controls className='aspect-[9/16] w-full rounded-lg border bg-black' />
+                <div className='flex justify-center'>
+                  <XgVideo
+                    url={task.outputVideoS3Url}
+                    className='aspect-[2/3] w-full max-w-[720px] rounded-lg border bg-black'
+                  />
+                </div>
               ) : task.status === 'failed' ? (
                 <p className='py-8 text-center text-sm text-destructive'>
                   合成失败：{task.errorMessage ?? '未知错误'}

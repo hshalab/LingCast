@@ -19,6 +19,9 @@ type Config struct {
 	TaskQueueKey        string
 	LiveControlQueueKey string
 	AvatarInitQueueKey  string
+	OpenAIAPIKey        string
+	OpenAIBaseURL       string
+	OpenAIModel         string
 
 	S3Endpoint      string
 	S3AccessKey     string
@@ -79,6 +82,9 @@ func Load() Config {
 		TaskQueueKey:        env("TASK_QUEUE_KEY", "talking_avatar:tasks"),
 		LiveControlQueueKey: env("LIVE_CONTROL_QUEUE_KEY", "talking_avatar:live_control"),
 		AvatarInitQueueKey:  env("AVATAR_INIT_QUEUE_KEY", "talking_avatar:avatar_init"),
+		OpenAIAPIKey:        os.Getenv("OPENAI_API_KEY"),
+		OpenAIBaseURL:       env("OPENAI_BASE_URL", "https://api.deepseek.com"),
+		OpenAIModel:         env("OPENAI_MODEL", "deepseek-chat"),
 
 		S3Endpoint:      env("S3_ENDPOINT", "http://127.0.0.1:9000"),
 		S3AccessKey:     env("S3_ACCESS_KEY", "minioadmin"),

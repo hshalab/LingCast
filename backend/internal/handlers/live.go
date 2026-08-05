@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -15,6 +16,10 @@ import (
 	"talkingavatar/backend/internal/models"
 	"talkingavatar/backend/internal/queue"
 	"talkingavatar/backend/internal/storage"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/responses"
 )
 
 // sentenceSplit matches a run of sentence-final punctuation (Chinese and
@@ -29,6 +34,9 @@ type LiveHandler struct {
 	q                   *queue.Queue
 	s3                  *storage.Client
 	liveControlQueueKey string
+	openAIAPIKey        string
+	openAIBaseURL       string
+	openAIModel         string
 }
 
 type startLiveRequest struct {
@@ -37,6 +45,15 @@ type startLiveRequest struct {
 
 type pushLiveRequest struct {
 	Text string `json:"text"`
+}
+
+type liveMessageRequest struct {
+	Text string `json:"text"`
+}
+
+type liveMessageResponse struct {
+	Reply      string `json:"reply"`
+	ChunkCount int    `json:"chunkCount"`
 }
 
 type liveSessionResponse struct {
@@ -67,8 +84,11 @@ type liveSessionItem struct {
 	Status         string `json:"status"`
 }
 
-func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey string) *LiveHandler {
-	return &LiveHandler{db: db, q: q, s3: s3, liveControlQueueKey: liveControlQueueKey}
+func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey, openAIAPIKey, openAIBaseURL, openAIModel string) *LiveHandler {
+	return &LiveHandler{
+		db: db, q: q, s3: s3, liveControlQueueKey: liveControlQueueKey,
+		openAIAPIKey: openAIAPIKey, openAIBaseURL: openAIBaseURL, openAIModel: openAIModel,
+	}
 }
 
 func liveQueueKey(avatarID uint) string {
@@ -230,6 +250,84 @@ func (h *LiveHandler) Push(c *gin.Context) {
 	_ = h.q.TrimList(c.Request.Context(), historyKey, -200, -1)
 	length, _ := h.q.ListLen(c.Request.Context(), key)
 	c.JSON(http.StatusAccepted, gin.H{"accepted": len(chunks), "queueLength": length})
+}
+
+// Message handles POST /api/live/:avatarID/message — the audience-side chat
+// entry. The user text goes to the LLM (OpenAI-compatible, DeepSeek by
+// default), and the model's reply is sentence-chunked into the live queue so
+// the worker can speak it (TTS -> lip-sync -> push). Without an API key the
+// incoming text is spoken verbatim (test mode).
+func (h *LiveHandler) Message(c *gin.Context) {
+	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
+	if err != nil || avatarID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatarID"})
+		return
+	}
+	var req liveMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Text) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'text' is required"})
+		return
+	}
+
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, avatarID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	reply := h.llmChat(c, req.Text, avatar.Name)
+	chunks := splitSentences(reply)
+	if len(chunks) == 0 {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "llm returned empty reply"})
+		return
+	}
+
+	key := liveQueueKey(avatar.ID)
+	historyKey := liveHistoryKey(avatar.ID)
+	for _, text := range chunks {
+		_ = h.q.RPushList(c.Request.Context(), key, text)
+		_ = h.q.RPushList(c.Request.Context(), historyKey, text)
+	}
+	_ = h.q.TrimList(c.Request.Context(), historyKey, -200, -1)
+
+	c.JSON(http.StatusOK, liveMessageResponse{Reply: reply, ChunkCount: len(chunks)})
+}
+
+// llmChat sends the user text to the LLM through the OpenAI SDK pointed at the
+// configured base URL (DeepSeek by default, Responses API) and returns the
+// assistant's reply. Without an API key the input is spoken verbatim (test).
+func (h *LiveHandler) llmChat(c *gin.Context, userText, avatarName string) string {
+	if strings.TrimSpace(h.openAIAPIKey) == "" {
+		log.Printf("[llm] OPENAI_API_KEY not set, speaking the input verbatim")
+		return userText
+	}
+
+	client := openai.NewClient(
+		option.WithBaseURL(strings.TrimRight(h.openAIBaseURL, "/")),
+		option.WithAPIKey(h.openAIAPIKey),
+	)
+	resp, err := client.Responses.New(c.Request.Context(), responses.ResponseNewParams{
+		Model: h.openAIModel,
+		Instructions: openai.String("你是一个直播间里的数字人主播「" + avatarName +
+			"」，用简短、口语化、中文回复观众消息，单次回复不超过3句话。"),
+		Input:           responses.ResponseNewParamsInputUnion{OfString: openai.String(userText)},
+		Temperature:     openai.Float(0.8),
+		MaxOutputTokens: openai.Int(300),
+	})
+	if err != nil {
+		log.Printf("[llm] request failed: %v", err)
+		return userText
+	}
+	reply := strings.TrimSpace(resp.OutputText())
+	if reply == "" {
+		return userText
+	}
+	log.Printf("[llm] %s -> %s", userText, reply)
+	return reply
 }
 
 // Status handles GET /api/live/:avatarID/status. It returns the live session

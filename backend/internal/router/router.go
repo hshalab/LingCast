@@ -33,7 +33,10 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 
 	avatarHandler := handlers.NewAvatarHandler(db, s3, q, cfg.AvatarInitQueueKey)
 	taskHandler := handlers.NewTaskHandler(db, q, s3)
-	liveHandler := handlers.NewLiveHandler(db, q, s3, cfg.LiveControlQueueKey)
+	liveHandler := handlers.NewLiveHandler(
+		db, q, s3, cfg.LiveControlQueueKey,
+		cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel,
+	)
 
 	api := r.Group("/api")
 	{
@@ -58,6 +61,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		api.POST("/live/:avatarID/start", liveHandler.Start)
 		api.POST("/live/:avatarID/stop", liveHandler.Stop)
 		api.POST("/live/:avatarID/push", liveHandler.Push)
+		api.POST("/live/:avatarID/message", liveHandler.Message)
 		api.GET("/live/:avatarID/status", liveHandler.Status)
 	}
 

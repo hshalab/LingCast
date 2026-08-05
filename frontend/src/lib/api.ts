@@ -44,6 +44,11 @@ export type LiveSessionItem = {
   status: string
 }
 
+export type LiveMessageResponse = {
+  reply: string
+  chunkCount: number
+}
+
 // In the dockerized setup the app and the API share the nginx origin, so the
 // base URL defaults to '' (same origin, proxied via /api). For local Vite
 // development set VITE_API_BASE_URL to the nginx/app origin, e.g.

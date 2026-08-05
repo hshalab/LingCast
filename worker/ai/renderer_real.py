@@ -143,13 +143,6 @@ class LivePortraitRenderer:
             device_id=0,
             flag_force_cpu=(self.device == "cpu"),
             flag_use_half_precision=self.half,
-            # Retarget eyes from the combined eye-open ratio so both eyes blink
-            # symmetrically (driving templates can be one-eye asymmetric).
-            # Relative motion must be OFF: with it on, the eye-retargeting path
-            # replaces the driving pose with the source pose, which drops the
-            # head/shoulder (耸肩) motion.
-            flag_eye_retargeting=True,
-            flag_relative_motion=False,
         )
 
         inference_cfg = partial_fields(InferenceConfig, args.__dict__)
@@ -254,18 +247,23 @@ class LivePortraitRenderer:
                     item[key] = ((1.0 - f) * va + f * vb).astype(np.float32)
             new_motion.append(item)
 
+        # Freeze the eye expression channels (LivePortrait eye region indices)
+        # to their first-frame values so the base video never blinks — only the
+        # shoulder/body motion from the template remains.
+        EYE_EXP_DIMS = (11, 13, 15, 16, 18)
+        first_exp = motion[0]["exp"]
+        for item in new_motion:
+            if "exp" in item:
+                item["exp"] = item["exp"].copy()
+                item["exp"][0, EYE_EXP_DIMS, :] = first_exp[0, EYE_EXP_DIMS, :]
+
         slowed = dict(dct)
         slowed["n_frames"] = new_n
         slowed["motion"] = new_motion
         for key in ("c_d_eyes_lst", "c_eyes_lst"):
             if key in slowed:
-                seq = slowed[key]
-                slowed[key] = [
-                    ((1.0 - frac[j]) * seq[i0[j]] + frac[j] * seq[i1[j]]).astype(
-                        np.float32
-                    )
-                    for j in range(new_n)
-                ]
+                first = slowed[key][0]
+                slowed[key] = [first.copy() for _ in range(new_n)]
         for key in ("c_d_lip_lst", "c_lip_lst"):
             if key in slowed:
                 seq = slowed[key]
