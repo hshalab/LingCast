@@ -1,7 +1,9 @@
 FROM python:3.10-slim
 
 # uv for dependency management (base deps only -> lightweight mock worker).
-COPY --from=ghcr.io/astral-sh/uv:0.12.1 /uv /uvx /bin/
+# Installed from PyPI instead of COPY --from=ghcr.io so the build does not
+# depend on the GitHub Container Registry (network/proxy flakiness).
+RUN pip install --no-cache-dir uv==0.12.1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg espeak-ng \
