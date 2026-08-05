@@ -1,5 +1,14 @@
 import axios from 'axios'
-import { ImageIcon, Play, Plus, RadioTower, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import {
+  ImageIcon,
+  Pencil,
+  Play,
+  Plus,
+  RadioTower,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -16,9 +25,28 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { api, type Avatar } from '@/lib/api'
 import { VideoPlayerDialog } from '@/components/video-player-dialog'
+import { getCachedVoices } from '../avatar-studio/voices'
 
 function formatDate(iso: string): string {
   const date = new Date(iso)
@@ -42,6 +70,22 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<Avatar | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Avatar | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [editTarget, setEditTarget] = useState<Avatar | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [voices] = useState(() => getCachedVoices())
+  const [editForm, setEditForm] = useState({
+    name: '',
+    category: '其他',
+    voiceId: '',
+    age: '',
+    heightCm: '',
+    weightKg: '',
+    ethnicity: '',
+    relationshipStatus: '单身',
+    personality: '',
+  })
 
   const loadAvatars = useCallback(async () => {
     setLoading(true)
@@ -72,15 +116,61 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
   }
 
   const removeAvatar = async (avatar: Avatar) => {
-    if (!window.confirm(`确定删除数字人「${avatar.name}」？将同时删除其任务、直播会话与视频文件。`)) {
-      return
-    }
+    if (!avatar) return
+    setDeleting(true)
     try {
       await api.delete(`/avatars/${avatar.id}`)
       toast.success(`已删除「${avatar.name}」`)
+      setDeleteTarget(null)
       void loadAvatars()
     } catch (error) {
       toast.error(showApiError(error))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const openEdit = (avatar: Avatar) => {
+    setEditForm({
+      name: avatar.name ?? '',
+      category: avatar.category ?? '其他',
+      voiceId: avatar.voiceId ?? '',
+      age: avatar.age != null ? String(avatar.age) : '',
+      heightCm: avatar.heightCm != null ? String(avatar.heightCm) : '',
+      weightKg: avatar.weightKg != null ? String(avatar.weightKg) : '',
+      ethnicity: avatar.ethnicity ?? '',
+      relationshipStatus: avatar.relationshipStatus ?? '单身',
+      personality: avatar.personality ?? '',
+    })
+    setEditTarget(avatar)
+  }
+
+  const saveEdit = async () => {
+    if (!editTarget) return
+    if (!editForm.name.trim()) {
+      toast.error('请填写形象名称')
+      return
+    }
+    setSavingEdit(true)
+    try {
+      const { data } = await api.put<Avatar>(`/avatars/${editTarget.id}`, {
+        name: editForm.name.trim(),
+        category: editForm.category,
+        voiceId: editForm.voiceId,
+        age: editForm.age ? Number(editForm.age) : null,
+        heightCm: editForm.heightCm ? Number(editForm.heightCm) : null,
+        weightKg: editForm.weightKg ? Number(editForm.weightKg) : null,
+        ethnicity: editForm.ethnicity.trim(),
+        relationshipStatus: editForm.relationshipStatus,
+        personality: editForm.personality.trim(),
+      })
+      toast.success(`已更新「${data.name}」`)
+      setEditTarget(null)
+      void loadAvatars()
+    } catch (error) {
+      toast.error(showApiError(error))
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -194,13 +284,22 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                   )}
                 </div>
 
-                <div className='absolute end-2 top-2'>
+                <div className='absolute end-2 top-2 flex gap-1'>
+                  <Button
+                    size='icon'
+                    variant='ghost'
+                    className='h-8 w-8 bg-black/40 text-white hover:bg-white/20 hover:text-white'
+                    title='编辑数字人'
+                    onClick={() => openEdit(avatar)}
+                  >
+                    <Pencil className='size-3.5' />
+                  </Button>
                   <Button
                     size='icon'
                     variant='ghost'
                     className='h-8 w-8 bg-black/40 text-white hover:bg-red-600/80 hover:text-white'
                     title='删除数字人'
-                    onClick={() => void removeAvatar(avatar)}
+                    onClick={() => setDeleteTarget(avatar)}
                   >
                     <Trash2 className='size-3.5' />
                   </Button>
@@ -274,6 +373,161 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
             ) : undefined
           }
         />
+
+        {/* 删除确认（系统 AlertDialog 封装，非原生 confirm） */}
+        <ConfirmDialog
+          open={Boolean(deleteTarget)}
+          onOpenChange={(open) => !open && setDeleteTarget(null)}
+          title='删除数字人'
+          desc={
+            deleteTarget
+              ? `确定删除数字人「${deleteTarget.name}」？将同时删除其任务、直播会话与视频文件，此操作不可恢复。`
+              : ''
+          }
+          destructive
+          isLoading={deleting}
+          confirmText={deleting ? '删除中…' : '删除'}
+          cancelBtnText='取消'
+          handleConfirm={() => void removeAvatar(deleteTarget!)}
+        />
+
+        {/* 编辑数字人 */}
+        <Dialog open={Boolean(editTarget)} onOpenChange={(open) => !open && setEditTarget(null)}>
+          <DialogContent className='max-h-[85vh] overflow-y-auto sm:max-w-lg'>
+            <DialogHeader>
+              <DialogTitle>编辑数字人</DialogTitle>
+              <DialogDescription>
+                修改名称、分类、音色与人物设定；形象图片与基础视频不受影响。
+              </DialogDescription>
+            </DialogHeader>
+            <div className='flex flex-col gap-4'>
+              <div className='flex flex-col gap-1.5'>
+                <Label htmlFor='edit-name'>形象名称</Label>
+                <Input
+                  id='edit-name'
+                  value={editForm.name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              <div className='grid grid-cols-2 gap-3'>
+                <div className='flex flex-col gap-1.5'>
+                  <Label>直播分类</Label>
+                  <Select
+                    value={editForm.category}
+                    onValueChange={(v) => setEditForm((f) => ({ ...f, category: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['闲聊', '知识', '娱乐', '游戏', '带货', '其他'].map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className='flex flex-col gap-1.5'>
+                  <Label>播报音色</Label>
+                  <Select
+                    value={editForm.voiceId}
+                    onValueChange={(v) => setEditForm((f) => ({ ...f, voiceId: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder='选择音色' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {voices.map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          {voice.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className='rounded-xl border bg-muted/30 p-3'>
+                <p className='mb-2 text-sm font-medium'>人物设定（注入 AI 对话提示词）</p>
+                <div className='grid grid-cols-2 gap-3'>
+                  <div className='flex flex-col gap-1.5'>
+                    <Label htmlFor='edit-age'>年龄</Label>
+                    <Input
+                      id='edit-age'
+                      type='number'
+                      min={1}
+                      value={editForm.age}
+                      onChange={(e) => setEditForm((f) => ({ ...f, age: e.target.value }))}
+                    />
+                  </div>
+                  <div className='flex flex-col gap-1.5'>
+                    <Label htmlFor='edit-height'>身高 (cm)</Label>
+                    <Input
+                      id='edit-height'
+                      type='number'
+                      min={1}
+                      value={editForm.heightCm}
+                      onChange={(e) => setEditForm((f) => ({ ...f, heightCm: e.target.value }))}
+                    />
+                  </div>
+                  <div className='flex flex-col gap-1.5'>
+                    <Label htmlFor='edit-weight'>体重 (kg)</Label>
+                    <Input
+                      id='edit-weight'
+                      type='number'
+                      min={1}
+                      value={editForm.weightKg}
+                      onChange={(e) => setEditForm((f) => ({ ...f, weightKg: e.target.value }))}
+                    />
+                  </div>
+                  <div className='flex flex-col gap-1.5'>
+                    <Label htmlFor='edit-ethnicity'>族裔</Label>
+                    <Input
+                      id='edit-ethnicity'
+                      value={editForm.ethnicity}
+                      onChange={(e) => setEditForm((f) => ({ ...f, ethnicity: e.target.value }))}
+                    />
+                  </div>
+                  <div className='flex flex-col gap-1.5'>
+                    <Label>感情状态</Label>
+                    <Select
+                      value={editForm.relationshipStatus}
+                      onValueChange={(v) => setEditForm((f) => ({ ...f, relationshipStatus: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['单身', '恋爱中', '已婚', '保密'].map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className='flex flex-col gap-1.5'>
+                    <Label htmlFor='edit-personality'>性格</Label>
+                    <Input
+                      id='edit-personality'
+                      value={editForm.personality}
+                      onChange={(e) => setEditForm((f) => ({ ...f, personality: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant='outline' onClick={() => setEditTarget(null)}>
+                取消
+              </Button>
+              <Button onClick={() => void saveEdit()} disabled={savingEdit}>
+                {savingEdit ? '保存中…' : '保存'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Main>
     </>
   )

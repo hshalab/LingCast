@@ -45,6 +45,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		api.POST("/avatars", avatarHandler.Create)
 		api.GET("/avatars", avatarHandler.List)
 		api.GET("/avatars/:id", avatarHandler.Get)
+		api.PUT("/avatars/:id", avatarHandler.Update)
 		api.DELETE("/avatars/:id", avatarHandler.Delete)
 		api.POST("/avatars/:id/retry", avatarHandler.Retry)
 		api.POST("/avatars/:id/skip", avatarHandler.Skip)

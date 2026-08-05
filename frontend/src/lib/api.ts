@@ -6,10 +6,17 @@ export type Avatar = {
   imageS3Key: string
   imageS3Url: string
   voiceId: string
+  category: string
   baseVideoS3Key?: string
   baseVideoS3Url?: string
   status: 'initializing' | 'ready' | 'failed' | 'skipped'
   liveSettings?: LiveSettings
+  age?: number
+  heightCm?: number
+  weightKg?: number
+  ethnicity?: string
+  relationshipStatus?: string
+  personality?: string
   initQueuePos?: number
   createdAt: string
 }

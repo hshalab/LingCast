@@ -141,6 +141,68 @@ func (h *AvatarHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
 }
 
+type updateAvatarRequest struct {
+	Name               string `json:"name"`
+	Category           string `json:"category"`
+	VoiceID            string `json:"voiceId"`
+	Age                *int   `json:"age"`
+	HeightCm           *int   `json:"heightCm"`
+	WeightKg           *int   `json:"weightKg"`
+	Ethnicity          string `json:"ethnicity"`
+	RelationshipStatus string `json:"relationshipStatus"`
+	Personality        string `json:"personality"`
+}
+
+// Update handles PUT /api/avatars/:id — edits an existing avatar's metadata
+// (name / category / voice / persona profile). The image and base video stay
+// untouched; regenerate them separately via the retry endpoint.
+func (h *AvatarHandler) Update(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		return
+	}
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	var req updateAvatarRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'name' is required"})
+		return
+	}
+	voiceID := strings.TrimSpace(req.VoiceID)
+	if voiceID == "" {
+		voiceID = models.DefaultEdgeVoice
+	}
+
+	avatar.Name = name
+	avatar.Category = normalizeCategory(req.Category)
+	avatar.VoiceID = voiceID
+	avatar.Age = req.Age
+	avatar.HeightCm = req.HeightCm
+	avatar.WeightKg = req.WeightKg
+	avatar.Ethnicity = strings.TrimSpace(req.Ethnicity)
+	avatar.RelationshipStatus = strings.TrimSpace(req.RelationshipStatus)
+	avatar.Personality = strings.TrimSpace(req.Personality)
+	if err := h.db.Save(&avatar).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
+}
+
 // UpdateBaseVideo handles POST /api/avatars/:id/base-video — an internal
 // webhook used by the worker to persist the pre-processed base video S3 key.
 func (h *AvatarHandler) UpdateBaseVideo(c *gin.Context) {
