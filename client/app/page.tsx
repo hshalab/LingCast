@@ -1,18 +1,32 @@
 'use client'
 
 import Link from 'next/link'
+import {
+  BookOpen,
+  Clapperboard,
+  Compass,
+  Flame,
+  Gamepad2,
+  MessageCircle,
+  Mic,
+  Palette,
+  Radio,
+  ShoppingCart,
+  Sparkles,
+  Tv,
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import NavHeader from '@/components/nav-header'
 import { listLiveSessions, type LiveSessionItem } from '@/lib/api'
 
-const CATEGORIES: { key: string; label: string; emoji: string }[] = [
-  { key: '全部', label: '全部', emoji: '🎪' },
-  { key: '闲聊', label: '闲聊', emoji: '💬' },
-  { key: '知识', label: '知识', emoji: '📚' },
-  { key: '娱乐', label: '娱乐', emoji: '🎤' },
-  { key: '游戏', label: '游戏', emoji: '🎮' },
-  { key: '带货', label: '带货', emoji: '🛒' },
-  { key: '其他', label: '其他', emoji: '✨' },
+const CATEGORIES: { key: string; label: string; icon: typeof Compass }[] = [
+  { key: '全部', label: '全部', icon: Compass },
+  { key: '闲聊', label: '闲聊', icon: MessageCircle },
+  { key: '知识', label: '知识', icon: BookOpen },
+  { key: '娱乐', label: '娱乐', icon: Mic },
+  { key: '游戏', label: '游戏', icon: Gamepad2 },
+  { key: '带货', label: '带货', icon: ShoppingCart },
+  { key: '其他', label: '其他', icon: Sparkles },
 ]
 
 export default function Home() {
@@ -61,17 +75,20 @@ export default function Home() {
           <div className='pointer-events-none absolute -bottom-20 -left-10 size-64 rounded-full bg-violet-500/20 blur-3xl' />
           <div className='relative z-10'>
             <h1 className='text-2xl font-bold tracking-tight sm:text-3xl'>
-              正在开播 <span className='align-middle text-xl'>🔥</span>
+              正在开播
+              <Flame className='ml-2 inline size-6 text-orange-400' />
             </h1>
             <p className='mt-2 max-w-md text-sm text-zinc-400'>
               进入房间观看直播、发消息互动，数字人会通过 AI 实时回复你。
             </p>
             <div className='mt-4 flex flex-wrap gap-2 text-xs'>
               <span className='rounded-full border border-white/10 bg-white/5 px-3 py-1 text-zinc-300 backdrop-blur'>
-                📺 开播中 {sessions.length} 个
+                <Tv className='mr-1 inline size-3.5' />
+                开播中 {sessions.length} 个
               </span>
               <span className='rounded-full border border-white/10 bg-white/5 px-3 py-1 text-zinc-300 backdrop-blur'>
-                🎨 分类 {Math.max(availableCategories.length - 1, 0)} 种
+                <Palette className='mr-1 inline size-3.5' />
+                分类 {Math.max(availableCategories.length - 1, 0)} 种
               </span>
             </div>
           </div>
@@ -89,7 +106,8 @@ export default function Home() {
                   : 'border border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'
               }`}
             >
-              {c.emoji} {c.label}
+              <c.icon className='mr-1.5 inline size-4' />
+              {c.label}
             </button>
           ))}
         </div>
@@ -105,7 +123,7 @@ export default function Home() {
           </div>
         ) : filtered.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 rounded-3xl border border-zinc-800 bg-zinc-900/40 py-20 text-center'>
-            <span className='text-5xl'>📡</span>
+            <Radio className='size-12 text-zinc-600' />
             <p className='font-medium text-zinc-200'>
               {category === '全部' ? '暂无开播的数字人' : `「${category}」分类暂无开播`}
             </p>
@@ -128,7 +146,7 @@ export default function Home() {
                   />
                 ) : (
                   <div className='flex aspect-[9/16] w-full items-center justify-center bg-zinc-900 text-zinc-600'>
-                    <span className='text-3xl'>🎭</span>
+                    <Clapperboard className='size-8 text-zinc-600' />
                   </div>
                 )}
                 <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/55 to-transparent px-3 pb-3 pt-12'>

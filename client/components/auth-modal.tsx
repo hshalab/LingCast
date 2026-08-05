@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { X } from 'lucide-react'
 import { useIdentity } from '@/lib/identity'
 
 export default function AuthModal({
@@ -56,7 +57,7 @@ export default function AuthModal({
             onClick={onClose}
             className='text-zinc-500 hover:text-zinc-300'
           >
-            ✕
+            <X className='size-4' />
           </button>
         </div>
         <p className='text-xs leading-relaxed text-zinc-500'>

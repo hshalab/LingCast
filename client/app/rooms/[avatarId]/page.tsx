@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { Bot, Eye, Heart, Tv } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import NavHeader from '@/components/nav-header'
 import XgFlvPlayer from '@/components/xg-player'
@@ -35,7 +36,7 @@ const AVATAR_COLORS = [
   'bg-cyan-600',
 ]
 
-const EMOJIS = ['😀', '😂', '❤️', '👍', '🎉', '🌹']
+const QUICK_PHRASES = ['欢迎', '在吗', '哈哈', '666', '谢谢', '晚安']
 
 export default function RoomPage() {
   const { avatarId } = useParams<{ avatarId: string }>()
@@ -143,7 +144,7 @@ export default function RoomPage() {
           userId: 0,
           username: '系统',
           role: 'bot',
-          content: `⚠️ ${msg}`,
+          content: `[发送失败] ${msg}`,
           createdAt: new Date().toISOString(),
         },
       ])
@@ -219,7 +220,7 @@ export default function RoomPage() {
                 />
               ) : (
                 <div className='flex aspect-[9/16] w-full max-w-[320px] flex-col items-center justify-center gap-2 text-sm text-zinc-500'>
-                  <span className='text-4xl'>📺</span>
+                  <Tv className='size-10 text-zinc-600' />
                   主播暂未开播，请稍候…
                 </div>
               )}
@@ -232,7 +233,8 @@ export default function RoomPage() {
                     直播中
                   </span>
                   <span className='absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white/90 backdrop-blur'>
-                    👀 {viewers}
+                    <Eye className='mr-1 inline size-3' />
+                    {viewers}
                   </span>
                 </>
               )}
@@ -245,7 +247,7 @@ export default function RoomPage() {
                     className='absolute bottom-10 animate-[float-up_1.2s_ease-out_forwards] text-2xl'
                     style={{ left: `${h.x}%` }}
                   >
-                    ❤️
+                    <Heart className='size-5 fill-rose-500 text-rose-500 drop-shadow' />
                   </span>
                 ))}
               </div>
@@ -256,7 +258,10 @@ export default function RoomPage() {
               onClick={like}
               className='mt-3 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-rose-500 hover:text-rose-400'
             >
-              ❤️ {likes > 0 ? likes : '点赞'}
+              <Heart
+                className={`size-4 ${likes > 0 ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'}`}
+              />
+              {likes > 0 ? likes : '点赞'}
             </button>
           </div>
 
@@ -287,7 +292,11 @@ export default function RoomPage() {
                       <span
                         className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white ${colorFor(m.userId)}`}
                       >
-                        {m.role === 'bot' ? '🤖' : initialFor(m.username)}
+                        {m.role === 'bot' ? (
+                          <Bot className='size-4' />
+                        ) : (
+                          initialFor(m.username)
+                        )}
                       </span>
                       <div className='min-w-0 max-w-[88%]'>
                         <p className='text-[11px] text-zinc-500'>
@@ -323,13 +332,13 @@ export default function RoomPage() {
             {/* 快捷表情 + 输入栏 */}
             <div className='shrink-0 border-t border-zinc-800 p-3'>
               <div className='mb-2 flex items-center gap-1'>
-                {EMOJIS.map((e) => (
+                {QUICK_PHRASES.map((p) => (
                   <button
-                    key={e}
-                    onClick={() => setInput((v) => v + e)}
-                    className='grid size-7 place-items-center rounded-lg text-lg transition hover:bg-zinc-800'
+                    key={p}
+                    onClick={() => setInput((v) => v + p)}
+                    className='rounded-lg px-2 py-1 text-xs text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200'
                   >
-                    {e}
+                    {p}
                   </button>
                 ))}
               </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { Tv } from 'lucide-react'
 import { useState } from 'react'
 import AuthModal from '@/components/auth-modal'
 import { useIdentity } from '@/lib/identity'
@@ -16,7 +17,7 @@ export default function NavHeader() {
         <div className='mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6'>
           <Link href='/' className='flex items-center gap-2'>
             <span className='grid size-9 place-items-center rounded-xl bg-blue-600 text-lg'>
-              📺
+              <Tv className='size-5 text-white' />
             </span>
             <span className='text-lg font-bold tracking-tight'>数字人直播间</span>
           </Link>
