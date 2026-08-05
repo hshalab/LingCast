@@ -26,10 +26,8 @@ import signal
 import subprocess
 import threading
 import time
-import wave
 from pathlib import Path
 
-import numpy as np
 import redis
 
 from storage import S3Storage
@@ -47,18 +45,6 @@ logging.basicConfig(
 logger = logging.getLogger("stream_worker")
 
 
-def _make_silent_wav(path: Path, seconds: float, sample_rate: int = 16000) -> Path:
-    """Write a silent mono WAV so the base animation can be rendered before
-    any text arrives (the renderer only needs the audio duration)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(path), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(sample_rate)
-        w.writeframes(b"\x00\x00" * int(sample_rate * seconds))
-    return path
-
-
 class LiveAvatarSession:
     """One avatar's continuous live session (pipe + base clip + TTS buffer)."""
 
@@ -67,7 +53,9 @@ class LiveAvatarSession:
         avatar_id: int,
         stream_id: str,
         image_path: Path,
+        base_video_path: Path,
         audio_path: Path | None,
+        voice_id: str,
         work_dir: Path,
         fps: float,
         queue_key: str,
@@ -75,7 +63,9 @@ class LiveAvatarSession:
         self.avatar_id = avatar_id
         self.stream_id = stream_id
         self.image_path = image_path
+        self.base_video_path = base_video_path
         self.audio_path = audio_path
+        self.voice_id = voice_id
         self.work_dir = work_dir
         self.fps = float(fps)
         self.queue_key = queue_key
@@ -95,19 +85,14 @@ class LiveAvatarSession:
     # Setup
     # ------------------------------------------------------------------ #
     def setup(self) -> None:
-        """Render the base clip once (10s silent template loop) and open pipe."""
+        """Load the pre-processed base clip from S3 and open the ffmpeg pipe."""
         from ai.lipsync_onnx import Wav2LipOnnxLipSync
-        from ai.renderer_real import LivePortraitRenderer
         from streaming.ffmpeg_pipe import FFmpegPipe
 
-        silent = _make_silent_wav(
-            self.work_dir / "silent_base.wav",
-            float(os.environ.get("LIVEPORTRAIT_IDLE_BASE_SECONDS", "10")),
-        )
+        if not self.base_video_path.exists():
+            raise RuntimeError(f"base video not found: {self.base_video_path}")
         self.lipsync = Wav2LipOnnxLipSync()
-        renderer = LivePortraitRenderer(output_fps=int(round(self.fps)))
-        base_video = renderer.render(self.image_path, silent, self.work_dir)
-        self.base_frames, base_fps = Wav2LipOnnxLipSync._read_frames(base_video)
+        self.base_frames, base_fps = Wav2LipOnnxLipSync._read_frames(self.base_video_path)
 
         h, w = self.base_frames[0].shape[:2]
         self.pipe = FFmpegPipe(
@@ -158,9 +143,14 @@ class LiveAvatarSession:
 
     def _get_tts(self):
         if self.tts is None:
-            from ai.tts_real import GPTSoVITSTTS
+            if self.voice_id:
+                from ai.tts_edge import EdgeTTS
 
-            self.tts = GPTSoVITSTTS()
+                self.tts = EdgeTTS(voice_id=self.voice_id)
+            else:
+                from ai.tts_real import GPTSoVITSTTS
+
+                self.tts = GPTSoVITSTTS()
         return self.tts
 
     # ------------------------------------------------------------------ #
@@ -342,6 +332,15 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions) -> Non
         work_dir.mkdir(parents=True)
         image_path = work_dir / ("image" + Path(payload["imageS3Key"]).suffix)
         storage.download(payload["imageS3Key"], image_path)
+        if not payload.get("baseVideoS3Key"):
+            logger.error(
+                "control message for %s has no baseVideoS3Key; "
+                "run the avatar pre-processing step first",
+                stream_id,
+            )
+            return
+        base_video_path = work_dir / "base_video.mp4"
+        storage.download(payload["baseVideoS3Key"], base_video_path)
         audio_path = None
         if payload.get("voiceAudioS3Key"):
             audio_path = work_dir / ("voice" + Path(payload["voiceAudioS3Key"]).suffix)
@@ -351,7 +350,9 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions) -> Non
             avatar_id=avatar_id,
             stream_id=stream_id,
             image_path=image_path,
+            base_video_path=base_video_path,
             audio_path=audio_path,
+            voice_id=payload.get("voiceId", ""),
             work_dir=work_dir,
             fps=fps,
             queue_key=f"live_queue:{avatar_id}",

@@ -11,8 +11,10 @@ class TaskInputs:
     avatar_id: int
     script_text: str
     image_path: Path
-    audio_path: Path | None
     work_dir: Path
+    audio_path: Path | None = None
+    base_video_path: Path | None = None
+    voice_id: str = ""
 
 
 class InferencePipeline(ABC):

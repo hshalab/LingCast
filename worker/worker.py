@@ -99,6 +99,9 @@ def load_config() -> dict:
         "redis_password": os.environ.get("REDIS_PASSWORD", ""),
         "redis_db": int(os.environ.get("REDIS_DB", "0")),
         "queue_key": os.environ.get("TASK_QUEUE_KEY", "talking_avatar:tasks"),
+        "avatar_init_key": os.environ.get(
+            "AVATAR_INIT_QUEUE_KEY", "talking_avatar:avatar_init"
+        ),
         "api_base_url": os.environ.get("API_BASE_URL", "http://api:8080"),
         "work_root": Path(os.environ.get("WORK_DIR", "/tmp/talking-avatar-worker")),
     }
@@ -123,6 +126,11 @@ def process_task(
             audio_path = work_dir / ("voice_audio" + Path(payload["voiceAudioS3Key"]).suffix)
             storage.download(payload["voiceAudioS3Key"], audio_path)
 
+        base_video_path = None
+        if payload.get("baseVideoS3Key"):
+            base_video_path = work_dir / "base_video.mp4"
+            storage.download(payload["baseVideoS3Key"], base_video_path)
+
         callback.update(task_id, "processing")
 
         inputs = TaskInputs(
@@ -130,8 +138,10 @@ def process_task(
             avatar_id=payload["avatarId"],
             script_text=payload["scriptText"],
             image_path=image_path,
+            base_video_path=base_video_path,
             audio_path=audio_path,
             work_dir=work_dir,
+            voice_id=payload.get("voiceId", ""),
         )
         output = pipeline.run(inputs)
 
@@ -140,6 +150,41 @@ def process_task(
         url = storage.url_for(output_key)
         callback.update(task_id, "completed", output_url=url)
         logger.info("task %s completed: %s", task_id, url)
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def process_avatar_init(
+    payload: dict,
+    storage: S3Storage,
+    callback: TaskCallback,
+    work_root: Path,
+) -> None:
+    """Pre-process a newly created avatar into a silent base driving video.
+
+    LivePortrait runs exactly once here (asset preprocessing); the offline and
+    live pipelines only consume the resulting base_videos/<avatar_id>.mp4.
+    """
+    avatar_id = payload["avatarId"]
+    work_dir = work_root / f"asset-{avatar_id}"
+    if work_dir.exists():
+        shutil.rmtree(work_dir, ignore_errors=True)
+    work_dir.mkdir(parents=True)
+    try:
+        image_path = work_dir / ("source_image" + Path(payload["imageS3Key"]).suffix)
+        storage.download(payload["imageS3Key"], image_path)
+
+        from ai.renderer_real import LivePortraitRenderer
+
+        renderer = LivePortraitRenderer()
+        seconds = float(os.environ.get("LIVEPORTRAIT_BASE_SECONDS", "10"))
+        base_video = renderer.render_base(image_path, work_dir, seconds=seconds)
+        key = f"base_videos/{avatar_id}.mp4"
+        storage.upload(key, base_video)
+        callback.update_avatar_base_video(avatar_id, key, status="ready")
+        logger.info("avatar %s base video ready: %s (%.1fs)", avatar_id, key, seconds)
+    except Exception:
+        logger.exception("avatar %s base video preprocess failed", avatar_id)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -169,12 +214,18 @@ def main() -> None:
 
     while True:
         try:
-            item = r.blpop(cfg["queue_key"], timeout=5)
+            item = r.blpop([cfg["queue_key"], cfg["avatar_init_key"]], timeout=5)
             if item is None:
                 continue
 
-            _, raw = item
+            queue_name, raw = item
             payload = json.loads(raw)
+
+            if queue_name == cfg["avatar_init_key"]:
+                logger.info("received avatar init payload: %s", payload)
+                process_avatar_init(payload, storage, callback, cfg["work_root"])
+                continue
+
             logger.info("received task payload: %s", payload)
             try:
                 process_task(payload, storage, pipeline, callback, cfg["work_root"])

@@ -16,14 +16,31 @@ const (
 	LiveStatusActive = "active"
 )
 
+// Avatar lifecycle: the base driving video is generated asynchronously after
+// creation (LivePortrait pre-processing), so avatars start as "initializing".
+const (
+	AvatarStatusInitializing = "initializing"
+	AvatarStatusReady        = "ready"
+	AvatarStatusFailed       = "failed"
+)
+
+// DefaultEdgeVoice is the fallback voice when no voiceId is supplied.
+const DefaultEdgeVoice = "zh-CN-XiaoxiaoNeural"
+
 // Avatar is a digital avatar material record. Files live in object storage;
 // the database only stores their S3 keys.
 type Avatar struct {
-	ID              uint      `gorm:"primaryKey" json:"id"`
-	Name            string    `gorm:"size:255;not null" json:"name"`
-	ImageS3Key      string    `gorm:"size:512;not null" json:"imageS3Key"`
-	VoiceAudioS3Key *string   `gorm:"size:512" json:"voiceAudioS3Key,omitempty"`
-	CreatedAt       time.Time `json:"createdAt"`
+	ID              uint    `gorm:"primaryKey" json:"id"`
+	Name            string  `gorm:"size:255;not null" json:"name"`
+	ImageS3Key      string  `gorm:"size:512;not null" json:"imageS3Key"`
+	VoiceAudioS3Key *string `gorm:"size:512" json:"voiceAudioS3Key,omitempty"`
+	// VoiceID selects the Edge-TTS voice used for broadcast/live speech.
+	VoiceID string `gorm:"size:64;not null;default:zh-CN-XiaoxiaoNeural" json:"voiceId"`
+	// BaseVideoS3Key points to the pre-processed LivePortrait driving clip
+	// (silent, 24fps) consumed by both the offline and live pipelines.
+	BaseVideoS3Key *string   `gorm:"size:512" json:"baseVideoS3Key,omitempty"`
+	Status         string    `gorm:"size:32;not null;default:initializing;index" json:"status"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 // BroadcastTask is an async synthesis task queued to the AI worker.

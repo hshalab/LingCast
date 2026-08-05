@@ -26,6 +26,7 @@ import logging
 import os
 import subprocess
 import sys
+import wave
 from pathlib import Path
 
 from hardware import device_from_env
@@ -79,6 +80,23 @@ class LivePortraitRenderer:
     # ------------------------------------------------------------------ #
     # Renderer interface
     # ------------------------------------------------------------------ #
+    def render_base(self, image_path: Path, work_dir: Path, seconds: float = 10.0) -> Path:
+        """Pre-process a static avatar image into a silent base driving video.
+
+        Runs LivePortrait once with the default driving template and returns a
+        silent, 24fps `base_video.mp4` of `seconds` length. This is a
+        preprocessing step: neither the offline nor the live pipeline calls
+        LivePortrait at inference time anymore.
+        """
+        silent = work_dir / "silent_base.wav"
+        silent.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(silent), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(16000)
+            w.writeframes(b"\x00\x00" * int(16000 * seconds))
+        return self.render(image_path, silent, work_dir)
+
     def render(self, image_path: Path, tts_wav: Path, work_dir: Path) -> Path:
         """Animate the avatar image (blink/micro-motion template) and return a
         silent `base_video.mp4` with the same length as the TTS audio.

@@ -20,6 +20,7 @@ import {
   Clapperboard,
   Images,
   RadioTower,
+  Video,
   ShieldCheck,
   AudioWaveform,
   Command,
@@ -113,6 +114,11 @@ export const sidebarData: SidebarData = {
           title: 'Avatar Studio',
           url: '/avatar-studio',
           icon: Clapperboard,
+        },
+        {
+          title: 'Broadcast',
+          url: '/broadcast',
+          icon: Video,
         },
         {
           title: 'Live Studio',

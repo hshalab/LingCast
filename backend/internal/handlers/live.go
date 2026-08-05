@@ -86,6 +86,12 @@ func (h *LiveHandler) Start(c *gin.Context) {
 		}
 		return
 	}
+	if avatar.Status != models.AvatarStatusReady || avatar.BaseVideoS3Key == nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "avatar is not ready yet (base video still generating), please try again later",
+		})
+		return
+	}
 
 	streamID := strings.TrimSpace(req.StreamID)
 	if streamID == "" {
@@ -112,6 +118,8 @@ func (h *LiveHandler) Start(c *gin.Context) {
 		StreamID:        streamID,
 		ImageS3Key:      avatar.ImageS3Key,
 		VoiceAudioS3Key: valueOrEmpty(avatar.VoiceAudioS3Key),
+		BaseVideoS3Key:  *avatar.BaseVideoS3Key,
+		VoiceID:         avatar.VoiceID,
 	}
 	if err := h.q.PushTo(c.Request.Context(), h.liveControlQueueKey, payload); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "notify worker failed: " + err.Error()})

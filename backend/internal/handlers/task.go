@@ -72,6 +72,12 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		}
 		return
 	}
+	if avatar.Status != models.AvatarStatusReady || avatar.BaseVideoS3Key == nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "avatar is not ready yet (base video still generating), please try again later",
+		})
+		return
+	}
 
 	task := models.BroadcastTask{
 		AvatarID:   req.AvatarID,
@@ -92,6 +98,8 @@ func (h *TaskHandler) Create(c *gin.Context) {
 	if avatar.VoiceAudioS3Key != nil {
 		payload.VoiceAudioS3Key = *avatar.VoiceAudioS3Key
 	}
+	payload.BaseVideoS3Key = *avatar.BaseVideoS3Key
+	payload.VoiceID = avatar.VoiceID
 
 	if err := h.q.Push(c.Request.Context(), payload); err != nil {
 		h.db.Model(&task).Update("status", models.TaskStatusFailed)

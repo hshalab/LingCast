@@ -7,6 +7,10 @@ export type Avatar = {
   imageS3Url: string
   voiceAudioS3Key?: string
   voiceAudioS3Url?: string
+  voiceId: string
+  baseVideoS3Key?: string
+  baseVideoS3Url?: string
+  status: 'initializing' | 'ready' | 'failed'
   createdAt: string
 }
 

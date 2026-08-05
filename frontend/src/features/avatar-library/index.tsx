@@ -154,16 +154,36 @@ export function AvatarLibrary() {
                     ) : (
                       <Badge variant='outline'>未上传音色</Badge>
                     )}
+                    {avatar.baseVideoS3Key ? (
+                      <Badge variant='outline'>基础视频就绪</Badge>
+                    ) : avatar.status === 'failed' ? (
+                      <Badge variant='destructive'>生成失败</Badge>
+                    ) : (
+                      <Badge variant='destructive'>基础视频生成中</Badge>
+                    )}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className='flex gap-2'>
-                  <Button asChild size='sm' className='flex-1'>
-                    <Link to='/avatar-studio' search={{ avatarId: String(avatar.id) }}>
+                  <Button
+                    asChild
+                    size='sm'
+                    className='flex-1'
+                    disabled={avatar.status !== 'ready'}
+                    title={avatar.status === 'ready' ? undefined : '基础视频生成中，请稍候'}
+                  >
+                    <Link to='/broadcast' search={{ avatarId: String(avatar.id) }}>
                       <Sparkles className='size-4' />
                       播报制作
                     </Link>
                   </Button>
-                  <Button asChild size='sm' variant='outline' className='flex-1'>
+                  <Button
+                    asChild
+                    size='sm'
+                    variant='outline'
+                    className='flex-1'
+                    disabled={avatar.status !== 'ready'}
+                    title={avatar.status === 'ready' ? undefined : '基础视频生成中，请稍候'}
+                  >
                     <Link to='/live-studio' search={{ avatarId: String(avatar.id) }}>
                       <RadioTower className='size-4' />
                       开启直播

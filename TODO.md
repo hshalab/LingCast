@@ -54,12 +54,12 @@ AMD GPUs using ROCm.
 
 ### Tasks
 
-1. **Go API (Backend)** — [ ]
-   - 确保 `GET /api/avatars` 成功从 MariaDB `avatars` 表返回标准 JSON 数组。
-2. **Frontend (shadcn-admin)** — [ ]
-   - 新增 "Avatar Library" 视图。
-   - 请求 `GET /api/avatars`，以响应式 Grid / Card 列表展示头像缩略图
-     （经 S3 代理）与名称。
+1. **Go API (Backend)** — [x]
+   - `GET /api/avatars` + `GET /api/avatars/:id`（轮询初始化状态）；创建时
+     `voice_id`/`status=initializing`/`avatar_init` 队列；base 视频回写 Webhook。
+2. **Frontend (shadcn-admin)** — [x]
+   - Avatar Library 响应式卡片 + 状态徽标；Avatar Studio 改为纯创建页
+     （名称/图片/Edge-TTS 音色 + 初始化轮询）；Broadcast 播报页；Live Studio。
 
 ## Phase 3: Streaming Architecture Reboot（流式架构）
 

@@ -3,10 +3,12 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"mime"
 	"mime/multipart"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,13 +16,16 @@ import (
 	"gorm.io/gorm"
 
 	"talkingavatar/backend/internal/models"
+	"talkingavatar/backend/internal/queue"
 	"talkingavatar/backend/internal/storage"
 )
 
 // AvatarHandler serves avatar material uploads and queries.
 type AvatarHandler struct {
-	db *gorm.DB
-	s3 *storage.Client
+	db                 *gorm.DB
+	s3                 *storage.Client
+	q                  *queue.Queue
+	avatarInitQueueKey string
 }
 
 type avatarResponse struct {
@@ -30,21 +35,30 @@ type avatarResponse struct {
 	ImageS3URL      string    `json:"imageS3Url"`
 	VoiceAudioS3Key *string   `json:"voiceAudioS3Key,omitempty"`
 	VoiceAudioS3URL *string   `json:"voiceAudioS3Url,omitempty"`
+	VoiceID         string    `json:"voiceId"`
+	BaseVideoS3Key  *string   `json:"baseVideoS3Key,omitempty"`
+	BaseVideoS3URL  *string   `json:"baseVideoS3Url,omitempty"`
+	Status          string    `json:"status"`
 	CreatedAt       time.Time `json:"createdAt"`
 }
 
-func NewAvatarHandler(db *gorm.DB, s3 *storage.Client) *AvatarHandler {
-	return &AvatarHandler{db: db, s3: s3}
+func NewAvatarHandler(db *gorm.DB, s3 *storage.Client, q *queue.Queue, avatarInitQueueKey string) *AvatarHandler {
+	return &AvatarHandler{db: db, s3: s3, q: q, avatarInitQueueKey: avatarInitQueueKey}
 }
 
 // Create handles POST /api/avatars. It accepts multipart/form-data with
-// `name`, `image` (required) and `voice_audio` (optional) fields, uploads the
-// files directly to S3 and stores the returned keys in MySQL.
+// `name`, `image` (required) and `voice_id` (optional) fields, uploads the
+// image to S3, stores the record as `initializing` and enqueues the
+// LivePortrait base-video pre-processing job.
 func (h *AvatarHandler) Create(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("name"))
 	if name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'name' is required"})
 		return
+	}
+	voiceID := strings.TrimSpace(c.PostForm("voice_id"))
+	if voiceID == "" {
+		voiceID = models.DefaultEdgeVoice
 	}
 
 	imageHeader, err := c.FormFile("image")
@@ -59,27 +73,93 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 		return
 	}
 
-	var voiceAudioKey *string
-	if audioHeader, err := c.FormFile("voice_audio"); err == nil {
-		key, err := h.uploadFormFile(c, audioHeader, "avatars")
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "upload voice audio failed: " + err.Error()})
-			return
-		}
-		voiceAudioKey = &key
-	}
-
 	avatar := models.Avatar{
-		Name:            name,
-		ImageS3Key:      imageKey,
-		VoiceAudioS3Key: voiceAudioKey,
+		Name:       name,
+		ImageS3Key: imageKey,
+		VoiceID:    voiceID,
+		Status:     models.AvatarStatusInitializing,
 	}
 	if err := h.db.Create(&avatar).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "save avatar failed: " + err.Error()})
 		return
 	}
 
+	// Notify the worker to pre-process the image into a silent base driving
+	// video (LivePortrait) and write the S3 key back via the webhook below.
+	init := queue.AvatarInitPayload{
+		AvatarID:   avatar.ID,
+		ImageS3Key: imageKey,
+	}
+	if err := h.q.PushTo(c.Request.Context(), h.avatarInitQueueKey, init); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "enqueue avatar init failed: " + err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusCreated, toAvatarResponse(avatar, h.s3))
+}
+
+// Get handles GET /api/avatars/:id so the frontend can poll the avatar's
+// initialization status until it becomes "ready".
+func (h *AvatarHandler) Get(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		return
+	}
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
+}
+
+// UpdateBaseVideo handles POST /api/avatars/:id/base-video — an internal
+// webhook used by the worker to persist the pre-processed base video S3 key.
+func (h *AvatarHandler) UpdateBaseVideo(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		return
+	}
+	var req struct {
+		BaseVideoS3Key string `json:"baseVideoS3Key"`
+		Status         string `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.BaseVideoS3Key) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'baseVideoS3Key' is required"})
+		return
+	}
+	status := strings.TrimSpace(req.Status)
+	if status == "" {
+		status = models.AvatarStatusReady
+	}
+	if status != models.AvatarStatusReady && status != models.AvatarStatusFailed {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+		return
+	}
+
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	key := strings.TrimSpace(req.BaseVideoS3Key)
+	avatar.BaseVideoS3Key = &key
+	avatar.Status = status
+	if err := h.db.Save(&avatar).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
 }
 
 // List handles GET /api/avatars and returns all avatars (newest first) so the
@@ -125,6 +205,8 @@ func toAvatarResponse(a models.Avatar, s3 *storage.Client) avatarResponse {
 		Name:       a.Name,
 		ImageS3Key: a.ImageS3Key,
 		ImageS3URL: s3.PublicURL(a.ImageS3Key),
+		VoiceID:    a.VoiceID,
+		Status:     a.Status,
 		CreatedAt:  a.CreatedAt,
 	}
 	if a.VoiceAudioS3Key != nil {
@@ -132,6 +214,13 @@ func toAvatarResponse(a models.Avatar, s3 *storage.Client) avatarResponse {
 		resp.VoiceAudioS3Key = &key
 		if url := s3.PublicURL(key); url != "" {
 			resp.VoiceAudioS3URL = &url
+		}
+	}
+	if a.BaseVideoS3Key != nil {
+		key := *a.BaseVideoS3Key
+		resp.BaseVideoS3Key = &key
+		if url := s3.PublicURL(key); url != "" {
+			resp.BaseVideoS3URL = &url
 		}
 	}
 	return resp

@@ -30,11 +30,15 @@
 
 ## 3. 当前实现状态
 
-- ✅ Avatar Studio 页面（上传素材、提交任务、轮询、播放成品）。
+- ✅ Avatar Studio（创建）：形象名称/图片/Edge-TTS 音色（localStorage 缓存，
+  默认 zh-CN-XiaoxiaoNeural），提交后轮询 `GET /api/avatars/:id` 直到 ready。
+- ✅ Broadcast（离线播报）页面：选数字人 + 脚本 → 任务轮询 → 播放成品。
 - ✅ Go API：`POST /api/avatars`、`GET /api/avatars`、`POST /api/tasks`、
   `GET /api/tasks/:id`、`POST /api/tasks/:id/status`（Worker 回调）。
-- ✅ 真实管线 `AI_MODE=real`：GPT-SoVITS 零样本克隆 → LivePortrait 24fps 无声
-  base 视频 → Wav2Lip ONNX 口型（CoreML 优先）→ mux 音频 → 上传 S3 + 回调。
+- ✅ 两段式管线：创建时 `avatar_init` 队列 → LivePortrait 生成静音 24fps base 视频
+  上传 S3 并回写 `base_video_s3_key`/`status`；使用时 **Edge-TTS**（`TTS_ENGINE=edge`，
+  零 GPU，默认）或 GPT-SoVITS（`TTS_ENGINE=gpt-sovits`）→ Wav2Lip ONNX（CoreML 优先）
+  → mux/推流。LivePortrait 不再出现在广播/直播循环里。
 - ✅ 直播管线 `stream_worker.py`（闲置/说话循环）：`POST /api/live/{id}/start`
   通知 Worker 打开**常驻 FFmpeg 管道**（闲置态喂 base 动画 + numpy 静音音频）；
   `POST /api/live/{id}/push` 按句切块入 `live_queue:{id}` → 异步 TTS → Wav2Lip
@@ -119,6 +123,8 @@ uv run python -u worker.py          # 真实管线，AI_MODE=real
   上要 8 分钟且打满 CPU，仅作对照。
 - **ROCm 上口型走 CPU 兜底**：`WAV2LIP_PROVIDER=rocm` 时若 LSTM 算子不在 ROCm EP
   支持集内会自动逐节点回退 CPU，不影响结果。
+- **Edge-TTS 需要外网**：语音合成走微软在线服务；离线/断网环境改
+  `TTS_ENGINE=gpt-sovits`（需参考音频 + GPU）。
 - **G2PW 中文前端**：首次真实 TTS 会自动从 ModelScope 下载（约 1.2GB），需要网络。
 - **ffmpeg**：宿主机需 `brew install ffmpeg`（torchcodec/GPT-SoVITS 依赖）。
 - **任务卡在 processing**：先看 worker 日志尾部；口型阶段卡住多半是用了旧 torch

@@ -1,8 +1,8 @@
 # Talking Avatar Platform（口播数字人系统）
 
-端到端 AI 口播数字人合成平台：管理后台上传**形象图片**与**克隆音色音频**、填写播报
-脚本，后台依次执行 **GPT-SoVITS 声音克隆 → LivePortrait 面部动画 → Wav2Lip 口型合成**，
-输出带声音的说话视频。
+端到端 AI 口播数字人合成平台：管理后台上传**形象图片**并选择**播报音色**创建数字人，
+系统先预处理生成**基础驱动视频**，之后离线播报与实时直播都只跑轻量推理：
+**Edge-TTS 语音合成 → Wav2Lip 口型**，输出带声音的视频/推流。
 
 ## 架构
 
@@ -12,7 +12,8 @@
              └── /media  ──> MinIO (S3 兼容, 模拟 RustFS)
 
 Python AI Worker ──> Redis 队列 / boto3 下载素材
-                  ──> 真实管线: GPT-SoVITS → LivePortrait → Wav2Lip(ONNX)
+                  ──> 创建: LivePortrait 生成 base 视频（一次性预处理）
+                  ──> 使用: Edge-TTS → Wav2Lip(ONNX) 离线播报 / 直播推流
                   ──> 上传成品到 S3, 通过 Webhook 回写任务状态
 ```
 
@@ -25,16 +26,29 @@ Python AI Worker ──> Redis 队列 / boto3 下载素材
   （macOS Apple Silicon 用 MPS/CoreML，Linux 用 NVIDIA CUDA 或 AMD ROCm），
   Docker 仅向宿主机发布 Redis 6379 与 MinIO 9000 两个端口。
 
+## 两段式架构（创建 → 使用）
+
+LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用它：
+
+1. **创建（Avatar Studio）**：上传形象图片 + 选择 Edge-TTS 音色（默认
+   `zh-CN-XiaoxiaoNeural`）→ `POST /api/avatars`（状态 `initializing`）→
+   Worker 消费 `avatar_init` 队列 → LivePortrait 生成静音 24fps base 视频 →
+   上传 S3 → 回写 `base_video_s3_key` 并置为 `ready`。前端轮询
+   `GET /api/avatars/:id` 显示「基础视频生成中…」。
+2. **使用（Broadcast / Live）**：只下载 base 视频 → **Edge-TTS**（零 GPU）合成
+   语音 → **Wav2Lip(ONNX)** 口型 → 离线 mux 成 MP4 上传 / 直播推流 SRS。
+
 ## 已实现功能
 
-- **Avatar Studio 页面**：上传形象图片（必填）+ 克隆音色音频（可选）+ 播报脚本；
-  提交后自动轮询任务状态，完成即内嵌播放成品视频。
-- **GPT-SoVITS 零样本声音克隆**：上传的音频仅作为基础音色参考，脚本文字用克隆
-  音色读出，不会把参考音频混入成片。
-- **LivePortrait 面部动画**：静态头像 → 眨眼/头部微动/耸肩的自然动画（24fps 无声
-  base 视频，铺满语音时长）。
-- **Wav2Lip(ONNX) 口型合成**：嘴部逐帧匹配语音，最终 mux 上克隆语音；ONNX +
-  CoreML 执行器，16 秒视频口型阶段约 10 秒，CPU 线程数受限（默认 4）。
+- **Avatar Studio（创建）**：形象名称 + 图片上传 + Edge-TTS 音色选择（列表缓存于
+  localStorage，默认中文女声晓晓）；提交后显示「基础视频生成中…」并轮询状态。
+- **Broadcast（离线播报）**：选择已就绪数字人 + 输入脚本 → 提交任务 → 轮询 →
+  内嵌播放成品 MP4。
+- **Edge-TTS 语音合成**：GPU-free 云端神经音色，按 avatar 的 `voice_id` 选声，
+  一条句子约 1-2 秒（`TTS_ENGINE=gpt-sovits` 可切回旧克隆模型）。
+- **LivePortrait 基础视频预处理**：创建数字人时生成静音 24fps 驱动视频，仅此一次。
+- **Wav2Lip(ONNX) 口型合成**：基于预生成 base 视频，嘴部逐帧匹配语音；ONNX +
+  CoreML 执行器，CPU 线程数受限（默认 4），短 base 自动循环覆盖任意脚本长度。
 - **动画节奏可调**：驱动模板可换、播放速度/动作幅度可调（见“动画节奏”）。
 - **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
 

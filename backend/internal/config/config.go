@@ -18,6 +18,7 @@ type Config struct {
 	RedisDB             int
 	TaskQueueKey        string
 	LiveControlQueueKey string
+	AvatarInitQueueKey  string
 
 	S3Endpoint      string
 	S3AccessKey     string
@@ -77,6 +78,7 @@ func Load() Config {
 		RedisDB:             envInt("REDIS_DB", 0),
 		TaskQueueKey:        env("TASK_QUEUE_KEY", "talking_avatar:tasks"),
 		LiveControlQueueKey: env("LIVE_CONTROL_QUEUE_KEY", "talking_avatar:live_control"),
+		AvatarInitQueueKey:  env("AVATAR_INIT_QUEUE_KEY", "talking_avatar:avatar_init"),
 
 		S3Endpoint:      env("S3_ENDPOINT", "http://127.0.0.1:9000"),
 		S3AccessKey:     env("S3_ACCESS_KEY", "minioadmin"),

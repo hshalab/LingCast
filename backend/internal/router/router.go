@@ -31,7 +31,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		MaxAge:           12 * time.Hour,
 	}))
 
-	avatarHandler := handlers.NewAvatarHandler(db, s3)
+	avatarHandler := handlers.NewAvatarHandler(db, s3, q, cfg.AvatarInitQueueKey)
 	taskHandler := handlers.NewTaskHandler(db, q)
 	liveHandler := handlers.NewLiveHandler(db, q, cfg.LiveControlQueueKey)
 
@@ -39,6 +39,9 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 	{
 		api.POST("/avatars", avatarHandler.Create)
 		api.GET("/avatars", avatarHandler.List)
+		api.GET("/avatars/:id", avatarHandler.Get)
+		// Internal webhook: worker persists the pre-processed base video key.
+		api.POST("/avatars/:id/base-video", avatarHandler.UpdateBaseVideo)
 		api.POST("/tasks", taskHandler.Create)
 		api.GET("/tasks/:id", taskHandler.Get)
 		// Internal webhook used by the Python AI worker.

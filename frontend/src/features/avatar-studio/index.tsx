@@ -1,6 +1,7 @@
 import axios from 'axios'
-import { LoaderCircle, Upload, Video } from 'lucide-react'
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { CheckCircle2, LoaderCircle, Upload, XCircle } from 'lucide-react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -24,18 +25,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { api, type Avatar, type BroadcastTask, type TaskStatus } from '@/lib/api'
-
-const STATUS_META: Record<
-  TaskStatus,
-  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
-> = {
-  pending: { label: '排队中', variant: 'secondary' },
-  processing: { label: '合成中', variant: 'default' },
-  completed: { label: '已完成', variant: 'default' },
-  failed: { label: '失败', variant: 'destructive' },
-}
+import { api, type Avatar } from '@/lib/api'
+import {
+  cacheVoices,
+  DEFAULT_VOICE_ID,
+  getCachedVoices,
+  type EdgeVoice,
+} from './voices'
 
 function showApiError(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -46,28 +42,42 @@ function showApiError(error: unknown) {
   toast.error('请求失败，请稍后重试')
 }
 
-function useTaskPolling(taskId: number | null) {
-  const [task, setTask] = useState<BroadcastTask | null>(null)
+export function AvatarStudio() {
+  const [name, setName] = useState('')
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [voices] = useState<EdgeVoice[]>(() => {
+    const cached = getCachedVoices()
+    cacheVoices(cached) // refresh cache so it is always available offline
+    return cached
+  })
+  const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID)
+  const [submitting, setSubmitting] = useState(false)
+  const [created, setCreated] = useState<Avatar | null>(null)
+  const [initFailed, setInitFailed] = useState(false)
 
+  const selectedVoice = useMemo(
+    () => voices.find((voice) => voice.id === voiceId) ?? voices[0],
+    [voices, voiceId],
+  )
+
+  // Poll the avatar's initialization status after creation.
   useEffect(() => {
-    if (!taskId) return
-
+    if (!created || created.status === 'ready' || created.status === 'failed') return
     let stopped = false
     let timer: number | undefined
     let attempts = 0
-    const MAX_ATTEMPTS = 300 // ~12 minutes
 
     const poll = async () => {
-      if (stopped || attempts >= MAX_ATTEMPTS) return
+      if (stopped || attempts >= 60) return
       attempts += 1
       try {
-        const { data } = await api.get<BroadcastTask>(`/tasks/${taskId}`)
+        const { data } = await api.get<Avatar>(`/avatars/${created.id}`)
         if (stopped) return
-        setTask(data)
-        if (data.status === 'completed' || data.status === 'failed') return
-        timer = window.setTimeout(poll, 2500)
+        setCreated(data)
+        if (data.status === 'ready' || data.status === 'failed') return
+        timer = window.setTimeout(poll, 3000)
       } catch {
-        if (!stopped) timer = window.setTimeout(poll, 2500)
+        if (!stopped) timer = window.setTimeout(poll, 3000)
       }
     }
 
@@ -76,88 +86,47 @@ function useTaskPolling(taskId: number | null) {
       stopped = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [taskId])
-
-  return task
-}
-
-export function AvatarStudio({ initialAvatarId }: { initialAvatarId?: string }) {
-  const [avatars, setAvatars] = useState<Avatar[]>([])
-  const [selectedAvatarId, setSelectedAvatarId] = useState('')
-  const [name, setName] = useState('')
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [audioFile, setAudioFile] = useState<File | null>(null)
-  const [script, setScript] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [taskId, setTaskId] = useState<number | null>(null)
-
-  const task = useTaskPolling(taskId)
-  const usingNewAvatar = selectedAvatarId === ''
-  const selectedAvatar = avatars.find((a) => String(a.id) === selectedAvatarId)
-
-  const loadAvatars = useCallback(async () => {
-    try {
-      const { data } = await api.get<{ data: Avatar[] }>('/avatars')
-      setAvatars(data.data)
-    } catch {
-      // Background refresh: do not disturb the user when the API is unreachable.
-    }
-  }, [])
+  }, [created])
 
   useEffect(() => {
-    void loadAvatars()
-  }, [loadAvatars])
-
-  // Preselect an avatar when arriving from the library page (?avatarId=...).
-  useEffect(() => {
-    if (!initialAvatarId || selectedAvatarId !== '') return
-    if (avatars.some((avatar) => String(avatar.id) === initialAvatarId)) {
-      setSelectedAvatarId(initialAvatarId)
+    if (created?.status === 'ready') {
+      toast.success('基础视频已生成，数字人创建完成')
     }
-  }, [initialAvatarId, avatars, selectedAvatarId])
+    if (created?.status === 'failed') {
+      setInitFailed(true)
+      toast.error('基础视频生成失败，请检查 worker 日志后重试')
+    }
+  }, [created?.status])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!script.trim()) {
-      toast.error('请填写播报脚本')
+    if (!name.trim()) {
+      toast.error('请填写形象名称')
       return
     }
-    if (usingNewAvatar) {
-      if (!name.trim()) {
-        toast.error('请填写形象名称')
-        return
-      }
-      if (!imageFile) {
-        toast.error('请上传形象图片')
-        return
-      }
+    if (!imageFile) {
+      toast.error('请上传形象图片')
+      return
     }
 
     setSubmitting(true)
+    setInitFailed(false)
     try {
-      let avatarId = Number(selectedAvatarId)
-      if (!avatarId) {
-        const form = new FormData()
-        form.append('name', name.trim())
-        form.append('image', imageFile as File)
-        if (audioFile) form.append('voice_audio', audioFile)
-
-        const { data: avatar } = await api.post<Avatar>('/avatars', form)
-        avatarId = avatar.id
-        void loadAvatars()
-      }
-
-      const { data: created } = await api.post<BroadcastTask>('/tasks', {
-        avatarId,
-        scriptText: script.trim(),
-      })
-      setTaskId(created.id)
-    } catch (error) {
-      showApiError(error)
-    } finally {
+      const form = new FormData()
+      form.append('name', name.trim())
+      form.append('image', imageFile)
+      form.append('voice_id', voiceId)
+      const { data } = await api.post<Avatar>('/avatars', form)
+      setCreated(data)
       setSubmitting(false)
+      toast.info('已提交，正在生成基础视频…')
+    } catch (error) {
+      setSubmitting(false)
+      showApiError(error)
     }
   }
+
+  const isInitializing = created != null && created.status === 'initializing'
 
   return (
     <>
@@ -171,161 +140,138 @@ export function AvatarStudio({ initialAvatarId }: { initialAvatarId?: string }) 
         <div>
           <h2 className='text-2xl font-bold tracking-tight'>Avatar Studio</h2>
           <p className='text-muted-foreground'>
-            上传素材并输入播报脚本，合成嘴型同步的数字人视频。
+            创建数字人身份：上传形象图片并选择播报音色，系统会自动生成基础驱动视频。
           </p>
         </div>
 
         <div className='grid gap-4 lg:grid-cols-2'>
           <Card>
             <CardHeader>
-              <CardTitle>素材与任务配置</CardTitle>
+              <CardTitle>创建数字人</CardTitle>
               <CardDescription>
-                可复用已有形象，或上传新形象图片（必填）与克隆音频（可选）。
+                提交后进入基础视频生成阶段（LivePortrait 预处理），完成后即可用于播报与直播。
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className='flex flex-col gap-5'>
                 <div className='flex flex-col gap-2'>
-                  <Label htmlFor='avatar-select'>选择已有形象（可选）</Label>
-                  <Select value={selectedAvatarId} onValueChange={setSelectedAvatarId}>
-                    <SelectTrigger id='avatar-select' className='w-full'>
-                      <SelectValue placeholder='新建形象' />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {avatars.map((avatar) => (
-                        <SelectItem key={avatar.id} value={String(avatar.id)}>
-                          {avatar.name} (#{avatar.id})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedAvatar?.imageS3Url && (
+                  <Label htmlFor='avatar-name'>形象名称</Label>
+                  <Input
+                    id='avatar-name'
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder='例如：小美'
+                    disabled={isInitializing}
+                  />
+                </div>
+
+                <div className='flex flex-col gap-2'>
+                  <Label htmlFor='avatar-image'>形象图片</Label>
+                  <Input
+                    id='avatar-image'
+                    type='file'
+                    accept='image/*'
+                    disabled={isInitializing}
+                    onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
+                  />
+                  {imageFile && (
                     <img
-                      src={selectedAvatar.imageS3Url}
-                      alt={selectedAvatar.name}
-                      className='mt-1 h-24 w-24 rounded-lg border object-cover'
+                      src={URL.createObjectURL(imageFile)}
+                      alt='preview'
+                      className='mt-1 h-32 w-32 rounded-lg border object-cover'
                     />
                   )}
                 </div>
 
-                {usingNewAvatar && (
-                  <>
-                    <div className='flex flex-col gap-2'>
-                      <Label htmlFor='avatar-name'>形象名称 *</Label>
-                      <Input
-                        id='avatar-name'
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder='例如：小林'
-                      />
-                    </div>
-
-                    <div className='flex flex-col gap-2'>
-                      <Label htmlFor='avatar-image'>
-                        <span className='inline-flex items-center gap-1'>
-                          <Upload className='size-3.5' /> 形象图片 *
-                        </span>
-                      </Label>
-                      <Input
-                        id='avatar-image'
-                        type='file'
-                        accept='image/*'
-                        onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-                      />
-                      <p className='text-xs text-muted-foreground'>
-                        {imageFile ? imageFile.name : '支持 JPG / PNG，建议正方形图片'}
-                      </p>
-                    </div>
-
-                    <div className='flex flex-col gap-2'>
-                      <Label htmlFor='voice-audio'>语音克隆音频（可选）</Label>
-                      <Input
-                        id='voice-audio'
-                        type='file'
-                        accept='audio/*'
-                        onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
-                      />
-                      <p className='text-xs text-muted-foreground'>
-                        {audioFile ? audioFile.name : '支持 WAV / MP3，用于声音克隆'}
-                      </p>
-                    </div>
-                  </>
-                )}
-
                 <div className='flex flex-col gap-2'>
-                  <Label htmlFor='script'>播报脚本 *</Label>
-                  <Textarea
-                    id='script'
-                    value={script}
-                    onChange={(e) => setScript(e.target.value)}
-                    placeholder='请输入需要数字人口播的文本内容…'
-                    rows={6}
-                  />
+                  <Label htmlFor='avatar-voice'>播报音色</Label>
+                  <Select value={voiceId} onValueChange={setVoiceId} disabled={isInitializing}>
+                    <SelectTrigger id='avatar-voice' className='w-full'>
+                      <SelectValue placeholder='选择音色' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {voices.map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          {voice.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className='text-xs text-muted-foreground'>
+                    当前：{selectedVoice?.label ?? voiceId}（Edge-TTS，云端合成，无需 GPU）
+                  </p>
                 </div>
 
-                <Button type='submit' disabled={submitting}>
-                  {submitting && <LoaderCircle className='size-4 animate-spin' />}
-                  开始合成
+                <Button type='submit' disabled={submitting || isInitializing}>
+                  {submitting || isInitializing ? (
+                    <LoaderCircle className='size-4 animate-spin' />
+                  ) : (
+                    <Upload className='size-4' />
+                  )}
+                  {isInitializing ? '基础视频生成中…' : '创建数字人'}
                 </Button>
               </form>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>合成结果</CardTitle>
-              <CardDescription>
-                提交任务后自动轮询进度，完成后在此处播放生成的视频。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='flex min-h-72 flex-col gap-4'>
-              {!task && (
-                <div className='flex h-full flex-1 items-center justify-center rounded-lg border border-dashed p-8 text-sm text-muted-foreground'>
-                  尚未提交任务
-                </div>
-              )}
+          {isInitializing && (
+            <Card>
+              <CardHeader>
+                <CardTitle className='flex items-center gap-2'>
+                  <LoaderCircle className='size-5 animate-spin' />
+                  正在生成基础视频
+                </CardTitle>
+                <CardDescription>
+                  LivePortrait 正在把形象图片合成为动态驱动视频（约 1-2 分钟），
+                  完成后本页会自动更新。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className='flex items-center gap-2'>
+                <Badge variant='secondary'>初始化中</Badge>
+                <span className='text-sm text-muted-foreground'>
+                  可离开本页，稍后到数字人列表查看状态
+                </span>
+              </CardContent>
+            </Card>
+          )}
 
-              {task && (
-                <div className='flex items-center justify-between'>
-                  <div className='flex items-center gap-2 text-sm text-muted-foreground'>
-                    <Video className='size-4' />
-                    任务 #{task.id}
-                  </div>
-                  <Badge variant={STATUS_META[task.status].variant}>
-                    {STATUS_META[task.status].label}
-                  </Badge>
-                </div>
-              )}
+          {created?.status === 'ready' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className='flex items-center gap-2 text-green-600'>
+                  <CheckCircle2 className='size-5' />
+                  创建完成
+                </CardTitle>
+                <CardDescription>
+                  「{created.name}」的基础视频已就绪，可以开始播报或直播了。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className='flex gap-2'>
+                <Button asChild>
+                  <Link to='/broadcast' search={{ avatarId: String(created.id) }}>
+                    去播报
+                  </Link>
+                </Button>
+                <Button asChild variant='outline'>
+                  <Link to='/avatar-library'>数字人列表</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
-              {(task?.status === 'pending' || task?.status === 'processing') && (
-                <div className='flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border p-8'>
-                  <LoaderCircle className='size-8 animate-spin text-muted-foreground' />
-                  <p className='text-sm text-muted-foreground'>
-                    数字人合成中，请稍候…
-                  </p>
-                </div>
-              )}
-
-              {task?.status === 'failed' && (
-                <div className='flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-destructive/40 p-8 text-sm text-destructive'>
-                  <p>任务执行失败</p>
-                  {task.errorMessage && (
-                    <p className='max-w-full break-all text-xs text-muted-foreground'>
-                      {task.errorMessage}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {task?.status === 'completed' && task.outputVideoS3Url && (
-                <video
-                  src={task.outputVideoS3Url}
-                  controls
-                  className='aspect-video w-full rounded-lg border bg-black'
-                />
-              )}
-            </CardContent>
-          </Card>
+          {initFailed && (
+            <Card>
+              <CardHeader>
+                <CardTitle className='flex items-center gap-2 text-destructive'>
+                  <XCircle className='size-5' />
+                  生成失败
+                </CardTitle>
+                <CardDescription>
+                  基础视频生成失败。请检查宿主机 worker 日志（avatar init 任务）后重试。
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )}
         </div>
       </Main>
     </>

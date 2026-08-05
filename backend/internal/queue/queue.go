@@ -17,6 +17,8 @@ type TaskPayload struct {
 	ScriptText      string `json:"scriptText"`
 	ImageS3Key      string `json:"imageS3Key"`
 	VoiceAudioS3Key string `json:"voiceAudioS3Key,omitempty"`
+	BaseVideoS3Key  string `json:"baseVideoS3Key,omitempty"`
+	VoiceID         string `json:"voiceId,omitempty"`
 }
 
 // LiveControlPayload tells the streaming worker to start/stop the continuous
@@ -27,6 +29,15 @@ type LiveControlPayload struct {
 	StreamID        string `json:"streamId"`
 	ImageS3Key      string `json:"imageS3Key"`
 	VoiceAudioS3Key string `json:"voiceAudioS3Key,omitempty"`
+	BaseVideoS3Key  string `json:"baseVideoS3Key,omitempty"`
+	VoiceID         string `json:"voiceId,omitempty"`
+}
+
+// AvatarInitPayload tells the worker to pre-process a newly created avatar
+// into a silent base driving video (LivePortrait) and store it in S3.
+type AvatarInitPayload struct {
+	AvatarID   uint   `json:"avatarId"`
+	ImageS3Key string `json:"imageS3Key"`
 }
 
 // Queue wraps a Redis list used as a FIFO task queue.
