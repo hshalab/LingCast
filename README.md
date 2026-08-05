@@ -1,53 +1,38 @@
-# 灵播 LingCast · AI 数字人直播平台
+# 灵播 LingCast
 
-端到端 AI 口播数字人合成平台（**管理后台 :8080** + **观众端 :3000**）：管理后台上传
-**形象图片**、选择**播报音色**并填写**人物设定**创建数字人，系统先预处理生成**基础驱动
-视频**，之后离线播报与实时直播都只跑轻量推理：**Edge-TTS 语音合成 → Wav2Lip 口型**，
-输出带声音的视频/推流；观众端可观看直播、发消息，数字人通过 **DeepSeek LLM** 实时回复
-并开口说话。
+端到端 AI 数字人直播平台：创建数字人（形象 + 音色 + 人物设定）→ LivePortrait 生成
+基础视频 → **Edge-TTS 语音 + Wav2Lip 口型** → **DeepSeek LLM 实时回复** → SRS 直播推流。
 
-> 📚 [架构文档](docs/技术需求与架构文档.md) · [Roadmap / TODO](docs/TODO.md) ·
-> [开发交接说明](AGENTS.md)
+管理后台 `:8080` · 观众端 `:3000` · [架构文档](docs/技术需求与架构文档.md) ·
+[Roadmap / TODO](docs/TODO.md) · [开发交接说明](AGENTS.md)
 
-## 架构
+# Contents
 
-```text
-管理后台 :8080 ──> Nginx (frontend)
-  ├── /api    ──> Go API (Gin) ──> MariaDB 11 / Redis 8.2 / MinIO
-  └── /media  ──> MinIO (S3 兼容, 模拟 RustFS)
+- [为什么做](#为什么做)
+- [功能特性](#功能特性)
+- [界面截图](#界面截图)
+- [架构](#架构)
+- [快速开始](#快速开始)
+- [使用说明](#使用说明)
+- [配置](#配置)
+- [API 参考](#api-参考)
+- [目录结构](#目录结构)
+- [常见问题](#常见问题)
+- [生产注意事项](#生产注意事项)
+- [参与贡献](#参与贡献)
 
-观众端 :3000 ──> Next.js（服务端代理 /api、/live）──> Go API / SRS
+## 为什么做
 
-Python AI Worker ──> Redis 队列 / boto3 下载素材
-                  ──> 创建: LivePortrait 生成 base 视频（一次性预处理）
-                  ──> 使用: Edge-TTS → Wav2Lip(ONNX) 离线播报 / 直播推流
-                  ──> 上传成品到 S3, 通过 Webhook 回写任务状态
-```
+做口播数字人/直播，传统方案要么依赖昂贵的闭源 API，要么需要高端 GPU 与复杂的声音克隆
+流水线。灵播的目标是：
 
-- 管理端前端：React + TypeScript + Vite + Tailwind + shadcn/ui（品牌「灵播
-  LingCast」，默认暗色主题，可切换亮色；需管理员登录）。
-- 观众端前端：独立 Next.js 16 + TailwindCSS 4（`client/`，亮/暗双主题可切换，
-  无需登录）。
-- 后端：Go + Gin + GORM，标准 AWS S3 SDK v2。
-- AI Worker：Python 3.11，uv 管理依赖，boto3 + Redis。
-- 存储：S3 兼容对象存储，开发环境用 MinIO 模拟 RustFS。
-- 部署：Docker Compose 编排基础设施与前端；**真实 AI Worker 在宿主机原生运行**
-  （macOS Apple Silicon 用 MPS/CoreML，Linux 用 NVIDIA CUDA 或 AMD ROCm），
-  Docker 仅向宿主机发布 Redis 6379 与 MinIO 9000 两个端口。
+- 创建数字人只跑**一次** LivePortrait 预处理，之后播报/直播都是轻量推理（Edge-TTS +
+  Wav2Lip ONNX），零 GPU 也能用。
+- 观众端开箱即用：游客/账号身份、持久化聊天、**DeepSeek LLM** 实时回复并开口说话。
+- 部署友好：Docker Compose 一键起基础设施；真实 AI Worker 在宿主机原生跑
+  （macOS MPS / Linux CUDA / AMD ROCm）。
 
-## 两段式架构（创建 → 使用）
-
-LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用它：
-
-1. **创建（Avatar Studio）**：上传形象图片 + 选择 Edge-TTS 音色（默认
-   `zh-CN-XiaoxiaoNeural`）→ `POST /api/avatars`（状态 `initializing`）→
-   Worker 消费 `avatar_init` 队列 → LivePortrait 生成静音 24fps base 视频 →
-   上传 S3 → 回写 `base_video_s3_key` 并置为 `ready`。前端轮询
-   `GET /api/avatars/:id` 显示「基础视频生成中…」。
-2. **使用（Broadcast / Live）**：只下载 base 视频 → **Edge-TTS**（零 GPU）合成
-   语音 → **Wav2Lip(ONNX)** 口型 → 离线 mux 成 MP4 上传 / 直播推流 SRS。
-
-## 已实现功能
+## 功能特性
 
 - [x] **Avatar Studio（创建）**：形象名称 + 头像展示 + 图片上传 + Edge-TTS 音色选择
   （列表缓存于 localStorage，默认中文女声晓晓），可填**人物设定**（年龄/身高/体重/
@@ -88,7 +73,8 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
 - [x] **LivePortrait 基础视频预处理**：创建数字人时生成静音 24fps 驱动视频，仅此一次。
 - [x] **Wav2Lip(ONNX) 口型合成**：基于预生成 base 视频，嘴部逐帧匹配语音；ONNX +
   CoreML 执行器，CPU 线程数受限（默认 4），短 base 自动循环覆盖任意脚本长度。
-- [x] **动画节奏可调**：驱动模板可换、播放速度/动作幅度可调（见“动画节奏”）。
+- [x] **动画节奏可调**：驱动模板可换、播放速度/动作幅度可调（见「配置」中的
+  `LIVEPORTRAIT_DRIVING*` 参数）。
 - [x] **基础视频去眨眼**：驱动模板眼部表情通道已冻结（不眨眼），保留耸肩/身体微晃，
   约 3 秒一次（`LIVEPORTRAIT_DRIVING_SPEED=0.2`）。
 - [x] **数字人分类**：Avatar 创建时可选「直播分类」（闲聊/知识/娱乐/游戏/带货/其他），
@@ -112,7 +98,33 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
 | ![首页](docs/images/pc1.png) | ![直播间-桌面](docs/images/pc2.png) | ![直播间-聊天](docs/images/pc3.png) |
 | ![直播间-暗色](docs/images/pc4.png) | ![直播间-亮色](docs/images/pc5.png) | |
 
-## 新设备快速开始
+## 架构
+
+```text
+管理后台 :8080 ──> Nginx (frontend)
+  ├── /api    ──> Go API (Gin) ──> MariaDB 11 / Redis 8.2 / MinIO
+  └── /media  ──> MinIO (S3 兼容, 模拟 RustFS)
+
+观众端 :3000 ──> Next.js（服务端代理 /api、/live）──> Go API / SRS
+
+Python AI Worker ──> Redis 队列 / boto3 下载素材
+                  ──> 创建: LivePortrait 生成 base 视频（一次性预处理）
+                  ──> 使用: Edge-TTS → Wav2Lip(ONNX) 离线播报 / 直播推流
+                  ──> 上传成品到 S3, 通过 Webhook 回写任务状态
+```
+
+- 管理端前端：React + TypeScript + Vite + Tailwind + shadcn/ui（品牌「灵播
+  LingCast」，默认暗色主题，可切换亮色；需管理员登录）。
+- 观众端前端：独立 Next.js 16 + TailwindCSS 4（`client/`，亮/暗双主题可切换，
+  无需登录）。
+- 后端：Go + Gin + GORM，标准 AWS S3 SDK v2。
+- AI Worker：Python 3.11，uv 管理依赖，boto3 + Redis。
+- 存储：S3 兼容对象存储，开发环境用 MinIO 模拟 RustFS。
+- 部署：Docker Compose 编排基础设施与前端；**真实 AI Worker 在宿主机原生运行**
+  （macOS Apple Silicon 用 MPS/CoreML，Linux 用 NVIDIA CUDA 或 AMD ROCm），
+  Docker 仅向宿主机发布 Redis 6379 与 MinIO 9000 两个端口。
+
+## 快速开始
 
 ### 0. 前置依赖
 
@@ -132,9 +144,9 @@ docker compose up --build
 
 访问 <http://localhost:8080>，左侧菜单进入 **Avatar Studio**。
 
-> **管理员登录**：管理后台现在需要登录后才能访问（默认 `admin` / `admin123`，
-> 请在 `.env` 中修改 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 并重启 API 容器）。
-> 观众端（:3000）不受影响，仍可直接进入直播间。
+> **Note**：管理后台需要登录后才能访问（默认 `admin` / `admin123`，请在 `.env` 中
+> 修改 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 并重启 API 容器）。观众端（:3000）不受
+> 影响，仍可直接进入直播间。
 
 ### 2. 准备 Worker 环境（uv）
 
@@ -174,22 +186,29 @@ ONNX（约 145MB）、下载 SCRFD 人脸检测 ONNX（约 3MB）。
 
 ```bash
 cd worker
-uv run python -u worker.py
+uv run python -u worker.py           # 离线播报 / 创建预处理
+uv run python -u stream_worker.py    # 实时直播（与 worker.py 并存）
 ```
 
 `worker.py` 自动加载 `worker/.env.local`（已导出的环境变量优先）。`AI_MODE=real`
 时跑真实模型管线；模型缺失时会有明确提示。
 
-### 5. 本地前端开发（Vite，端口 5173）
+### 5. 本地前端开发
 
 ```bash
+# 管理端（Vite，端口 5173）
 cd frontend
 cp .env.example .env.local   # VITE_API_BASE_URL=http://localhost:8080
 pnpm install
 pnpm dev
+
+# 观众端（Next.js，端口 3000）
+cd client
+pnpm install
+pnpm dev
 ```
 
-## Linux + AMD Radeon 部署（ROCm，如 RX 6800 XT）
+### Linux + AMD Radeon 部署（ROCm，如 RX 6800 XT）
 
 6800 XT 是 RDNA2（gfx1030），ROCm 6.x / 7.x 均支持。两种方式任选：
 
@@ -211,8 +230,8 @@ cp .env.local.example .env.local
 uv run python -u worker.py
 ```
 
-> `--inexact` 很重要：镜像预装的 torch 不在 lock 里，不加这个参数 `uv sync`
-> 会把 torch 剪掉。`--network=host` 让容器直接访问宿主机的 Redis/MinIO。
+> **Warning**：`--inexact` 很重要——镜像预装的 torch 不在 lock 里，不加这个参数
+> `uv sync` 会把 torch 剪掉。`--network=host` 让容器直接访问宿主机的 Redis/MinIO。
 
 **方式 B：裸机 Ubuntu + ROCm**
 
@@ -237,47 +256,26 @@ WAV2LIP_PROVIDER=rocm    # ROCm EP 不支持 LSTM 时会自动逐算子回退 CP
 > 如果 ROCm EP 在你的卡上有问题，`WAV2LIP_PROVIDER=cpu` 同样可用（CPU 推理本身
 > 就有 35fps+）。
 
-## 实时直播（流式架构）
+## 使用说明
 
-平台内置实时直播能力：每个数字人维持一条**常驻 FFmpeg 管道**推流到 SRS，浏览器经
-Nginx 拉 HTTP-FLV 播放，全程不落盘 MP4。
+### 创建数字人
 
-### 组件
+管理后台 → **Avatar Studio**：上传形象图片、选择音色与分类、填写人物设定 → 创建后
+自动进入基础视频生成（LivePortrait 预处理，约 1-2 分钟），就绪后即可用于播报/直播。
 
-- **SRS v5**（`docker-compose.yml` 中的 `srs` 服务）：RTMP 推流 1935、HTTP API
-  1985、HTTP-FLV 8081（Nginx `/live/` 代理到 `srs:8080`，不与前端 8080 冲突）。
-- **后端直播接口**（`backend/internal/handlers/live.go`）：
-  - `POST /api/live/{avatarID}/start`：在数据库登记 LiveSession 并通知 Worker
-    打开常驻管道（闲置态：base 动画 + 静音）。
-  - `POST /api/live/{avatarID}/push`：按 `。！？!?；;`/换行切句，逐条压入
-    `live_queue:{avatarID}`。
-  - `POST /api/live/{avatarID}/message`：把聊天文本交给 LLM（DeepSeek Responses，
-    OpenAI SDK），回复切句入队 → TTS → 口型 → 推流；无 `OPENAI_API_KEY` 时回显
-    原文（直播台“发送文字”仅测试用）；同时把用户消息与机器人完整回复写入
-    `chat_messages`。
-  - `GET /api/live/{avatarID}/status`：返回会话状态、队列长度与待渲染句子，
-    供前端每秒轮询。
-- **字幕**：默认开启，按 Avatar 的 `live_settings` 渲染（Pillow，非 ffmpeg
-  drawtext——brew 版 ffmpeg 无此滤镜）；字体放 `worker/fonts/`，文件名需与设置一致。
-- **`stream_worker.py`**（闲置/说话循环）：
-  - 闲置态：循环喂 base 动画帧 + numpy 生成的静音音频（数字人自然耸肩/微动）。
-  - 说话态：从 `live_queue:{avatarID}` 弹出句子 → Edge-TTS 异步 TTS → Wav2Lip(ONNX)
-    内存出帧 → 口型帧 + TTS 音频替换推流（可选叠加字幕）；句子结束立即回到闲置态，
-    **管道全程不关闭**。TTS 飞行期间不会丢弃队列里的后续句子（预取下一句）。
-  - 帧率/分辨率两种状态完全一致（口型帧来自同一 base 片段）；视频输入带 ffmpeg
-    `-re` 实时节流，音频按每 0.5s 切片与帧交错，A/V 同步且不超前。
+### 离线播报
 
-### 启动与使用
+**Broadcast**：选数字人 + 输入脚本 → 提交任务 → 制作历史里查看进度并播放/下载成品
+（9:16 MP4，Edge-TTS + Wav2Lip 合成）。
+
+### 实时直播
+
+**Live Studio**：开启直播后数字人进入常驻推流（闲置态播放基础动画）；直播台可发文字
+测试，观众端发消息会走 **DeepSeek LLM** 回复并开口说话。字幕可在「字幕设置」按数字人
+配置（开关/字体/位置/边框/字号，字体放 `worker/fonts/`）。
 
 ```bash
-docker compose up --build            # 基础设施 + API + 前端 + SRS
-cd worker
-uv run python -u stream_worker.py    # 流式 Worker（与离线 worker.py 并存）
-
-# 观众端（独立 Next.js 项目）：http://localhost:3000
-cd client && pnpm dev                # 或 docker compose up -d client
-
-# 命令行示例：
+# 命令行示例
 curl -X POST http://localhost:8080/api/live/9/start
 curl -X POST http://localhost:8080/api/live/9/message \
   -H 'Content-Type: application/json' \
@@ -287,48 +285,12 @@ curl http://localhost:8080/api/live/9/status
 
 播放地址：`http://localhost:8080/live/avatar_9.flv`（前端用 xgplayer + flv 插件拉流）。
 
-### 设计说明与当前限制
+### 观众端
 
-- 音视频同步：ffmpeg 需要每个输入的“首个包”才开始消费，且一次性写完整段音频会
-  撑爆其预缓冲——因此实现为**每 0.5 秒交错写音频切片**（先写首片再写帧）。
-- 实时性：视频输入带 `-re` 按帧率节流，内容按 1x 真实时间推进，播放器缓冲不膨胀；
-  TTS 在闲置期间异步预取，说话切换无明显等待。
-- 闲置 base 动画按 `LIVEPORTRAIT_IDLE_BASE_SECONDS`（默认 10s）渲染并循环取帧，
-  头部动作每 10s 重复一次；逐 chunk 重新生成 base（更生动的头部动作）留作后续优化。
-- 多机/断流重连属下一阶段（LLM 消息链路已由 `POST /api/live/:id/message` 落地）。
+打开 <http://localhost:3000>：首页按分类筛选开播数字人 → 进入直播间（桌面左右布局 /
+手机全屏抖音式）→ 游客可直接发消息，注册/登录后聊天记录跟随账号。
 
-## 数据流
-
-1. 前端上传形象图片（必填）与克隆音频（可选），`POST /api/avatars` 直传对象存储，
-   S3 Key 存入 MariaDB。
-2. 提交播报脚本，`POST /api/tasks` 创建任务并把
-   `{taskId, avatarId, scriptText, imageS3Key, voiceAudioS3Key}` 压入 Redis 队列。
-3. Worker 通过 boto3 下载素材到本地 `/tmp`，执行 AI 管线（真实或 Mock），
-   上传成品 MP4 回对象存储。
-4. Worker 通过 `POST /api/tasks/:id/status` Webhook 将任务标记为
-   `processing/completed/failed` 并保存视频 URL。
-5. 前端轮询 `GET /api/tasks/:id`，完成后用 `<video>` 播放返回的 S3 URL。
-
-## 动画节奏调整
-
-面部动画由 LivePortrait 驱动模板（`.pkl`）控制，默认 `d5.pkl`（约 5 秒自然说话
-动作；旧默认 `d1.pkl` 只有 0.5 秒，循环时眨眼/耸肩过快）。在 `worker/.env.local`
-中设置：
-
-```bash
-LIVEPORTRAIT_DRIVING=.../assets/examples/driving/d5.pkl   # 换模板
-LIVEPORTRAIT_DRIVING_SPEED=0.2                            # 0.2 = 动作更慢，约 3s 一次耸肩
-LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度更含蓄
-```
-
-基础视频默认**冻结眼部表情通道**（`EYE_EXP_DIMS` 取首帧值），因此不眨眼；耸肩等
-身体动作保留。
-
-可选模板见 `worker/external/LivePortrait/assets/examples/driving/`：
-`talking.pkl`（说话）、`wink.pkl`（眨眼）、`shy.pkl`（害羞）、`shake_face.pkl`（摇头）、
-`laugh.pkl`（笑）等。
-
-## 配置参数
+## 配置
 
 | 参数 | 位置 | 说明 |
 | --- | --- | --- |
@@ -347,14 +309,14 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `.env` | 管理后台登录账号（默认 admin/admin123） |
 | `STREAM_SUBTITLE_FONT` | `worker/.env.local` | 字幕回退字体（未配或字体缺失时用） |
 
-完整清单见 `worker/.env.local.example`。
+完整清单见 `worker/.env.local.example`。动画节奏调整（驱动模板/速度/幅度）见
+`LIVEPORTRAIT_DRIVING*` 注释与 `worker/.env.local.example`。
 
-## API
+## API 参考
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `POST` | `/api/avatars` | multipart 上传 `name` + `image`(必填) + `voice_id`(可选) |
-| `POST` | `/api/avatars` | 另可传 `category`（闲聊/知识/娱乐/游戏/带货/其他） |
+| `POST` | `/api/avatars` | multipart 上传 `name` + `image`(必填) + `voice_id`(可选) + `category` |
 | `GET` | `/api/avatars` | 素材列表 |
 | `GET` | `/api/avatars/:id` | 单个素材（含 `liveSettings`） |
 | `PUT` | `/api/avatars/:id` | 编辑名称/分类/音色/人物设定 |
@@ -387,23 +349,25 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 ## 目录结构
 
 ```text
-backend/   Go Gin API（模型、S3、Redis、handlers、Dockerfile）
-frontend/  灵播管理后台（React + shadcn/ui，Dockerfile + nginx.conf，:8080）
-client/    Next.js + TailwindCSS 观众端（独立项目，:3000）
-  lib/identity.tsx + components/auth-modal.tsx   聊天身份与登录/注册
-  lib/theme.tsx + components/nav-header.tsx      亮/暗主题与导航头
-  public/logo.svg + logo-white.svg               品牌 logo（暗/亮）
-worker/    Python 3.11 AI Worker（uv、Redis、boto3、真实/模拟管线）
-  ai/        base/mock/real 管线、TTS、渲染、ONNX 口型
-  fonts/     字幕字体目录（gitignore，见 fonts/README.md）
-  external/  gitignore：LivePortrait / Wav2Lip 克隆代码
-  models/    gitignore：全部权重（LivePortrait / Wav2Lip ONNX）
-docker-compose.yml / .env.example
-AGENTS.md   开发交接说明（新设备快速接手）
-docs/       架构文档 + Roadmap（TODO.md）+ 界面截图（images/）
+LingCast/
+├── backend/        Go Gin API（模型、S3、Redis、handlers、Dockerfile）
+├── frontend/       灵播管理后台（React + shadcn/ui，:8080）
+│   └── public/images/  品牌 logo（暗/亮）+ favicon
+├── client/         Next.js 观众端（独立项目，:3000）
+│   ├── lib/        聊天身份（identity.tsx）/ 主题（theme.tsx）
+│   └── public/     logo.svg + logo-white.svg
+├── worker/         Python 3.11 AI Worker（uv、Redis、boto3）
+│   ├── ai/         base/mock/real 管线、TTS、渲染、ONNX 口型
+│   ├── fonts/      字幕字体目录（gitignore，见 fonts/README.md）
+│   ├── external/   gitignore：LivePortrait / Wav2Lip 克隆代码
+│   ├── models/     gitignore：全部权重（LivePortrait / Wav2Lip ONNX）
+│   └── streaming/  ffmpeg 管道 + Pillow 字幕渲染
+├── docs/           架构文档 + Roadmap（TODO.md）+ 界面截图（images/）
+├── docker-compose.yml / .env.example
+└── AGENTS.md       开发交接说明（新设备快速接手）
 ```
 
-## 常见问题排查
+## 常见问题
 
 - **任务一直 processing**：看 `worker` 日志尾部。口型阶段卡住通常是模型缺失，跑
   `cd worker && uv run python download_models.py --models wav2lip` 补齐。
@@ -411,6 +375,8 @@ docs/       架构文档 + Roadmap（TODO.md）+ 界面截图（images/）
 - **口型 CPU 打满/极慢**：确认 `WAV2LIP_BACKEND` 为 `onnx`（torch 版仅作对照）。
 - **视频无声音**：成品由 Wav2Lip 阶段 mux Edge-TTS 语音；若用 mock 管线则以其
   离线 TTS 为音轨。
+- **直播推流没画面**：先确认 `docker compose up` 里 srs 健康、`/live/<id>.flv`
+  可拉流；ffmpeg 日志在 `stream-<id>/ffmpeg.log`。
 
 ## 生产注意事项
 
@@ -420,3 +386,10 @@ docs/       架构文档 + Roadmap（TODO.md）+ 界面截图（images/）
 - 生产环境请收紧 Worker 回调 Webhook 的鉴权。
 - Linux/CUDA 生产部署需替换 PyTorch 为 CUDA 版（见 `worker/pyproject.toml` 注释），
   Wav2Lip ONNX 可在 NVIDIA 上用 `WAV2LIP_PROVIDER` 选择 GPU provider。
+
+## 参与贡献
+
+- 架构与演进方向见 [docs/TODO.md](docs/TODO.md) 与 [架构文档](docs/技术需求与架构文档.md)。
+- 开发约定见 [AGENTS.md](AGENTS.md)（新设备快速上手、目录速览、已知坑）。
+- 提交信息沿用仓库现有风格：`feat:` / `fix:` / `docs:` / `refactor:` 前缀 + 中文或
+  英文描述。
