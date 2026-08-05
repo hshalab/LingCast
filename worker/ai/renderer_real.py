@@ -145,7 +145,11 @@ class LivePortraitRenderer:
             flag_use_half_precision=self.half,
             # Retarget eyes from the combined eye-open ratio so both eyes blink
             # symmetrically (driving templates can be one-eye asymmetric).
+            # Relative motion must be OFF: with it on, the eye-retargeting path
+            # replaces the driving pose with the source pose, which drops the
+            # head/shoulder (耸肩) motion.
             flag_eye_retargeting=True,
+            flag_relative_motion=False,
         )
 
         inference_cfg = partial_fields(InferenceConfig, args.__dict__)
