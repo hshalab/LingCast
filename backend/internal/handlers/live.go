@@ -134,6 +134,42 @@ func (h *LiveHandler) Start(c *gin.Context) {
 	})
 }
 
+// Stop handles POST /api/live/:avatarID/stop — tells the worker to close the
+// FFmpeg pipe for this avatar's live session and removes the session record
+// (GET status then returns 404 until the stream is started again).
+func (h *LiveHandler) Stop(c *gin.Context) {
+	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
+	if err != nil || avatarID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatarID"})
+		return
+	}
+
+	var session models.LiveSession
+	if err := h.db.Where("avatar_id = ?", avatarID).First(&session).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "live session not started"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	payload := queue.LiveControlPayload{
+		Action:   "stop",
+		AvatarID: session.AvatarID,
+		StreamID: session.StreamID,
+	}
+	if err := h.q.PushTo(c.Request.Context(), h.liveControlQueueKey, payload); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "notify worker failed: " + err.Error()})
+		return
+	}
+	if err := h.db.Delete(&session).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"stopped": session.AvatarID})
+}
+
 // Push handles POST /api/live/:avatarID/push. It chunks the incoming text by
 // sentences and appends them to live_queue:<avatarID> for the worker.
 func (h *LiveHandler) Push(c *gin.Context) {

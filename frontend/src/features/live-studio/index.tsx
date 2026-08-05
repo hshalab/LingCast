@@ -2,7 +2,7 @@ import axios from 'axios'
 import Player from 'xgplayer'
 import 'xgplayer/dist/index.min.css'
 import FlvPlugin from 'xgplayer-flv'
-import { LoaderCircle, Send, Video } from 'lucide-react'
+import { Copy, LoaderCircle, Power, PowerOff, Send, Video } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
@@ -35,26 +35,27 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
   const playerHostRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<Player | null>(null)
   const [status, setStatus] = useState<LiveStatus | null>(null)
+  const [started, setStarted] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const streamUrl = `${import.meta.env.VITE_API_BASE_URL ?? ''}/live/avatar_${id}.flv`
 
-  // Start the live session (worker opens the continuous FFmpeg pipe).
+  // Check whether the live session already exists on load.
   useEffect(() => {
     if (!id) return
     api
-      .post(`/live/${id}/start`)
-      .then(() => toast.success('直播会话已启动，画面即将就绪'))
-      .catch(showApiError)
+      .get(`/live/${id}/status`)
+      .then(() => setStarted(true))
+      .catch(() => setStarted(false))
   }, [id])
 
-  // HTTP-FLV player (SRS via nginx /live proxy).
+  // HTTP-FLV player (xgplayer + flv plugin) — only while the stream is on.
   useEffect(() => {
-    if (!id || !playerHostRef.current) return
-    const base = `${import.meta.env.VITE_API_BASE_URL ?? ''}`
-    const url = `${base}/live/avatar_${id}.flv`
+    if (!id || !started || !playerHostRef.current) return
     const player = new Player({
       el: playerHostRef.current,
-      url,
+      url: streamUrl,
       type: 'flv',
       isLive: true,
       autoplay: true,
@@ -66,7 +67,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       player.destroy()
       playerRef.current = null
     }
-  }, [id])
+  }, [id, started, streamUrl])
 
   // Queue monitor: refresh every second.
   useEffect(() => {
@@ -75,9 +76,17 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
     const timer = window.setInterval(async () => {
       try {
         const { data } = await api.get<LiveStatus>(`/live/${id}/status`)
-        if (!stopped) setStatus(data)
-      } catch {
-        // session not started yet or API hiccup; keep polling
+        if (!stopped) {
+          setStatus(data)
+          setStarted(true)
+        }
+      } catch (error) {
+        // Only a 404 means the session is gone; other errors keep polling.
+        const notFound = axios.isAxiosError(error) && error.response?.status === 404
+        if (!stopped && notFound) {
+          setStatus(null)
+          setStarted(false)
+        }
       }
     }, 1000)
     return () => {
@@ -85,6 +94,44 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       window.clearInterval(timer)
     }
   }, [id])
+
+  const handleStart = async () => {
+    if (!id || busy) return
+    setBusy(true)
+    try {
+      await api.post(`/live/${id}/start`)
+      setStarted(true)
+      toast.success('直播已开启，画面即将就绪')
+    } catch (error) {
+      showApiError(error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleStop = async () => {
+    if (!id || busy) return
+    setBusy(true)
+    try {
+      await api.post(`/live/${id}/stop`)
+      setStarted(false)
+      setStatus(null)
+      toast.success('直播已关闭')
+    } catch (error) {
+      showApiError(error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const copyStreamUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(streamUrl)
+      toast.success('拉流地址已复制')
+    } catch {
+      toast.error('复制失败，请手动选择复制')
+    }
+  }
 
   const handleSend = useCallback(async () => {
     const trimmed = text.trim()
@@ -123,16 +170,43 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
               Avatar #{id} 实时直播：输入文字后数字人将开口播报。
             </p>
           </div>
-          {status && (
-            <Badge variant={statusVariant}>
-              {status.status === 'active'
-                ? '说话中'
-                : status.status === 'pending'
-                  ? '启动中'
-                  : '闲置'}
-            </Badge>
-          )}
+          <div className='flex items-center gap-2'>
+            {status && (
+              <Badge variant={statusVariant}>
+                {status.status === 'active'
+                  ? '说话中'
+                  : status.status === 'pending'
+                    ? '启动中'
+                    : '闲置'}
+              </Badge>
+            )}
+            {started ? (
+              <Button variant='destructive' size='sm' onClick={() => void handleStop()} disabled={busy}>
+                {busy ? <LoaderCircle className='size-4 animate-spin' /> : <PowerOff className='size-4' />}
+                关闭直播
+              </Button>
+            ) : (
+              <Button size='sm' onClick={() => void handleStart()} disabled={busy}>
+                {busy ? <LoaderCircle className='size-4 animate-spin' /> : <Power className='size-4' />}
+                打开直播
+              </Button>
+            )}
+          </div>
         </div>
+
+        <Card>
+          <CardContent className='flex flex-wrap items-center gap-2 py-3 text-sm'>
+            <span className='text-muted-foreground'>拉流地址：</span>
+            <code className='truncate rounded bg-muted px-2 py-1'>{streamUrl}</code>
+            <Button variant='ghost' size='sm' onClick={() => void copyStreamUrl()}>
+              <Copy className='size-3.5' />
+              复制
+            </Button>
+            <span className='text-xs text-muted-foreground'>
+              多个页面同时打开看到同一路直播；任一页面关闭直播即停止全部；所有页面共用同一文字队列。
+            </span>
+          </CardContent>
+        </Card>
 
         <div className='grid gap-4 lg:grid-cols-3'>
           {/* Left: player */}

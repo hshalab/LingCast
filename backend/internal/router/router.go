@@ -55,6 +55,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		api.POST("/tasks/:id/status", taskHandler.UpdateStatus)
 		// Live streaming: session lifecycle, per-avatar text intake and status.
 		api.POST("/live/:avatarID/start", liveHandler.Start)
+		api.POST("/live/:avatarID/stop", liveHandler.Stop)
 		api.POST("/live/:avatarID/push", liveHandler.Push)
 		api.GET("/live/:avatarID/status", liveHandler.Status)
 	}
