@@ -268,7 +268,7 @@ export default function RoomPage() {
 
                 {/* 直播间徽标 */}
                 {started && (
-                  <span className='absolute right-2 top-2 flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-red-500 px-2 py-0.5 text-xs font-medium text-white shadow-lg shadow-red-600/30 lg:left-2 lg:right-auto lg:top-2'>
+                  <span className='absolute right-2 top-2 hidden items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-red-500 px-2 py-0.5 text-xs font-medium text-white shadow-lg shadow-red-600/30 lg:left-2 lg:right-auto lg:top-2 lg:flex'>
                     <span className='size-1.5 animate-pulse rounded-full bg-white' />
                     直播中
                   </span>
