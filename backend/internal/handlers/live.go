@@ -113,13 +113,12 @@ func (h *LiveHandler) Start(c *gin.Context) {
 	}
 
 	payload := queue.LiveControlPayload{
-		Action:          "start",
-		AvatarID:        avatar.ID,
-		StreamID:        streamID,
-		ImageS3Key:      avatar.ImageS3Key,
-		VoiceAudioS3Key: valueOrEmpty(avatar.VoiceAudioS3Key),
-		BaseVideoS3Key:  *avatar.BaseVideoS3Key,
-		VoiceID:         avatar.VoiceID,
+		Action:         "start",
+		AvatarID:       avatar.ID,
+		StreamID:       streamID,
+		ImageS3Key:     avatar.ImageS3Key,
+		BaseVideoS3Key: *avatar.BaseVideoS3Key,
+		VoiceID:        avatar.VoiceID,
 	}
 	if err := h.q.PushTo(c.Request.Context(), h.liveControlQueueKey, payload); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "notify worker failed: " + err.Error()})

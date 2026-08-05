@@ -170,11 +170,6 @@ export function AvatarLibrary() {
                   </CardTitle>
                   <CardDescription className='flex flex-wrap items-center gap-2'>
                     <span>{formatDate(avatar.createdAt)}</span>
-                    {avatar.voiceAudioS3Url ? (
-                      <Badge variant='outline'>含克隆音色</Badge>
-                    ) : (
-                      <Badge variant='outline'>未上传音色</Badge>
-                    )}
                     {avatar.baseVideoS3Key ? (
                       <Badge variant='outline'>基础视频就绪</Badge>
                     ) : avatar.status === 'failed' ? (
@@ -185,31 +180,44 @@ export function AvatarLibrary() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className='flex gap-2'>
-                  <Button
-                    asChild
-                    size='sm'
-                    className='flex-1'
-                    disabled={avatar.status !== 'ready'}
-                    title={avatar.status === 'ready' ? undefined : '基础视频生成中，请稍候'}
-                  >
-                    <Link to='/broadcast' search={{ avatarId: String(avatar.id) }}>
-                      <Sparkles className='size-4' />
-                      播报制作
-                    </Link>
-                  </Button>
-                  <Button
-                    asChild
-                    size='sm'
-                    variant='outline'
-                    className='flex-1'
-                    disabled={avatar.status !== 'ready'}
-                    title={avatar.status === 'ready' ? undefined : '基础视频生成中，请稍候'}
-                  >
-                    <Link to='/live-studio' search={{ avatarId: String(avatar.id) }}>
-                      <RadioTower className='size-4' />
-                      开启直播
-                    </Link>
-                  </Button>
+                  {avatar.status === 'ready' ? (
+                    <>
+                      <Button asChild size='sm' className='flex-1'>
+                        <Link to='/broadcast' search={{ avatarId: String(avatar.id) }}>
+                          <Sparkles className='size-4' />
+                          播报制作
+                        </Link>
+                      </Button>
+                      <Button asChild size='sm' variant='outline' className='flex-1'>
+                        <Link to='/live-studio' search={{ avatarId: String(avatar.id) }}>
+                          <RadioTower className='size-4' />
+                          开启直播
+                        </Link>
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        size='sm'
+                        className='flex-1'
+                        disabled
+                        title='基础视频生成中，请稍候'
+                      >
+                        <Sparkles className='size-4' />
+                        播报制作
+                      </Button>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        className='flex-1'
+                        disabled
+                        title='基础视频生成中，请稍候'
+                      >
+                        <RadioTower className='size-4' />
+                        开启直播
+                      </Button>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             ))}

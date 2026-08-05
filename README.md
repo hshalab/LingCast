@@ -277,7 +277,7 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `POST` | `/api/avatars` | multipart 上传 `name` + `image`(必填) + `voice_audio`(可选) |
+| `POST` | `/api/avatars` | multipart 上传 `name` + `image`(必填) + `voice_id`(可选) |
 | `GET` | `/api/avatars` | 素材列表 |
 | `POST` | `/api/tasks` | `{avatarId, scriptText}`，入队并返回任务 |
 | `GET` | `/api/tasks/:id` | 轮询任务状态与输出 URL |
@@ -303,8 +303,8 @@ AGENTS.md   开发交接说明（新设备快速接手）
 - **GitHub/HF 下载慢**：GitHub 走代理，HF 用 `HF_ENDPOINT=https://hf-mirror.com`。
 - **TTS 启动报 NLTK 错误**：确认 `nltk>=3.8,<3.10` 已安装（首次会自动下载数据）。
 - **口型 CPU 打满/极慢**：确认 `WAV2LIP_BACKEND` 为 `onnx`（torch 版仅作对照）。
-- **视频无声音**：成品由 Wav2Lip 阶段 mux 克隆语音；若用 mock 管线且未传参考音频，
-  会以脚本离线 TTS 为音轨。
+- **视频无声音**：成品由 Wav2Lip 阶段 mux Edge-TTS 语音；若用 mock 管线则以其
+  离线 TTS 为音轨。
 
 ## 生产注意事项
 

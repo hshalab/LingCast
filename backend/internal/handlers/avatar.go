@@ -31,18 +31,16 @@ type AvatarHandler struct {
 }
 
 type avatarResponse struct {
-	ID              uint      `json:"id"`
-	Name            string    `json:"name"`
-	ImageS3Key      string    `json:"imageS3Key"`
-	ImageS3URL      string    `json:"imageS3Url"`
-	VoiceAudioS3Key *string   `json:"voiceAudioS3Key,omitempty"`
-	VoiceAudioS3URL *string   `json:"voiceAudioS3Url,omitempty"`
-	VoiceID         string    `json:"voiceId"`
-	BaseVideoS3Key  *string   `json:"baseVideoS3Key,omitempty"`
-	BaseVideoS3URL  *string   `json:"baseVideoS3Url,omitempty"`
-	Status          string    `json:"status"`
-	InitQueuePos    *int      `json:"initQueuePos,omitempty"`
-	CreatedAt       time.Time `json:"createdAt"`
+	ID             uint      `json:"id"`
+	Name           string    `json:"name"`
+	ImageS3Key     string    `json:"imageS3Key"`
+	ImageS3URL     string    `json:"imageS3Url"`
+	VoiceID        string    `json:"voiceId"`
+	BaseVideoS3Key *string   `json:"baseVideoS3Key,omitempty"`
+	BaseVideoS3URL *string   `json:"baseVideoS3Url,omitempty"`
+	Status         string    `json:"status"`
+	InitQueuePos   *int      `json:"initQueuePos,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 func NewAvatarHandler(db *gorm.DB, s3 *storage.Client, q *queue.Queue, avatarInitQueueKey string) *AvatarHandler {
@@ -226,9 +224,6 @@ func (h *AvatarHandler) Delete(c *gin.Context) {
 	ctx := c.Request.Context()
 	// Best-effort cleanup: S3 objects, pending init payload, live queue.
 	_ = h.s3.Delete(ctx, avatar.ImageS3Key)
-	if avatar.VoiceAudioS3Key != nil {
-		_ = h.s3.Delete(ctx, *avatar.VoiceAudioS3Key)
-	}
 	if avatar.BaseVideoS3Key != nil {
 		_ = h.s3.Delete(ctx, *avatar.BaseVideoS3Key)
 	}
@@ -370,13 +365,6 @@ func toAvatarResponse(a models.Avatar, s3 *storage.Client) avatarResponse {
 		VoiceID:    a.VoiceID,
 		Status:     a.Status,
 		CreatedAt:  a.CreatedAt,
-	}
-	if a.VoiceAudioS3Key != nil {
-		key := *a.VoiceAudioS3Key
-		resp.VoiceAudioS3Key = &key
-		if url := s3.PublicURL(key); url != "" {
-			resp.VoiceAudioS3URL = &url
-		}
 	}
 	if a.BaseVideoS3Key != nil {
 		key := *a.BaseVideoS3Key

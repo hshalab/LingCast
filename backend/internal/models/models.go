@@ -31,10 +31,9 @@ const DefaultEdgeVoice = "zh-CN-XiaoxiaoNeural"
 // Avatar is a digital avatar material record. Files live in object storage;
 // the database only stores their S3 keys.
 type Avatar struct {
-	ID              uint    `gorm:"primaryKey" json:"id"`
-	Name            string  `gorm:"size:255;not null" json:"name"`
-	ImageS3Key      string  `gorm:"size:512;not null" json:"imageS3Key"`
-	VoiceAudioS3Key *string `gorm:"size:512" json:"voiceAudioS3Key,omitempty"`
+	ID         uint   `gorm:"primaryKey" json:"id"`
+	Name       string `gorm:"size:255;not null" json:"name"`
+	ImageS3Key string `gorm:"size:512;not null" json:"imageS3Key"`
 	// VoiceID selects the Edge-TTS voice used for broadcast/live speech.
 	VoiceID string `gorm:"size:64;not null;default:zh-CN-XiaoxiaoNeural" json:"voiceId"`
 	// BaseVideoS3Key points to the pre-processed LivePortrait driving clip

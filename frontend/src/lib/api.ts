@@ -5,8 +5,6 @@ export type Avatar = {
   name: string
   imageS3Key: string
   imageS3Url: string
-  voiceAudioS3Key?: string
-  voiceAudioS3Url?: string
   voiceId: string
   baseVideoS3Key?: string
   baseVideoS3Url?: string

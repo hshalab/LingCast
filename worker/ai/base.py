@@ -12,7 +12,6 @@ class TaskInputs:
     script_text: str
     image_path: Path
     work_dir: Path
-    audio_path: Path | None = None
     base_video_path: Path | None = None
     voice_id: str = ""
 

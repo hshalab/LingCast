@@ -46,7 +46,7 @@ class RealPipeline(InferencePipeline):
         tts = self._build_tts(inputs)
         tts_wav = tts.synthesize(
             inputs.script_text,
-            inputs.audio_path,
+            None,
             inputs.work_dir / "tts_out.wav",
         )
         final = self.lipsync.sync(tts_wav, inputs.base_video_path, inputs.work_dir)

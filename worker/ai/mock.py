@@ -28,7 +28,7 @@ class MockPipeline(InferencePipeline):
 
         tts_wav = self.tts.synthesize(
             inputs.script_text,
-            inputs.audio_path,
+            None,
             inputs.work_dir / "tts_out.wav",
         )
 

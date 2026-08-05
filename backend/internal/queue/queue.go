@@ -12,25 +12,23 @@ import (
 // Python AI worker. It carries S3 keys instead of local paths so the
 // services stay decoupled from each other's filesystems.
 type TaskPayload struct {
-	TaskID          uint   `json:"taskId"`
-	AvatarID        uint   `json:"avatarId"`
-	ScriptText      string `json:"scriptText"`
-	ImageS3Key      string `json:"imageS3Key"`
-	VoiceAudioS3Key string `json:"voiceAudioS3Key,omitempty"`
-	BaseVideoS3Key  string `json:"baseVideoS3Key,omitempty"`
-	VoiceID         string `json:"voiceId,omitempty"`
+	TaskID         uint   `json:"taskId"`
+	AvatarID       uint   `json:"avatarId"`
+	ScriptText     string `json:"scriptText"`
+	ImageS3Key     string `json:"imageS3Key"`
+	BaseVideoS3Key string `json:"baseVideoS3Key,omitempty"`
+	VoiceID        string `json:"voiceId,omitempty"`
 }
 
 // LiveControlPayload tells the streaming worker to start/stop the continuous
 // FFmpeg pipe for an avatar's live session.
 type LiveControlPayload struct {
-	Action          string `json:"action"` // "start" | "stop"
-	AvatarID        uint   `json:"avatarId"`
-	StreamID        string `json:"streamId"`
-	ImageS3Key      string `json:"imageS3Key"`
-	VoiceAudioS3Key string `json:"voiceAudioS3Key,omitempty"`
-	BaseVideoS3Key  string `json:"baseVideoS3Key,omitempty"`
-	VoiceID         string `json:"voiceId,omitempty"`
+	Action         string `json:"action"` // "start" | "stop"
+	AvatarID       uint   `json:"avatarId"`
+	StreamID       string `json:"streamId"`
+	ImageS3Key     string `json:"imageS3Key"`
+	BaseVideoS3Key string `json:"baseVideoS3Key,omitempty"`
+	VoiceID        string `json:"voiceId,omitempty"`
 }
 
 // AvatarInitPayload tells the worker to pre-process a newly created avatar

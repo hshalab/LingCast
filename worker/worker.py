@@ -121,11 +121,6 @@ def process_task(
         image_path = work_dir / ("source_image" + Path(payload["imageS3Key"]).suffix)
         storage.download(payload["imageS3Key"], image_path)
 
-        audio_path = None
-        if payload.get("voiceAudioS3Key"):
-            audio_path = work_dir / ("voice_audio" + Path(payload["voiceAudioS3Key"]).suffix)
-            storage.download(payload["voiceAudioS3Key"], audio_path)
-
         base_video_path = None
         if payload.get("baseVideoS3Key"):
             base_video_path = work_dir / "base_video.mp4"
@@ -139,7 +134,6 @@ def process_task(
             script_text=payload["scriptText"],
             image_path=image_path,
             base_video_path=base_video_path,
-            audio_path=audio_path,
             work_dir=work_dir,
             voice_id=payload.get("voiceId", ""),
         )

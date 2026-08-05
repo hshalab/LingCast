@@ -54,7 +54,6 @@ class LiveAvatarSession:
         stream_id: str,
         image_path: Path,
         base_video_path: Path,
-        audio_path: Path | None,
         voice_id: str,
         work_dir: Path,
         fps: float,
@@ -64,7 +63,6 @@ class LiveAvatarSession:
         self.stream_id = stream_id
         self.image_path = image_path
         self.base_video_path = base_video_path
-        self.audio_path = audio_path
         self.voice_id = voice_id
         self.work_dir = work_dir
         self.fps = float(fps)
@@ -132,7 +130,7 @@ class LiveAvatarSession:
         try:
             wav = self._get_tts().synthesize(
                 text,
-                self.audio_path,
+                None,
                 self.work_dir / f"chunk_{int(time.time() * 1000)}.wav",
             )
             logger.info("avatar %s TTS ready (%.1fs): %s", self.avatar_id, _wav_duration(wav), text)
@@ -341,17 +339,11 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions) -> Non
             return
         base_video_path = work_dir / "base_video.mp4"
         storage.download(payload["baseVideoS3Key"], base_video_path)
-        audio_path = None
-        if payload.get("voiceAudioS3Key"):
-            audio_path = work_dir / ("voice" + Path(payload["voiceAudioS3Key"]).suffix)
-            storage.download(payload["voiceAudioS3Key"], audio_path)
-
         session = LiveAvatarSession(
             avatar_id=avatar_id,
             stream_id=stream_id,
             image_path=image_path,
             base_video_path=base_video_path,
-            audio_path=audio_path,
             voice_id=payload.get("voiceId", ""),
             work_dir=work_dir,
             fps=fps,

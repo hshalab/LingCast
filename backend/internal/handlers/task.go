@@ -98,9 +98,6 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		ScriptText: task.ScriptText,
 		ImageS3Key: avatar.ImageS3Key,
 	}
-	if avatar.VoiceAudioS3Key != nil {
-		payload.VoiceAudioS3Key = *avatar.VoiceAudioS3Key
-	}
 	payload.BaseVideoS3Key = *avatar.BaseVideoS3Key
 	payload.VoiceID = avatar.VoiceID
 
@@ -201,9 +198,6 @@ func (h *TaskHandler) Retry(c *gin.Context) {
 		ImageS3Key:     avatar.ImageS3Key,
 		BaseVideoS3Key: *avatar.BaseVideoS3Key,
 		VoiceID:        avatar.VoiceID,
-	}
-	if avatar.VoiceAudioS3Key != nil {
-		payload.VoiceAudioS3Key = *avatar.VoiceAudioS3Key
 	}
 	if err := h.q.Push(c.Request.Context(), payload); err != nil {
 		h.db.Model(&task).Update("status", models.TaskStatusFailed)
