@@ -19,6 +19,12 @@ deadlocks:
 
 The muxer assigns timestamps from consumed frames/samples, so interleaving
 order does not affect A/V sync.
+
+Pacing: only the video input gets `-re`, which throttles reads to the frame
+rate. Frames are therefore consumed in real time and a whole 16s chunk is
+spread over 16s of wall clock (true live latency, no unbounded player buffer).
+Audio has no `-re`: it is written in 0.5s slices aligned with every `fps/2`
+frames, so it arrives at exactly the real-time rate as a side effect.
 """
 
 import logging
@@ -73,6 +79,7 @@ class FFmpegPipe:
             self.ffmpeg_bin,
             "-y",
             "-loglevel", "warning",
+            "-re",
             "-f", "rawvideo",
             "-pix_fmt", "bgr24",
             "-s", f"{self.width}x{self.height}",

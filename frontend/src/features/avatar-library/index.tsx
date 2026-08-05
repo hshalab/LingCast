@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { ImageIcon, Plus, RefreshCw, Sparkles } from 'lucide-react'
+import { ImageIcon, Plus, RadioTower, RefreshCw, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Header } from '@/components/layout/header'
@@ -160,7 +160,13 @@ export function AvatarLibrary() {
                   <Button asChild size='sm' className='flex-1'>
                     <Link to='/avatar-studio' search={{ avatarId: String(avatar.id) }}>
                       <Sparkles className='size-4' />
-                      开始创作
+                      播报制作
+                    </Link>
+                  </Button>
+                  <Button asChild size='sm' variant='outline' className='flex-1'>
+                    <Link to='/live-studio' search={{ avatarId: String(avatar.id) }}>
+                      <RadioTower className='size-4' />
+                      开启直播
                     </Link>
                   </Button>
                 </CardContent>

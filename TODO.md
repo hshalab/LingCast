@@ -66,26 +66,27 @@ AMD GPUs using ROCm.
 **Goal:** 引入 RTMP 流媒体网关，将 Worker 推理管线重构为
 **内存 → 网络持续推流**，不再落盘 MP4。
 
-### Step 3.1: SRS Streaming Gateway — [ ]
+### Step 3.1: SRS Streaming Gateway — [x]
 
 1. ✅ 在 `docker-compose.yml` 集成 SRS（`ossrs/srs:5`）容器。
 2. ✅ 端口：1935 RTMP 推流、1985 HTTP API、8081 HTTP-FLV（避免与前端 8080 冲突）。
 3. ✅ 拉流经 Nginx `/live/` 代理到 `srs:8081`（内网，仅 1935 供宿主机 Worker）。
 
-### Step 3.2: Streaming Pipeline Refactor（交互式问答）— [ ]
+### Step 3.2: Streaming Pipeline Refactor（交互式问答）— [x]
 
-1. ✅ 分句处理：`POST /api/stream` 按 `。！？!?；;`/换行切句，顺序入队
-   `talking_avatar:stream_tasks`。
-2. ✅ 内存 → RTMP：`stream_worker.py` 用 ffmpeg 双管道（BGR24 帧 stdin +
-   s16le 音频 /dev/fd/3）推流 `rtmp://localhost:1935/live/<stream_id>`；
-   音频每 0.5s 与帧交错写（首片先行），避免双管道死锁。离线 MP4 逻辑保留。
-3. [~] `POST /api/stream` 已落地；`POST /api/chat`（LLM 响应切句入队）留待下一步。
+1. ✅ 分句处理：`POST /api/live/{id}/push` 按 `。！？!?；;`/换行切句，顺序入队
+   `live_queue:{id}`。
+2. ✅ 内存 → RTMP：`stream_worker.py` 常驻 ffmpeg 双管道（BGR24 帧 stdin +
+   s16le 音频 /dev/fd/3，视频输入 `-re` 实时节流）推流
+   `rtmp://localhost:1935/live/avatar_<id>`；闲置态喂静音音频 + base 动画，
+   说话态喂口型帧 + TTS 音频，管道全程不关闭。离线 MP4 逻辑保留。
+3. [~] `POST /api/live/{id}/start|push|status` 已落地；`POST /api/chat`
+   （LLM 响应切句入队）留待下一步。
 
-### Step 3.3: 7x24 Long-form Broadcast（长时直播）— [ ]
+### Step 3.3: 7x24 Long-form Broadcast（长时直播）— [~]
 
-1. [~] 异步多线程：已实现每流 TTS 生产者线程 + 有界结果队列——Chunk N 推流时
-   Chunk N+1..N+k 已在 TTS。base 动画按流缓存（`STREAM_REGENERATE_BASE` 可后续
-   开启逐 chunk 重生成，更生动的头部动作）。
+1. [~] 异步多线程：闲置期间 TTS 异步预取，说话切换不等待；base 动画按流缓存
+   （`LIVEPORTRAIT_IDLE_BASE_SECONDS` 控制，默认 10s）。
 2. [ ] 会话保持 / 断流重连 / 多流并发资源调度（未开始）。
 
 ## Strict Rules for Execution

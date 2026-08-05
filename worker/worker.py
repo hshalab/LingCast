@@ -99,9 +99,6 @@ def load_config() -> dict:
         "redis_password": os.environ.get("REDIS_PASSWORD", ""),
         "redis_db": int(os.environ.get("REDIS_DB", "0")),
         "queue_key": os.environ.get("TASK_QUEUE_KEY", "talking_avatar:tasks"),
-        "stream_queue_key": os.environ.get(
-            "STREAM_TASK_QUEUE_KEY", "talking_avatar:stream_tasks"
-        ),
         "api_base_url": os.environ.get("API_BASE_URL", "http://api:8080"),
         "work_root": Path(os.environ.get("WORK_DIR", "/tmp/talking-avatar-worker")),
     }

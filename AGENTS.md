@@ -35,11 +35,12 @@
   `GET /api/tasks/:id`、`POST /api/tasks/:id/status`（Worker 回调）。
 - ✅ 真实管线 `AI_MODE=real`：GPT-SoVITS 零样本克隆 → LivePortrait 24fps 无声
   base 视频 → Wav2Lip ONNX 口型（CoreML 优先）→ mux 音频 → 上传 S3 + 回调。
-- ✅ 直播管线 `stream_worker.py`：长文本按句切块入 `talking_avatar:stream_tasks`
-  队列 → 分句 TTS（异步预取）→ Wav2Lip 内存推理 → BGR24 帧 + PCM 音频交错写入
-  ffmpeg → RTMP 推 SRS（`streaming/ffmpeg_pipe.py`）。离线 worker.py 不受影响。
-- ✅ `POST /api/stream`：切句入队并返回 `streamId`/`playbackUrl`；SRS v5 服务
-  已入 docker-compose（1935 RTMP / 1985 API / 8081 HTTP-FLV，Nginx `/live/` 代理）。
+- ✅ 直播管线 `stream_worker.py`（闲置/说话循环）：`POST /api/live/{id}/start`
+  通知 Worker 打开**常驻 FFmpeg 管道**（闲置态喂 base 动画 + numpy 静音音频）；
+  `POST /api/live/{id}/push` 按句切块入 `live_queue:{id}` → 异步 TTS → Wav2Lip
+  内存出帧 → 口型帧 + TTS 音频替换推流，句子结束自动回闲置，管道不关闭。
+  `GET /api/live/{id}/status` 供前端轮询队列。SRS v5 已入 docker-compose
+  （1935 RTMP / 1985 API / 8081 HTTP-FLV，Nginx `/live/` 代理到 srs:8080）。
 - ✅ `worker/download_models.py --models all`：克隆外部代码、下载权重、导出
   wav2lip ONNX、创建软链接（一键可复现）。
 - ✅ 性能：16 秒视频口型阶段约 10 秒；CPU 线程数受限（`WAV2LIP_THREADS`，默认 4）。
@@ -68,7 +69,7 @@ worker/
   external/  gitignore，外部推理仓库克隆（GPT-SoVITS/LivePortrait/Wav2Lip）
   models/    gitignore，权重（见下方“模型目录”）
   streaming/ffmpeg_pipe.py   ffmpeg 子进程管道（双输入，音频走 /dev/fd/3）
-  stream_worker.py       流式 Worker 入口（与 worker.py 并存）
+  stream_worker.py       流式 Worker 入口（闲置/说话循环，与 worker.py 并存）
 ```
 
 ## 5. 关键约定
@@ -125,3 +126,5 @@ uv run python -u worker.py          # 真实管线，AI_MODE=real
 - **直播推流没画面**：先确认 `docker compose up` 里 srs 健康、`/live/<id>.flv`
   可拉流；ffmpeg 日志在 `stream-<id>/ffmpeg.log`。音频必须与视频交错写（见
   ffmpeg_pipe.py 顶部说明），否则双管道死锁。
+- **闲置/说话切换崩溃**：两种状态的帧率与分辨率必须一致（都来自同一 base 片段）；
+  视频输入带 `-re` 实时节流，勿删除。

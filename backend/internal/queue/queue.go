@@ -19,14 +19,12 @@ type TaskPayload struct {
 	VoiceAudioS3Key string `json:"voiceAudioS3Key,omitempty"`
 }
 
-// StreamPayload is one sentence-level chunk of a live stream, pushed to the
-// streaming queue and consumed by stream_worker.py. All chunks of a stream
-// share the StreamID so the worker can keep a single FFmpeg pipe per stream.
-type StreamPayload struct {
-	StreamID        string `json:"streamId"`
+// LiveControlPayload tells the streaming worker to start/stop the continuous
+// FFmpeg pipe for an avatar's live session.
+type LiveControlPayload struct {
+	Action          string `json:"action"` // "start" | "stop"
 	AvatarID        uint   `json:"avatarId"`
-	ChunkIndex      int    `json:"chunkIndex"`
-	Text            string `json:"text"`
+	StreamID        string `json:"streamId"`
 	ImageS3Key      string `json:"imageS3Key"`
 	VoiceAudioS3Key string `json:"voiceAudioS3Key,omitempty"`
 }
@@ -66,4 +64,19 @@ func (q *Queue) PushTo(ctx context.Context, key string, value any) error {
 		return err
 	}
 	return q.client.RPush(ctx, key, data).Err()
+}
+
+// RPushList appends a raw string to a named Redis list (e.g. a live_queue).
+func (q *Queue) RPushList(ctx context.Context, key, value string) error {
+	return q.client.RPush(ctx, key, value).Err()
+}
+
+// ListLen returns the length of a named Redis list.
+func (q *Queue) ListLen(ctx context.Context, key string) (int64, error) {
+	return q.client.LLen(ctx, key).Result()
+}
+
+// ListRange returns a slice of a named Redis list (start inclusive).
+func (q *Queue) ListRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+	return q.client.LRange(ctx, key, start, stop).Result()
 }

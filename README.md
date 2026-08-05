@@ -163,20 +163,27 @@ WAV2LIP_PROVIDER=rocm    # ROCm EP 不支持 LSTM 时会自动逐算子回退 CP
 
 ## 实时直播（流式架构）
 
-平台内置实时直播能力：长文本按句子切块后，由 `stream_worker.py` 逐块合成并
-**内存直推 RTMP** 到 SRS，浏览器经 Nginx 拉 HTTP-FLV 播放，全程不落盘 MP4。
+平台内置实时直播能力：每个数字人维持一条**常驻 FFmpeg 管道**推流到 SRS，浏览器经
+Nginx 拉 HTTP-FLV 播放，全程不落盘 MP4。
 
 ### 组件
 
 - **SRS v5**（`docker-compose.yml` 中的 `srs` 服务）：RTMP 推流 1935、HTTP API
-  1985、HTTP-FLV 8081（Nginx `/live/` 代理到 `srs:8081`，不与前端 8080 冲突）。
-- **`POST /api/stream`**：接收 `{avatarId, text}`（或 `streamId` 可选），按
-  `。！？!?；;` 与换行切句，按序推入 `talking_avatar:stream_tasks` 队列，
-  返回 `{streamId, chunkCount, playbackUrl}`。
-- **`stream_worker.py`**：消费队列 → GPT-SoVITS 分句 TTS（异步预取：Chunk N
-  推流时 N+1 已在合成）→ 复用缓存的 LivePortrait base 动画 → Wav2Lip ONNX
-  内存推理 → BGR24 帧 + 16k PCM 音频交错写入单个 ffmpeg 进程 →
-  `rtmp://localhost:1935/live/<stream_id>`。
+  1985、HTTP-FLV 8081（Nginx `/live/` 代理到 `srs:8080`，不与前端 8080 冲突）。
+- **后端直播接口**（`backend/internal/handlers/live.go`）：
+  - `POST /api/live/{avatarID}/start`：在数据库登记 LiveSession 并通知 Worker
+    打开常驻管道（闲置态：base 动画 + 静音）。
+  - `POST /api/live/{avatarID}/push`：按 `。！？!?；;`/换行切句，逐条压入
+    `live_queue:{avatarID}`。
+  - `GET /api/live/{avatarID}/status`：返回会话状态、队列长度与待渲染句子，
+    供前端每秒轮询。
+- **`stream_worker.py`**（闲置/说话循环）：
+  - 闲置态：循环喂 base 动画帧 + numpy 生成的静音音频（数字人自然眨眼/微动）。
+  - 说话态：从 `live_queue:{avatarID}` 弹出句子 → GPT-SoVITS 异步 TTS →
+    Wav2Lip(ONNX) 内存出帧 → 口型帧 + TTS 音频替换推流；句子结束立即回到闲置态，
+    **管道全程不关闭**。
+  - 帧率/分辨率两种状态完全一致（口型帧来自同一 base 片段）；视频输入带 ffmpeg
+    `-re` 实时节流，音频按每 0.5s 切片与帧交错，A/V 同步且不超前。
 
 ### 启动与使用
 
@@ -185,25 +192,26 @@ docker compose up --build            # 基础设施 + API + 前端 + SRS
 cd worker
 uv run python -u stream_worker.py    # 流式 Worker（与离线 worker.py 并存）
 
-# 发起一场直播（示例）
-curl -X POST http://localhost:8080/api/stream \
+# 前端：Avatar Library → 卡片「开启直播」进入 Live Studio（自动调 start + 播放器）
+# 或命令行示例：
+curl -X POST http://localhost:8080/api/live/9/start
+curl -X POST http://localhost:8080/api/live/9/push \
   -H 'Content-Type: application/json' \
-  -d '{"avatarId": 9, "text": "大家好！欢迎来到直播间。今天聊聊数字人。"}'
+  -d '{"text": "大家好！欢迎来到直播间。今天聊聊数字人。"}'
+curl http://localhost:8080/api/live/9/status
 ```
 
-播放地址：`http://localhost:8080/live/<stream_id>.flv`（`<video>` 标签直接可用）。
+播放地址：`http://localhost:8080/live/avatar_9.flv`（Live Studio 用 mpegts.js 拉流）。
 
 ### 设计说明与当前限制
 
 - 音视频同步：ffmpeg 需要每个输入的“首个包”才开始消费，且一次性写完整段音频会
   撑爆其预缓冲——因此实现为**每 0.5 秒交错写音频切片**（先写首片再写帧）。
-- 稳定性优先：base 动画每个流只渲染一次（按首个 chunk 时长缓存并循环取帧）；
-  每个 chunk 重新生成 base 动画（更生动的头部动作）留作后续优化
-  （`STREAM_REGENERATE_BASE`）。
-- 并发：TTS 与推流解耦（每流一个生产者线程 + 有界结果队列），帧生成与音频写入
-  在推流线程内交错，不丢帧。`STREAM_ASYNC=0` 可退回串行。
-- `POST /api/chat`（接 LLM 再入队）与 7x24 会话保持属下一阶段，当前 `/api/stream`
-  直接接收整段文本。
+- 实时性：视频输入带 `-re` 按帧率节流，内容按 1x 真实时间推进，播放器缓冲不膨胀；
+  TTS 在闲置期间异步预取，说话切换无明显等待。
+- 闲置 base 动画按 `LIVEPORTRAIT_IDLE_BASE_SECONDS`（默认 10s）渲染并循环取帧，
+  头部动作每 10s 重复一次；逐 chunk 重新生成 base（更生动的头部动作）留作后续优化。
+- `POST /api/chat`（LLM 响应切句入队）与多机/断流重连属下一阶段。
 
 ## 数据流
 

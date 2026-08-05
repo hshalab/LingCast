@@ -26,9 +26,9 @@ type createTaskRequest struct {
 }
 
 type updateTaskStatusRequest struct {
-	Status          string  `json:"status"`
+	Status           string  `json:"status"`
 	OutputVideoS3URL *string `json:"outputVideoS3Url"`
-	Error           string  `json:"error"`
+	Error            string  `json:"error"`
 }
 
 type taskResponse struct {

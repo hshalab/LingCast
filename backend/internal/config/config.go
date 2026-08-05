@@ -13,11 +13,11 @@ type Config struct {
 
 	MySQLDSN string
 
-	RedisAddr      string
-	RedisPassword  string
-	RedisDB        int
-	TaskQueueKey   string
-	StreamQueueKey string
+	RedisAddr           string
+	RedisPassword       string
+	RedisDB             int
+	TaskQueueKey        string
+	LiveControlQueueKey string
 
 	S3Endpoint      string
 	S3AccessKey     string
@@ -72,11 +72,11 @@ func Load() Config {
 		MySQLDSN: env("MYSQL_DSN",
 			"talking:talking123@tcp(127.0.0.1:3306)/talking_avatar?charset=utf8mb4&parseTime=True&loc=Local"),
 
-		RedisAddr:      env("REDIS_ADDR", "127.0.0.1:6379"),
-		RedisPassword:  os.Getenv("REDIS_PASSWORD"),
-		RedisDB:        envInt("REDIS_DB", 0),
-		TaskQueueKey:   env("TASK_QUEUE_KEY", "talking_avatar:tasks"),
-		StreamQueueKey: env("STREAM_TASK_QUEUE_KEY", "talking_avatar:stream_tasks"),
+		RedisAddr:           env("REDIS_ADDR", "127.0.0.1:6379"),
+		RedisPassword:       os.Getenv("REDIS_PASSWORD"),
+		RedisDB:             envInt("REDIS_DB", 0),
+		TaskQueueKey:        env("TASK_QUEUE_KEY", "talking_avatar:tasks"),
+		LiveControlQueueKey: env("LIVE_CONTROL_QUEUE_KEY", "talking_avatar:live_control"),
 
 		S3Endpoint:      env("S3_ENDPOINT", "http://127.0.0.1:9000"),
 		S3AccessKey:     env("S3_ACCESS_KEY", "minioadmin"),

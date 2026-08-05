@@ -1,0 +1,223 @@
+package handlers
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+
+	"talkingavatar/backend/internal/models"
+	"talkingavatar/backend/internal/queue"
+)
+
+// sentenceSplit matches a run of sentence-final punctuation (Chinese and
+// English, plus newlines). Sentences are kept intact including the delimiter.
+var sentenceSplit = regexp.MustCompile(`[^。！？!?；;\n]+[。！？!?；;\n]*`)
+
+// LiveHandler manages live sessions: session lifecycle (start), per-avatar
+// text intake (push, sentence-chunked into a Redis list) and status/queue
+// monitoring (status) for the Live Studio frontend.
+type LiveHandler struct {
+	db                  *gorm.DB
+	q                   *queue.Queue
+	liveControlQueueKey string
+}
+
+type startLiveRequest struct {
+	StreamID string `json:"streamId"` // optional; defaults to avatar_<id>
+}
+
+type pushLiveRequest struct {
+	Text string `json:"text"`
+}
+
+type liveSessionResponse struct {
+	ID          uint   `json:"id"`
+	AvatarID    uint   `json:"avatarId"`
+	StreamID    string `json:"streamId"`
+	Status      string `json:"status"`
+	PlaybackURL string `json:"playbackUrl"`
+}
+
+type liveStatusResponse struct {
+	AvatarID    uint     `json:"avatarId"`
+	StreamID    string   `json:"streamId"`
+	Status      string   `json:"status"`
+	QueueLength int64    `json:"queueLength"`
+	Pending     []string `json:"pending"`
+}
+
+func NewLiveHandler(db *gorm.DB, q *queue.Queue, liveControlQueueKey string) *LiveHandler {
+	return &LiveHandler{db: db, q: q, liveControlQueueKey: liveControlQueueKey}
+}
+
+func liveQueueKey(avatarID uint) string {
+	return fmt.Sprintf("live_queue:%d", avatarID)
+}
+
+// Start handles POST /api/live/:avatarID/start. It upserts a LiveSession in
+// the database and tells the streaming worker to start the continuous FFmpeg
+// pipe (idle mode: base animation + silent audio) for this avatar.
+func (h *LiveHandler) Start(c *gin.Context) {
+	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
+	if err != nil || avatarID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatarID"})
+		return
+	}
+
+	var req startLiveRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		return
+	}
+
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, avatarID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	streamID := strings.TrimSpace(req.StreamID)
+	if streamID == "" {
+		streamID = fmt.Sprintf("avatar_%d", avatar.ID)
+	}
+
+	session := models.LiveSession{AvatarID: avatar.ID}
+	err = h.db.Where(models.LiveSession{AvatarID: avatar.ID}).
+		FirstOrCreate(&session).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	session.StreamID = streamID
+	session.Status = models.LiveStatusIdle
+	if err := h.db.Save(&session).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	payload := queue.LiveControlPayload{
+		Action:          "start",
+		AvatarID:        avatar.ID,
+		StreamID:        streamID,
+		ImageS3Key:      avatar.ImageS3Key,
+		VoiceAudioS3Key: valueOrEmpty(avatar.VoiceAudioS3Key),
+	}
+	if err := h.q.PushTo(c.Request.Context(), h.liveControlQueueKey, payload); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "notify worker failed: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, liveSessionResponse{
+		ID:          session.ID,
+		AvatarID:    avatar.ID,
+		StreamID:    streamID,
+		Status:      models.LiveStatusIdle,
+		PlaybackURL: "/live/" + streamID + ".flv",
+	})
+}
+
+// Push handles POST /api/live/:avatarID/push. It chunks the incoming text by
+// sentences and appends them to live_queue:<avatarID> for the worker.
+func (h *LiveHandler) Push(c *gin.Context) {
+	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
+	if err != nil || avatarID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatarID"})
+		return
+	}
+
+	var req pushLiveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		return
+	}
+	if strings.TrimSpace(req.Text) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'text' is required"})
+		return
+	}
+
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, avatarID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	chunks := splitSentences(req.Text)
+	key := liveQueueKey(avatar.ID)
+	for _, text := range chunks {
+		if err := h.q.RPushList(c.Request.Context(), key, text); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "push chunk failed: " + err.Error()})
+			return
+		}
+	}
+	length, _ := h.q.ListLen(c.Request.Context(), key)
+	c.JSON(http.StatusAccepted, gin.H{"accepted": len(chunks), "queueLength": length})
+}
+
+// Status handles GET /api/live/:avatarID/status. It returns the live session
+// state plus the pending text chunks (and queue length) so the frontend can
+// monitor what is waiting to be rendered.
+func (h *LiveHandler) Status(c *gin.Context) {
+	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
+	if err != nil || avatarID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatarID"})
+		return
+	}
+
+	var session models.LiveSession
+	if err := h.db.Where("avatar_id = ?", avatarID).First(&session).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "live session not started"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	key := liveQueueKey(uint(avatarID))
+	length, _ := h.q.ListLen(c.Request.Context(), key)
+	pending, _ := h.q.ListRange(c.Request.Context(), key, 0, 19)
+	if pending == nil {
+		pending = []string{}
+	}
+
+	c.JSON(http.StatusOK, liveStatusResponse{
+		AvatarID:    session.AvatarID,
+		StreamID:    session.StreamID,
+		Status:      session.Status,
+		QueueLength: length,
+		Pending:     pending,
+	})
+}
+
+func splitSentences(text string) []string {
+	matches := sentenceSplit.FindAllString(text, -1)
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if s := strings.TrimSpace(m); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func valueOrEmpty(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}

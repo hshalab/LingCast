@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ClerkRouteRouteImport } from './routes/clerk/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedLiveStudioRouteImport } from './routes/_authenticated/live-studio'
 import { Route as AuthenticatedAvatarStudioRouteImport } from './routes/_authenticated/avatar-studio'
 import { Route as AuthenticatedAvatarLibraryRouteImport } from './routes/_authenticated/avatar-library'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
@@ -54,6 +55,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedLiveStudioRoute = AuthenticatedLiveStudioRouteImport.update({
+  id: '/live-studio',
+  path: '/live-studio',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAvatarStudioRoute =
@@ -227,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
+  '/live-studio': typeof AuthenticatedLiveStudioRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -256,6 +263,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
+  '/live-studio': typeof AuthenticatedLiveStudioRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -291,6 +299,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/_authenticated/avatar-studio': typeof AuthenticatedAvatarStudioRoute
+  '/_authenticated/live-studio': typeof AuthenticatedLiveStudioRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -325,6 +334,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/avatar-library'
     | '/avatar-studio'
+    | '/live-studio'
     | '/errors/$error'
     | '/settings/account'
     | '/settings/appearance'
@@ -354,6 +364,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/avatar-library'
     | '/avatar-studio'
+    | '/live-studio'
     | '/'
     | '/errors/$error'
     | '/settings/account'
@@ -388,6 +399,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/avatar-library'
     | '/_authenticated/avatar-studio'
+    | '/_authenticated/live-studio'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
     | '/_authenticated/settings/account'
@@ -441,6 +453,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/live-studio': {
+      id: '/_authenticated/live-studio'
+      path: '/live-studio'
+      fullPath: '/live-studio'
+      preLoaderRoute: typeof AuthenticatedLiveStudioRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/avatar-studio': {
@@ -676,6 +695,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedAvatarLibraryRoute: typeof AuthenticatedAvatarLibraryRoute
   AuthenticatedAvatarStudioRoute: typeof AuthenticatedAvatarStudioRoute
+  AuthenticatedLiveStudioRoute: typeof AuthenticatedLiveStudioRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
@@ -689,6 +709,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedAvatarLibraryRoute: AuthenticatedAvatarLibraryRoute,
   AuthenticatedAvatarStudioRoute: AuthenticatedAvatarStudioRoute,
+  AuthenticatedLiveStudioRoute: AuthenticatedLiveStudioRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
