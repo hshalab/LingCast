@@ -14,6 +14,7 @@ import (
 
 	"talkingavatar/backend/internal/models"
 	"talkingavatar/backend/internal/queue"
+	"talkingavatar/backend/internal/storage"
 )
 
 // sentenceSplit matches a run of sentence-final punctuation (Chinese and
@@ -26,6 +27,7 @@ var sentenceSplit = regexp.MustCompile(`[^。！？!?；;\n]+[。！？!?；;\n]
 type LiveHandler struct {
 	db                  *gorm.DB
 	q                   *queue.Queue
+	s3                  *storage.Client
 	liveControlQueueKey string
 }
 
@@ -53,8 +55,16 @@ type liveStatusResponse struct {
 	Pending     []string `json:"pending"`
 }
 
-func NewLiveHandler(db *gorm.DB, q *queue.Queue, liveControlQueueKey string) *LiveHandler {
-	return &LiveHandler{db: db, q: q, liveControlQueueKey: liveControlQueueKey}
+type liveSessionItem struct {
+	AvatarID   uint   `json:"avatarId"`
+	AvatarName string `json:"avatarName"`
+	ImageS3URL string `json:"imageS3Url"`
+	StreamID   string `json:"streamId"`
+	Status     string `json:"status"`
+}
+
+func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey string) *LiveHandler {
+	return &LiveHandler{db: db, q: q, s3: s3, liveControlQueueKey: liveControlQueueKey}
 }
 
 func liveQueueKey(avatarID uint) string {
@@ -245,6 +255,31 @@ func (h *LiveHandler) Status(c *gin.Context) {
 		QueueLength: length,
 		Pending:     pending,
 	})
+}
+
+// ListSessions handles GET /api/live — returns every active live session
+// with its avatar info, so the Live Studio can render a switching list.
+func (h *LiveHandler) ListSessions(c *gin.Context) {
+	var sessions []models.LiveSession
+	if err := h.db.Find(&sessions).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	items := make([]liveSessionItem, 0, len(sessions))
+	for _, s := range sessions {
+		var avatar models.Avatar
+		item := liveSessionItem{
+			AvatarID: s.AvatarID,
+			StreamID: s.StreamID,
+			Status:   s.Status,
+		}
+		if err := h.db.First(&avatar, s.AvatarID).Error; err == nil {
+			item.AvatarName = avatar.Name
+			item.ImageS3URL = h.s3.PublicURL(avatar.ImageS3Key)
+		}
+		items = append(items, item)
+	}
+	c.JSON(http.StatusOK, gin.H{"data": items})
 }
 
 func splitSentences(text string) []string {

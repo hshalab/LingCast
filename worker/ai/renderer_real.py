@@ -13,8 +13,8 @@ a drop-in change.
 
 Motion feel is controlled by the driving template plus two knobs:
   - LIVEPORTRAIT_DRIVING: which .pkl template drives the animation (default
-    d5.pkl, a ~5s natural talking-head clip; d1.pkl is only 0.5s and reads as
-    frantic blinking/shrugging when looped).
+    d1.pkl: idle eyes/shoulders with NO mouth movement; pair it with
+    LIVEPORTRAIT_DRIVING_SPEED ~0.6 so the 0.5s cycle is not frantic).
   - LIVEPORTRAIT_DRIVING_SPEED: temporal playback speed (1.0 = original;
     0.5 = half speed / 2x slower). The template's motion features are
     interpolated in time, so blinks and shoulder motion become calmer.
@@ -57,7 +57,7 @@ class LivePortraitRenderer:
         self.driving = driving or Path(
             os.environ.get(
                 "LIVEPORTRAIT_DRIVING",
-                self.repo_dir / "assets" / "examples" / "driving" / "d5.pkl",
+                self.repo_dir / "assets" / "examples" / "driving" / "d1.pkl",
             )
         )
         self.device = device or device_from_env("LIVEPORTRAIT") or "cpu"

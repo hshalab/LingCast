@@ -4,6 +4,7 @@ import 'xgplayer/dist/index.min.css'
 import FlvPlugin from 'xgplayer-flv'
 import { Copy, LoaderCircle, Power, PowerOff, Send, Video } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -19,7 +20,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
-import { api, type LiveStatus } from '@/lib/api'
+import { api, type Avatar, type LiveSessionItem, type LiveStatus } from '@/lib/api'
 
 function showApiError(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -39,6 +40,8 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
   const [busy, setBusy] = useState(false)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [avatars, setAvatars] = useState<Avatar[]>([])
+  const [liveSessions, setLiveSessions] = useState<LiveSessionItem[]>([])
   const streamUrl = `${import.meta.env.VITE_API_BASE_URL ?? ''}/live/avatar_${id}.flv`
 
   // Check whether the live session already exists on load.
@@ -48,6 +51,31 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       .get(`/live/${id}/status`)
       .then(() => setStarted(true))
       .catch(() => setStarted(false))
+  }, [id])
+
+  // Avatar switcher data: ready avatars + which ones are live, every 3s.
+  useEffect(() => {
+    if (!id) return
+    let stopped = false
+    const refresh = async () => {
+      try {
+        const [avatarResp, liveResp] = await Promise.all([
+          api.get<{ data: Avatar[] }>('/avatars'),
+          api.get<{ data: LiveSessionItem[] }>('/live'),
+        ])
+        if (stopped) return
+        setAvatars(avatarResp.data.data)
+        setLiveSessions(liveResp.data.data)
+      } catch {
+        // keep previous data
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(refresh, 3000)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+    }
   }, [id])
 
   // HTTP-FLV player (xgplayer + flv plugin) — only while the stream is on.
@@ -208,8 +236,49 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
           </CardContent>
         </Card>
 
-        <div className='grid gap-4 lg:grid-cols-3'>
-          {/* Left: player */}
+        <div className='grid gap-4 lg:grid-cols-4'>
+          {/* Left: avatar switcher */}
+          <Card className='lg:col-span-1'>
+            <CardHeader className='gap-1'>
+              <CardTitle>数字人直播</CardTitle>
+              <CardDescription>多个数字人可同时直播，分别发送文字。</CardDescription>
+            </CardHeader>
+            <CardContent className='flex flex-col gap-2'>
+              {avatars
+                .filter((avatar) => avatar.status === 'ready')
+                .map((avatar) => {
+                  const live = liveSessions.some((s) => s.avatarId === avatar.id)
+                  const active = avatar.id === id
+                  return (
+                    <Link
+                      key={avatar.id}
+                      to='/live-studio'
+                      search={{ avatarId: String(avatar.id) }}
+                      className={`flex items-center gap-3 rounded-lg border p-2 transition-colors hover:bg-muted ${
+                        active ? 'border-primary bg-muted ring-1 ring-primary' : ''
+                      }`}
+                    >
+                      {avatar.imageS3Url && (
+                        <img
+                          src={avatar.imageS3Url}
+                          alt={avatar.name}
+                          className='h-9 w-9 rounded-md border object-cover'
+                        />
+                      )}
+                      <div className='min-w-0 flex-1'>
+                        <p className='truncate text-sm font-medium'>{avatar.name}</p>
+                        <p className='text-xs text-muted-foreground'>#{avatar.id}</p>
+                      </div>
+                      <Badge variant={live ? 'default' : 'outline'}>
+                        {live ? '直播中' : '未开启'}
+                      </Badge>
+                    </Link>
+                  )
+                })}
+            </CardContent>
+          </Card>
+
+          {/* Player */}
           <Card className='lg:col-span-2'>
             <CardHeader className='flex-row items-center justify-between space-y-0'>
               <CardTitle>直播画面</CardTitle>

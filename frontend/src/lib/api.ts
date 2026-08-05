@@ -35,6 +35,14 @@ export type LiveStatus = {
   pending: string[]
 }
 
+export type LiveSessionItem = {
+  avatarId: number
+  avatarName: string
+  imageS3Url: string
+  streamId: string
+  status: string
+}
+
 // In the dockerized setup the app and the API share the nginx origin, so the
 // base URL defaults to '' (same origin, proxied via /api). For local Vite
 // development set VITE_API_BASE_URL to the nginx/app origin, e.g.

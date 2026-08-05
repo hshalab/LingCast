@@ -77,6 +77,8 @@ class LiveAvatarSession:
         # Talking chunk state (one at a time; TTS runs async while idle).
         self._tts_results: queue_mod.Queue = queue_mod.Queue(maxsize=2)
         self._tts_thread: threading.Thread | None = None
+        self._feed_thread: threading.Thread | None = None
+        self._running = False
         self.talking = None  # dict with audio/frames/iter state
 
     # ------------------------------------------------------------------ #
@@ -182,6 +184,28 @@ class LiveAvatarSession:
         else:
             self._feed_idle_block()
 
+    def start(self, r: redis.Redis) -> None:
+        """Run the idle/talking feed loop in its own thread so multiple
+        avatars can stream concurrently (each pipe is paced independently)."""
+        if self._feed_thread is not None and self._feed_thread.is_alive():
+            return
+        self._running = True
+        self._feed_thread = threading.Thread(
+            target=self._run_loop,
+            args=(r,),
+            daemon=True,
+            name=f"feed-{self.stream_id}",
+        )
+        self._feed_thread.start()
+
+    def _run_loop(self, r: redis.Redis) -> None:
+        while self._running:
+            try:
+                self.tick(r)
+            except Exception:
+                logger.exception("session %s feed error, continuing", self.stream_id)
+                time.sleep(0.2)
+
     def _feed_idle_block(self) -> None:
         from streaming.ffmpeg_pipe import AUDIO_SAMPLE_RATE
 
@@ -261,6 +285,9 @@ class LiveAvatarSession:
         return seg
 
     def close(self) -> None:
+        self._running = False
+        if self._feed_thread is not None:
+            self._feed_thread.join(timeout=5)
         if self.pipe is not None:
             self.pipe.stop()
 
@@ -309,7 +336,7 @@ def _control_listener(
 
             threading.Thread(
                 target=_setup_session,
-                args=(payload, stream_id, storage, work_root, fps, sessions),
+                args=(payload, stream_id, storage, work_root, fps, sessions, r),
                 daemon=True,
                 name=f"setup-{stream_id}",
             ).start()
@@ -321,7 +348,7 @@ def _control_listener(
             time.sleep(1)
 
 
-def _setup_session(payload, stream_id, storage, work_root, fps, sessions) -> None:
+def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> None:
     try:
         avatar_id = int(payload["avatarId"])
         work_dir = work_root / f"live-{stream_id}"
@@ -351,6 +378,7 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions) -> Non
         )
         session.setup()
         sessions[avatar_id] = session
+        session.start(r)
     except Exception:
         logger.exception("failed to set up live session for %s", payload.get("streamId"))
 
@@ -394,16 +422,10 @@ def main() -> None:
 
     logger.info("stream worker started: control=%s fps=%s", control_key, fps)
 
+    # Feed loops now run per session (see LiveAvatarSession.start); the main
+    # thread only keeps the process alive for signal handling.
     while True:
-        try:
-            for session in list(sessions.values()):
-                if session.ready:
-                    session.tick(r)
-            if not sessions:
-                time.sleep(0.2)
-        except Exception:
-            logger.exception("unexpected stream worker error, continuing")
-            time.sleep(1)
+        time.sleep(3600)
 
 
 if __name__ == "__main__":
