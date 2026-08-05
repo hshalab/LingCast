@@ -65,7 +65,7 @@ export function VideoPlayerDialog({
             无法播放该视频：可能为旧版（MPEG-4）编码任务。请在任务中心删除旧任务并重新生成后重试。
           </p>
         ) : (
-          <div ref={hostRef} id={playerId} className='aspect-video w-full' />
+          <div ref={hostRef} id={playerId} className='aspect-[9/16] w-full' />
         )}
       </DialogContent>
     </Dialog>

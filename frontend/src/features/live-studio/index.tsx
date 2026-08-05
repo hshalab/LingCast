@@ -291,7 +291,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
               </Badge>
             </CardHeader>
             <CardContent>
-              <div ref={playerHostRef} className='aspect-video w-full rounded-lg border bg-black' />
+              <div ref={playerHostRef} className='aspect-[9/16] w-full rounded-lg border bg-black' />
             </CardContent>
           </Card>
 

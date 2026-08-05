@@ -310,7 +310,7 @@ export function Broadcast({
                   <span>提交任务后，这里会显示合成进度与成品视频。</span>
                 </div>
               ) : task.status === 'completed' && task.outputVideoS3Url ? (
-                <video src={task.outputVideoS3Url} controls className='aspect-video w-full rounded-lg border bg-black' />
+                <video src={task.outputVideoS3Url} controls className='aspect-[9/16] w-full rounded-lg border bg-black' />
               ) : task.status === 'failed' ? (
                 <p className='py-8 text-center text-sm text-destructive'>
                   合成失败：{task.errorMessage ?? '未知错误'}

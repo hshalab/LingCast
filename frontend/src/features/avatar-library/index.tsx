@@ -95,7 +95,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
           <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
             {Array.from({ length: 8 }, (_, i) => (
               <Card key={i} className='overflow-hidden'>
-                <Skeleton className='aspect-video w-full rounded-none' />
+                <Skeleton className='aspect-[9/16] w-full rounded-none' />
                 <CardHeader className='gap-1.5'>
                   <Skeleton className='h-5 w-2/3' />
                   <Skeleton className='h-4 w-1/3' />
@@ -156,7 +156,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                     <img
                       src={avatar.imageS3Url}
                       alt={avatar.name}
-                      className='aspect-video w-full border-b object-cover'
+                      className='aspect-[9/16] w-full border-b object-cover'
                       loading='lazy'
                     />
                     {avatar.status === 'ready' && (
@@ -168,7 +168,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                     )}
                   </button>
                 ) : (
-                  <div className='flex aspect-video w-full items-center justify-center border-b bg-muted'>
+                  <div className='flex aspect-[9/16] w-full items-center justify-center border-b bg-muted'>
                     <ImageIcon className='size-8 text-muted-foreground' />
                   </div>
                 )}

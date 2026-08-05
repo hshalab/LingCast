@@ -204,7 +204,7 @@ export function AvatarStudio() {
                     <img
                       src={URL.createObjectURL(imageFile)}
                       alt='preview'
-                      className='mt-1 h-32 w-32 rounded-lg border object-cover'
+                      className='mt-1 aspect-[9/16] w-24 rounded-lg border object-cover'
                     />
                   )}
                 </div>
