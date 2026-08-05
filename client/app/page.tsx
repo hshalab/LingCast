@@ -178,7 +178,7 @@ export default function Home() {
       </main>
 
       <footer className='border-t border-zinc-800/60 py-5 text-center text-xs text-zinc-600'>
-        灵播 · AI 数字人直播平台 · 登录后聊天记录不丢失
+        灵播 · AI 数字人直播平台
       </footer>
     </div>
   )
