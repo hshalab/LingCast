@@ -55,6 +55,9 @@ type Avatar struct {
 	ID         uint   `gorm:"primaryKey" json:"id"`
 	Name       string `gorm:"size:255;not null" json:"name"`
 	ImageS3Key string `gorm:"size:512;not null" json:"imageS3Key"`
+	// Category groups avatars for the audience home page filter
+	// (闲聊/知识/娱乐/游戏/带货/其他; empty -> 其他).
+	Category string `gorm:"size:32;not null;default:其他" json:"category"`
 	// VoiceID selects the Edge-TTS voice used for broadcast/live speech.
 	VoiceID string `gorm:"size:64;not null;default:zh-CN-XiaoxiaoNeural" json:"voiceId"`
 	// BaseVideoS3Key points to the pre-processed LivePortrait driving clip

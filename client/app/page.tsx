@@ -1,12 +1,19 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import AuthModal from '@/components/auth-modal'
 import { listLiveSessions, type LiveSessionItem } from '@/lib/api'
+import { useIdentity } from '@/lib/identity'
+
+const CATEGORIES = ['闲聊', '知识', '娱乐', '游戏', '带货', '其他']
 
 export default function Home() {
+  const { identity, loading: identityLoading, ensureIdentity, logout } = useIdentity()
   const [sessions, setSessions] = useState<LiveSessionItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [category, setCategory] = useState('全部')
+  const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null)
 
   useEffect(() => {
     let stopped = false
@@ -28,56 +35,170 @@ export default function Home() {
     }
   }, [])
 
+  const availableCategories = useMemo(() => {
+    const present = new Set(sessions.map((s) => s.category || '其他'))
+    return CATEGORIES.filter((c) => present.has(c))
+  }, [sessions])
+
+  const filtered =
+    category === '全部'
+      ? sessions
+      : sessions.filter((s) => (s.category || '其他') === category)
+
   return (
-    <main className='mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6'>
-      <header className='mb-6'>
-        <h1 className='text-2xl font-bold tracking-tight'>数字人直播间</h1>
-        <p className='mt-1 text-sm text-zinc-400'>
-          正在开播的数字人，点击进入房间观看并与 TA 互动。
-        </p>
+    <div className='mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 sm:px-6'>
+      {/* Navigation header */}
+      <header className='sticky top-0 z-40 -mx-4 border-b border-zinc-800/80 bg-zinc-950/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6'>
+        <div className='flex items-center justify-between gap-3'>
+          <Link href='/' className='flex items-center gap-2'>
+            <span className='grid size-9 place-items-center rounded-xl bg-blue-600 text-lg'>
+              📺
+            </span>
+            <span className='text-lg font-bold tracking-tight'>数字人直播间</span>
+          </Link>
+
+          <div className='flex items-center gap-2'>
+            {identity ? (
+              <>
+                <span
+                  className={`hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-xs sm:flex ${
+                    identity.isGuest
+                      ? 'bg-zinc-800/80 text-zinc-300'
+                      : 'bg-blue-600/20 text-blue-300'
+                  }`}
+                >
+                  <span>{identity.isGuest ? '游客' : '账号'}</span>
+                  <span className='font-medium'>{identity.username}</span>
+                  <span className='opacity-60'>#{identity.userId}</span>
+                </span>
+                {identity.isGuest ? (
+                  <>
+                    <button
+                      onClick={() => setAuthMode('register')}
+                      className='rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500'
+                    >
+                      注册
+                    </button>
+                    <button
+                      onClick={() => setAuthMode('login')}
+                      className='rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-500'
+                    >
+                      登录
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => void logout()}
+                    className='rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-500'
+                  >
+                    退出
+                  </button>
+                )}
+              </>
+            ) : (
+              <button
+                onClick={() => void ensureIdentity()}
+                disabled={identityLoading}
+                className='rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-40'
+              >
+                {identityLoading ? '获取身份中…' : '获取游客身份'}
+              </button>
+            )}
+          </div>
+        </div>
       </header>
 
-      {loading ? (
-        <p className='py-16 text-center text-sm text-zinc-500'>加载中…</p>
-      ) : sessions.length === 0 ? (
-        <div className='flex flex-col items-center justify-center gap-2 rounded-2xl border border-zinc-800 py-20 text-center'>
-          <span className='text-4xl'>📡</span>
-          <p className='font-medium'>暂无开播的数字人</p>
-          <p className='text-sm text-zinc-500'>管理员在后台开启直播后，会出现在这里。</p>
-        </div>
-      ) : (
-        <div className='grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
-          {sessions.map((session) => (
-            <Link
-              key={session.avatarId}
-              href={`/rooms/${session.avatarId}`}
-              className='group relative overflow-hidden rounded-2xl border border-zinc-800 transition hover:border-zinc-600'
+      <main className='flex flex-1 flex-col py-6'>
+        <section className='mb-6'>
+          <h1 className='text-2xl font-bold tracking-tight'>正在开播</h1>
+          <p className='mt-1 text-sm text-zinc-500'>
+            点击进入房间观看直播、发消息互动，数字人会通过 AI 实时回复你。
+          </p>
+        </section>
+
+        {/* Category filter */}
+        <div className='mb-5 flex flex-wrap items-center gap-2'>
+          <button
+            onClick={() => setCategory('全部')}
+            className={`rounded-full px-4 py-1.5 text-sm transition ${
+              category === '全部'
+                ? 'bg-blue-600 font-medium text-white'
+                : 'border border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'
+            }`}
+          >
+            全部
+          </button>
+          {availableCategories.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategory(c)}
+              className={`rounded-full px-4 py-1.5 text-sm transition ${
+                category === c
+                  ? 'bg-blue-600 font-medium text-white'
+                  : 'border border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'
+              }`}
             >
-              {session.imageS3Url ? (
-                // eslint-disable-next-line @next/next/no-img-element -- remote storage origin, plain img is simplest
-                <img
-                  src={session.imageS3Url}
-                  alt={session.avatarName}
-                  className='aspect-[9/16] w-full object-cover transition duration-300 group-hover:scale-[1.03]'
-                />
-              ) : (
-                <div className='flex aspect-[9/16] w-full items-center justify-center bg-zinc-900 text-zinc-600'>
-                  <span className='text-3xl'>🎭</span>
-                </div>
-              )}
-              <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-3 pb-2 pt-8'>
-                <p className='truncate text-sm font-medium text-white'>
-                  {session.avatarName}
-                </p>
-              </div>
-              <span className='absolute right-2 top-2 flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5 text-xs font-medium text-white'>
-                <span className='size-1.5 animate-pulse rounded-full bg-white' />
-                直播中
-              </span>
-            </Link>
+              {c}
+            </button>
           ))}
         </div>
-      )}
-    </main>
+
+        {loading ? (
+          <p className='py-16 text-center text-sm text-zinc-500'>加载中…</p>
+        ) : filtered.length === 0 ? (
+          <div className='flex flex-col items-center justify-center gap-2 rounded-2xl border border-zinc-800 py-20 text-center'>
+            <span className='text-4xl'>📡</span>
+            <p className='font-medium'>
+              {category === '全部' ? '暂无开播的数字人' : `「${category}」分类暂无开播`}
+            </p>
+            <p className='text-sm text-zinc-500'>
+              管理员在后台开启直播后，会出现在这里。
+            </p>
+          </div>
+        ) : (
+          <div className='grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
+            {filtered.map((session) => (
+              <Link
+                key={session.avatarId}
+                href={`/rooms/${session.avatarId}`}
+                className='group relative overflow-hidden rounded-2xl border border-zinc-800 transition hover:-translate-y-0.5 hover:border-zinc-600 hover:shadow-lg hover:shadow-black/40'
+              >
+                {session.imageS3Url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- remote storage origin, plain img is simplest
+                  <img
+                    src={session.imageS3Url}
+                    alt={session.avatarName}
+                    className='aspect-[9/16] w-full object-cover transition duration-300 group-hover:scale-[1.03]'
+                  />
+                ) : (
+                  <div className='flex aspect-[9/16] w-full items-center justify-center bg-zinc-900 text-zinc-600'>
+                    <span className='text-3xl'>🎭</span>
+                  </div>
+                )}
+                <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 pb-2.5 pt-10'>
+                  <p className='truncate text-sm font-semibold text-white'>
+                    {session.avatarName}
+                  </p>
+                  <p className='mt-0.5 text-xs text-white/60'>{session.category || '其他'}</p>
+                </div>
+                <span className='absolute right-2 top-2 flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5 text-xs font-medium text-white'>
+                  <span className='size-1.5 animate-pulse rounded-full bg-white' />
+                  直播中
+                </span>
+                <span className='absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white/90 backdrop-blur'>
+                  #{session.avatarId}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </main>
+
+      <footer className='border-t border-zinc-800/60 py-5 text-center text-xs text-zinc-600'>
+        数字人直播间 · 登录后聊天记录不丢失
+      </footer>
+
+      {authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} />}
+    </div>
   )
 }

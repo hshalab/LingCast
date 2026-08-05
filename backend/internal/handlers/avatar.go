@@ -35,6 +35,7 @@ type avatarResponse struct {
 	Name           string              `json:"name"`
 	ImageS3Key     string              `json:"imageS3Key"`
 	ImageS3URL     string              `json:"imageS3Url"`
+	Category       string              `json:"category"`
 	VoiceID        string              `json:"voiceId"`
 	BaseVideoS3Key *string             `json:"baseVideoS3Key,omitempty"`
 	BaseVideoS3URL *string             `json:"baseVideoS3Url,omitempty"`
@@ -62,6 +63,7 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 	if voiceID == "" {
 		voiceID = models.DefaultEdgeVoice
 	}
+	category := normalizeCategory(c.PostForm("category"))
 
 	imageHeader, err := c.FormFile("image")
 	if err != nil {
@@ -78,6 +80,7 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 	avatar := models.Avatar{
 		Name:       name,
 		ImageS3Key: imageKey,
+		Category:   category,
 		VoiceID:    voiceID,
 		Status:     models.AvatarStatusInitializing,
 	}
@@ -412,6 +415,7 @@ func toAvatarResponse(a models.Avatar, s3 *storage.Client) avatarResponse {
 		Name:         a.Name,
 		ImageS3Key:   a.ImageS3Key,
 		ImageS3URL:   s3.PublicURL(a.ImageS3Key),
+		Category:     normalizeCategory(a.Category),
 		VoiceID:      a.VoiceID,
 		Status:       a.Status,
 		LiveSettings: liveSettings,
@@ -425,6 +429,13 @@ func toAvatarResponse(a models.Avatar, s3 *storage.Client) avatarResponse {
 		}
 	}
 	return resp
+}
+
+func normalizeCategory(c string) string {
+	if c = strings.TrimSpace(c); c == "" {
+		return "其他"
+	}
+	return c
 }
 
 // parseLiveSettings decodes the avatar's JSON live settings, falling back to

@@ -1,6 +1,7 @@
 export type LiveSessionItem = {
   avatarId: number
   avatarName: string
+  category: string
   imageS3Url: string
   streamId: string
   status: string

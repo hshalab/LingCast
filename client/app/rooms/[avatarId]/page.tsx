@@ -3,36 +3,15 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import AuthModal from '@/components/auth-modal'
 import XgFlvPlayer from '@/components/xg-player'
 import {
-  createGuestIdentity,
   fetchChatHistory,
   getLiveStatus,
-  loginIdentity,
-  registerIdentity,
   sendMessage,
-  type ChatIdentity,
   type ChatMessage,
 } from '@/lib/api'
-
-const IDENTITY_KEY = 'tav_chat_identity'
-
-function loadIdentity(): ChatIdentity | null {
-  try {
-    const raw = localStorage.getItem(IDENTITY_KEY)
-    return raw ? (JSON.parse(raw) as ChatIdentity) : null
-  } catch {
-    return null
-  }
-}
-
-function saveIdentity(identity: ChatIdentity) {
-  localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity))
-}
-
-function clearIdentity() {
-  localStorage.removeItem(IDENTITY_KEY)
-}
+import { useIdentity } from '@/lib/identity'
 
 function formatTime(iso: string) {
   try {
@@ -49,43 +28,13 @@ export default function RoomPage() {
   const { avatarId } = useParams<{ avatarId: string }>()
   const id = Number(avatarId)
   const [started, setStarted] = useState(false)
-  const [identity, setIdentity] = useState<ChatIdentity | null>(null)
-  const [identityLoading, setIdentityLoading] = useState(false)
+  const { identity, loading: identityLoading, ensureIdentity, logout } = useIdentity()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null)
-  const [authUser, setAuthUser] = useState('')
-  const [authPass, setAuthPass] = useState('')
-  const [authError, setAuthError] = useState('')
-  const [authBusy, setAuthBusy] = useState(false)
   const chatRef = useRef<HTMLDivElement>(null)
   const streamUrl = `/live/avatar_${id}.flv`
-
-  // Viewer identity: restore from localStorage, otherwise create a guest.
-  const ensureIdentity = useCallback(async () => {
-    const cached = loadIdentity()
-    if (cached) {
-      setIdentity(cached)
-      return cached
-    }
-    setIdentityLoading(true)
-    try {
-      const guest = await createGuestIdentity()
-      saveIdentity(guest)
-      setIdentity(guest)
-      return guest
-    } catch {
-      setIdentity(null)
-      return null
-    } finally {
-      setIdentityLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void ensureIdentity()
-  }, [ensureIdentity])
 
   // Poll the session status; the player mounts once the stream is live.
   useEffect(() => {
@@ -165,35 +114,6 @@ export default function RoomPage() {
     } finally {
       setSending(false)
     }
-  }
-
-  const submitAuth = async () => {
-    const username = authUser.trim()
-    if (!username || !authPass || !identity || !authMode) return
-    setAuthBusy(true)
-    setAuthError('')
-    try {
-      const next =
-        authMode === 'register'
-          ? await registerIdentity(identity.userId, username, authPass)
-          : await loginIdentity(identity.userId, username, authPass)
-      saveIdentity(next)
-      setIdentity(next)
-      setAuthMode(null)
-      setAuthUser('')
-      setAuthPass('')
-      await refreshHistory()
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : '操作失败')
-    } finally {
-      setAuthBusy(false)
-    }
-  }
-
-  const logout = async () => {
-    clearIdentity()
-    setIdentity(null)
-    await ensureIdentity()
   }
 
   return (
@@ -290,54 +210,6 @@ export default function RoomPage() {
             </p>
           </div>
 
-          {authMode && identity ? (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                void submitAuth()
-              }}
-              className='shrink-0 space-y-2 border-b border-zinc-800 bg-zinc-950/40 p-3'
-            >
-              <div className='flex items-center justify-between'>
-                <p className='text-sm font-medium text-zinc-300'>
-                  {authMode === 'register' ? '注册账号' : '登录账号'}
-                </p>
-                <button
-                  type='button'
-                  onClick={() => {
-                    setAuthMode(null)
-                    setAuthError('')
-                  }}
-                  className='text-xs text-zinc-500 hover:text-zinc-300'
-                >
-                  取消
-                </button>
-              </div>
-              <input
-                value={authUser}
-                onChange={(e) => setAuthUser(e.target.value)}
-                placeholder='用户名'
-                autoFocus
-                className='w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm outline-none focus:border-zinc-500'
-              />
-              <input
-                value={authPass}
-                onChange={(e) => setAuthPass(e.target.value)}
-                placeholder='密码（至少 4 位）'
-                type='password'
-                className='w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm outline-none focus:border-zinc-500'
-              />
-              {authError && <p className='text-xs text-red-400'>{authError}</p>}
-              <button
-                type='submit'
-                disabled={authBusy || !authUser.trim() || !authPass}
-                className='w-full rounded-lg bg-blue-600 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40'
-              >
-                {authBusy ? '处理中…' : authMode === 'register' ? '注册并绑定当前身份' : '登录并合并聊天记录'}
-              </button>
-            </form>
-          ) : null}
-
           <div ref={chatRef} className='min-h-0 flex-1 overflow-y-auto px-4 py-3'>
             {messages.length === 0 ? (
               <p className='py-10 text-center text-sm text-zinc-500'>
@@ -390,6 +262,8 @@ export default function RoomPage() {
           </div>
         </section>
       </div>
+
+      {authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} />}
     </main>
   )
 }

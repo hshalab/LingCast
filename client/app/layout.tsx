@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { IdentityProvider } from '@/lib/identity'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -11,7 +12,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang='zh-CN'>
-      <body className='min-h-screen antialiased'>{children}</body>
+      <body className='min-h-screen antialiased'>
+        <IdentityProvider>{children}</IdentityProvider>
+      </body>
     </html>
   )
 }

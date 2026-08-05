@@ -2,7 +2,7 @@ import axios from 'axios'
 import Player from 'xgplayer'
 import 'xgplayer/dist/index.min.css'
 import FlvPlugin from 'xgplayer-flv'
-import { Copy, Eye, EyeOff, LoaderCircle, Power, PowerOff, Send, Video } from 'lucide-react'
+import { Copy, Eye, EyeOff, LoaderCircle, Power, PowerOff, Send, Video, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -55,7 +55,10 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
   const [status, setStatus] = useState<LiveStatus | null>(null)
   const [started, setStarted] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [monitorOn, setMonitorOn] = useState(false)
+  const [monitorOpen, setMonitorOpen] = useState(false)
+  const [monitorPos, setMonitorPos] = useState<{ x: number; y: number } | null>(null)
+  const winRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [liveSettings, setLiveSettings] = useState<LiveSettings>({
     subtitleEnabled: true,
@@ -149,10 +152,10 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
     }
   }, [id])
 
-  // HTTP-FLV player (xgplayer + flv plugin) — only while the stream is on AND
-  // the monitor toggle is enabled (default off to save resources).
+  // HTTP-FLV player (xgplayer + flv plugin) — only while the floating monitor
+  // is open AND the stream is on (default closed to save resources).
   useEffect(() => {
-    if (!id || !started || !monitorOn || !playerHostRef.current) return
+    if (!id || !started || !monitorOpen || !playerHostRef.current) return
     const player = new Player({
       el: playerHostRef.current,
       url: streamUrl,
@@ -168,7 +171,48 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       player.destroy()
       playerRef.current = null
     }
-  }, [id, started, monitorOn, streamUrl])
+  }, [id, started, monitorOpen, streamUrl])
+
+  // Open the floating window at a sensible default spot the first time.
+  const openMonitor = () => {
+    if (!monitorPos) {
+      setMonitorPos({
+        x: Math.max(8, window.innerWidth - 340 - 24),
+        y: Math.max(8, window.innerHeight - 340 * (16 / 9) - 96),
+      })
+    }
+    setMonitorOpen(true)
+  }
+
+  // Drag the floating window by its header bar.
+  const onHeaderMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const rect = winRef.current?.getBoundingClientRect()
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: rect?.left ?? 0,
+      origY: rect?.top ?? 0,
+    }
+    window.addEventListener('mousemove', onDragMove)
+    window.addEventListener('mouseup', onDragEnd)
+  }
+
+  const onDragMove = (e: MouseEvent) => {
+    const d = dragRef.current
+    if (!d) return
+    setMonitorPos({
+      x: Math.min(window.innerWidth - 60, Math.max(-340 + 40, d.origX + e.clientX - d.startX)),
+      y: Math.min(window.innerHeight - 40, Math.max(0, d.origY + e.clientY - d.startY)),
+    })
+  }
+
+  const onDragEnd = () => {
+    dragRef.current = null
+    window.removeEventListener('mousemove', onDragMove)
+    window.removeEventListener('mouseup', onDragEnd)
+  }
 
   // Persisted chat feed (viewer id/username + bot replies), refreshed every 3s.
   useEffect(() => {
@@ -373,47 +417,8 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
             </CardContent>
           </Card>
 
-          {/* Player */}
-          <Card className='lg:col-span-2'>
-            <CardHeader className='flex-row items-center justify-between space-y-0'>
-              <CardTitle>直播画面</CardTitle>
-              <div className='flex items-center gap-2'>
-                <Badge variant='outline'>
-                  <Video className='me-1 size-3.5' />
-                  HTTP-FLV
-                </Badge>
-                <Button
-                  size='sm'
-                  variant={monitorOn ? 'default' : 'outline'}
-                  onClick={() => setMonitorOn((v) => !v)}
-                >
-                  {monitorOn ? <EyeOff className='size-4' /> : <Eye className='size-4' />}
-                  {monitorOn ? '关闭监看' : '开启监看'}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className='flex justify-center'>
-                {monitorOn ? (
-                  <div
-                    ref={playerHostRef}
-                    className='aspect-[9/16] w-full max-w-[720px] rounded-lg border bg-black'
-                  />
-                ) : (
-                  <button
-                    onClick={() => setMonitorOn(true)}
-                    className='flex aspect-[9/16] w-full max-w-[720px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/40 text-sm text-muted-foreground transition hover:bg-muted'
-                  >
-                    <Eye className='size-8' />
-                    画面监看默认关闭，点击开启
-                  </button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Right: queue + input */}
-          <div className='flex flex-col gap-4'>
+          {/* Right: queue / chat / settings / input (2x2 on wide screens) */}
+          <div className='grid gap-4 lg:col-span-3 lg:grid-cols-2'>
             <Card>
               <CardHeader className='gap-1'>
                 <CardTitle>待渲染队列</CardTitle>
@@ -623,6 +628,60 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
           </div>
         </div>
       </Main>
+
+      {/* Floating monitor: round FAB bottom-right; click opens a draggable 9:16 window. */}
+      <button
+        onClick={() => (monitorOpen ? setMonitorOpen(false) : openMonitor())}
+        className='fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition hover:bg-primary/90'
+        title={monitorOpen ? '关闭画面监看' : '开启画面监看'}
+      >
+        {monitorOpen ? <EyeOff className='size-6' /> : <Eye className='size-6' />}
+        {started && (
+          <span className='absolute right-1 top-1 size-3 rounded-full bg-red-500 ring-2 ring-background' />
+        )}
+      </button>
+
+      {monitorOpen && (
+        <div
+          ref={winRef}
+          style={{
+            left: monitorPos?.x ?? 0,
+            top: monitorPos?.y ?? 0,
+            width: 340,
+          }}
+          className='fixed z-50 overflow-hidden rounded-xl border bg-background shadow-2xl'
+        >
+          <div
+            onMouseDown={onHeaderMouseDown}
+            className='flex cursor-move items-center justify-between border-b bg-muted/60 px-3 py-2'
+          >
+            <span className='flex items-center gap-1.5 text-xs font-medium'>
+              <Video className='size-3.5' />
+              画面监看
+              {started && <span className='size-1.5 animate-pulse rounded-full bg-red-500' />}
+            </span>
+            <button
+              onClick={() => setMonitorOpen(false)}
+              className='rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground'
+              title='关闭'
+            >
+              <X className='size-4' />
+            </button>
+          </div>
+          <div className='p-2'>
+            {started ? (
+              <div className='aspect-[9/16] w-full overflow-hidden rounded-lg border bg-black'>
+                <div ref={playerHostRef} className='h-full w-full' />
+              </div>
+            ) : (
+              <div className='flex aspect-[9/16] w-full flex-col items-center justify-center gap-2 rounded-lg border bg-muted/40 text-sm text-muted-foreground'>
+                <Eye className='size-6' />
+                未开播
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   )
 }

@@ -54,6 +54,7 @@ export function AvatarStudio() {
     return cached
   })
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID)
+  const [category, setCategory] = useState('闲聊')
   const [submitting, setSubmitting] = useState(false)
   const [previewing, setPreviewing] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -121,6 +122,7 @@ export function AvatarStudio() {
       form.append('name', name.trim())
       form.append('image', imageFile)
       form.append('voice_id', voiceId)
+      form.append('category', category)
       const { data } = await api.post<Avatar>('/avatars', form)
       setCreated(data)
       setSubmitting(false)
@@ -241,6 +243,25 @@ export function AvatarStudio() {
                   </div>
                   <p className='text-xs text-muted-foreground'>
                     当前：{selectedVoice?.label ?? voiceId}（Edge-TTS，云端合成，无需 GPU）
+                  </p>
+                </div>
+
+                <div className='flex flex-col gap-2'>
+                  <Label htmlFor='avatar-category'>直播分类</Label>
+                  <Select value={category} onValueChange={setCategory} disabled={isInitializing}>
+                    <SelectTrigger id='avatar-category' className='w-full'>
+                      <SelectValue placeholder='选择分类' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['闲聊', '知识', '娱乐', '游戏', '带货', '其他'].map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className='text-xs text-muted-foreground'>
+                    观看端首页按此分类筛选直播。
                   </p>
                 </div>
 

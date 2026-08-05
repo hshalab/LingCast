@@ -79,6 +79,7 @@ type liveStatusResponse struct {
 type liveSessionItem struct {
 	AvatarID       uint                `json:"avatarId"`
 	AvatarName     string              `json:"avatarName"`
+	Category       string              `json:"category"`
 	ImageS3URL     string              `json:"imageS3Url"`
 	ImageS3Key     string              `json:"imageS3Key"`
 	BaseVideoS3Key string              `json:"baseVideoS3Key"`
@@ -425,6 +426,7 @@ func (h *LiveHandler) ListSessions(c *gin.Context) {
 		}
 		if err := h.db.First(&avatar, s.AvatarID).Error; err == nil {
 			item.AvatarName = avatar.Name
+			item.Category = normalizeCategory(avatar.Category)
 			item.ImageS3URL = h.s3.PublicURL(avatar.ImageS3Key)
 			item.ImageS3Key = avatar.ImageS3Key
 			item.VoiceID = avatar.VoiceID
