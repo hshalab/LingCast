@@ -333,7 +333,7 @@ export default function RoomPage() {
                 {messages.slice(-3).map((m) => (
                   <span
                     key={m.id}
-                    className='max-w-[85%] truncate rounded-full bg-black/55 px-3 py-1.5 text-xs text-white/95 backdrop-blur'
+                    className='max-w-[85%] whitespace-normal break-words rounded-2xl bg-black/55 px-3 py-1.5 text-xs leading-relaxed text-white/95 backdrop-blur'
                   >
                     <span
                       className={
@@ -437,8 +437,8 @@ export default function RoomPage() {
                         <div
                           className={`mt-0.5 rounded-2xl rounded-tl-sm px-3.5 py-2 text-sm leading-relaxed ${
                             m.role === 'bot'
-                              ? 'bg-gradient-to-br from-violet-600/25 to-blue-600/15 text-foreground'
-                              : 'bg-muted/80 text-foreground'
+                              ? 'border border-violet-500/20 bg-violet-500/10 text-foreground'
+                              : 'bg-gradient-to-br from-blue-600 to-violet-600 text-white'
                           }`}
                         >
                           {m.content}

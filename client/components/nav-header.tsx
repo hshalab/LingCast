@@ -19,7 +19,11 @@ export default function NavHeader() {
         <div className='mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6'>
           <Link href='/' className='flex items-center gap-2'>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src='/logo.svg' alt='灵播' className='size-9 rounded-xl' />
+            <img
+              src={theme === 'dark' ? '/logo-white.svg' : '/logo.svg'}
+              alt='灵播'
+              className='size-9 rounded-xl'
+            />
             <span className='text-lg font-bold tracking-tight'>灵播</span>
             <span className='hidden rounded-md bg-white/5 px-1.5 py-0.5 text-xs text-muted sm:inline'>
               数字人直播
