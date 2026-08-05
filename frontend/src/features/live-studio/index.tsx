@@ -90,7 +90,8 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       type: 'flv',
       isLive: true,
       autoplay: true,
-      fluid: true,
+      width: '100%',
+      height: '100%',
       plugins: [FlvPlugin],
     })
     playerRef.current = player

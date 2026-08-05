@@ -182,6 +182,8 @@ class LiveAvatarSession:
         if self.talking is not None:
             if self._feed_talking_block():
                 self.talking = None
+                # Subtitle disappears together with the audio of the chunk.
+                self._subtitle_text = ""
                 logger.info("avatar %s back to idle", self.avatar_id)
         else:
             self._feed_idle_block()
