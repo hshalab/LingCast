@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -172,4 +173,52 @@ func (h *ChatHandler) History(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": msgs})
+}
+
+type userListItem struct {
+	ID           uint      `json:"id"`
+	Username     string    `json:"username"`
+	IsGuest      bool      `json:"isGuest"`
+	MessageCount int64     `json:"messageCount"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// ListUsers handles GET /api/users — the persisted chat users (guests and
+// registered accounts) with their message counts, newest first.
+func (h *ChatHandler) ListUsers(c *gin.Context) {
+	var users []models.ChatUser
+	if err := h.db.Order("id desc").Limit(500).Find(&users).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	type countRow struct {
+		UserID uint
+		C      int64
+	}
+	var counts []countRow
+	if err := h.db.Model(&models.ChatMessage{}).
+		Select("user_id, count(*) as c").
+		Where("role = ?", "user").
+		Group("user_id").
+		Scan(&counts).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	msgCount := make(map[uint]int64, len(counts))
+	for _, row := range counts {
+		msgCount[row.UserID] = row.C
+	}
+
+	items := make([]userListItem, 0, len(users))
+	for _, u := range users {
+		items = append(items, userListItem{
+			ID:           u.ID,
+			Username:     u.Username,
+			IsGuest:      u.IsGuest,
+			MessageCount: msgCount[u.ID],
+			CreatedAt:    u.CreatedAt,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"data": items})
 }

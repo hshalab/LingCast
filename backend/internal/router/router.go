@@ -70,6 +70,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		api.POST("/chat/register", chatHandler.Register)
 		api.POST("/chat/login", chatHandler.Login)
 		api.GET("/chat/history", chatHandler.History)
+		api.GET("/users", chatHandler.ListUsers)
 	}
 
 	r.GET("/healthz", func(c *gin.Context) {
