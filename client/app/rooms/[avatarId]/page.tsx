@@ -49,7 +49,9 @@ export default function RoomPage() {
   const [sending, setSending] = useState(false)
   const [likes, setLikes] = useState(0)
   const [hearts, setHearts] = useState<{ id: number; x: number }[]>([])
+  const [hasNew, setHasNew] = useState(false)
   const likeId = useRef(0)
+  const stickRef = useRef(true)
   const chatRef = useRef<HTMLDivElement>(null)
   const streamUrl = `/live/avatar_${id}.flv`
 
@@ -108,10 +110,32 @@ export default function RoomPage() {
     return () => window.clearInterval(timer)
   }, [refreshHistory])
 
-  // Keep the chat scrolled to the latest message.
+  // Chat scroll: only auto-scroll when the viewer is at the bottom. If they
+  // scrolled up to read history, new messages show a "有新消息" button instead
+  // of yanking the scroll position.
+  const onChatScroll = () => {
+    const el = chatRef.current
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+    stickRef.current = nearBottom
+    if (nearBottom) setHasNew(false)
+  }
+
   useEffect(() => {
-    chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight })
+    const el = chatRef.current
+    if (!el) return
+    if (stickRef.current) {
+      el.scrollTo({ top: el.scrollHeight })
+    } else if (messages.length > 0) {
+      setHasNew(true)
+    }
   }, [messages])
+
+  const scrollToLatest = () => {
+    stickRef.current = true
+    setHasNew(false)
+    chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight })
+  }
 
   const send = async () => {
     const text = input.trim()
@@ -176,56 +200,35 @@ export default function RoomPage() {
 
           {/* 数字人详情：靠右的纵向资料卡 */}
           {avatar && (
-            <div className='ml-auto shrink-0 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-xs backdrop-blur'>
-              <p className='font-semibold text-white'>
+            <div className='ml-auto flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-2 text-xs backdrop-blur'>
+              <span className='whitespace-nowrap font-semibold text-white'>
                 {avatar.name} <span className='text-zinc-500'>#{avatar.id}</span>
-              </p>
-              <div className='mt-2 flex flex-col gap-1.5 text-zinc-400'>
-                {avatar.category && (
-                  <span className='flex items-center gap-2'>
-                    <span className='w-10 shrink-0 text-zinc-600'>分类</span>
-                    <span className='rounded-md bg-white/5 px-1.5 py-0.5 text-zinc-300'>
-                      {avatar.category}
-                    </span>
-                  </span>
-                )}
-                {avatar.age != null && (
-                  <span>
-                    <span className='mr-2 text-zinc-600'>年龄</span>
-                    {avatar.age}岁
-                  </span>
-                )}
-                {avatar.heightCm != null && (
-                  <span>
-                    <span className='mr-2 text-zinc-600'>身高</span>
-                    {avatar.heightCm}cm
-                  </span>
-                )}
-                {avatar.weightKg != null && (
-                  <span>
-                    <span className='mr-2 text-zinc-600'>体重</span>
-                    {avatar.weightKg}kg
-                  </span>
-                )}
-                {avatar.ethnicity && (
-                  <span>
-                    <span className='mr-2 text-zinc-600'>族裔</span>
-                    {avatar.ethnicity}
-                  </span>
-                )}
-                {avatar.relationshipStatus && (
-                  <span>
-                    <span className='mr-2 text-zinc-600'>感情</span>
-                    {avatar.relationshipStatus}
-                  </span>
-                )}
-                {avatar.personality && (
-                  <span>
-                    <span className='mr-2 text-zinc-600'>性格</span>
-                    {avatar.personality}
-                  </span>
-                )}
-              </div>
+              </span>
+              {avatar.category && (
+                <span className='whitespace-nowrap rounded-md bg-white/5 px-1.5 py-0.5 text-zinc-300'>
+                  {avatar.category}
+                </span>
+              )}
+              {avatar.age != null && (
+                <span className='whitespace-nowrap text-zinc-400'>年龄 {avatar.age}岁</span>
+              )}
+              {avatar.heightCm != null && (
+                <span className='whitespace-nowrap text-zinc-400'>身高 {avatar.heightCm}cm</span>
+              )}
+              {avatar.weightKg != null && (
+                <span className='whitespace-nowrap text-zinc-400'>体重 {avatar.weightKg}kg</span>
+              )}
+              {avatar.ethnicity && (
+                <span className='whitespace-nowrap text-zinc-400'>族裔 {avatar.ethnicity}</span>
+              )}
+              {avatar.relationshipStatus && (
+                <span className='whitespace-nowrap text-zinc-400'>
+                  感情 {avatar.relationshipStatus}
+                </span>
+              )}
+              {avatar.personality && (
+                <span className='whitespace-nowrap text-zinc-400'>性格 {avatar.personality}</span>
+              )}
             </div>
           )}
         </div>
@@ -306,7 +309,19 @@ export default function RoomPage() {
               </div>
             </div>
 
-            <div ref={chatRef} className='min-h-0 flex-1 overflow-y-auto px-3 py-3'>
+            <div
+              ref={chatRef}
+              onScroll={onChatScroll}
+              className='relative min-h-0 flex-1 overflow-y-auto px-3 py-3'
+            >
+              {hasNew && (
+                <button
+                  onClick={scrollToLatest}
+                  className='absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-200 shadow-lg transition hover:border-blue-500 hover:text-blue-300'
+                >
+                  有新消息
+                </button>
+              )}
               {messages.length === 0 ? (
                 <p className='py-10 text-center text-sm text-zinc-500'>
                   还没有消息，说点什么吧
