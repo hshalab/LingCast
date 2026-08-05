@@ -67,3 +67,26 @@ type LiveSession struct {
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
+
+// ChatUser is a chat identity. Guests are auto-created rows without a
+// password; registering upgrades the guest row (same ID -> history kept),
+// logging in merges the guest's messages into the existing account.
+type ChatUser struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	Username     string    `gorm:"size:64;not null;uniqueIndex" json:"username"`
+	PasswordHash string    `gorm:"size:255" json:"-"`
+	IsGuest      bool      `gorm:"not null;default:true;index" json:"isGuest"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// ChatMessage is one persisted line of a room chat: a viewer message or the
+// bot's reply (role = user | bot, username snapshot at send time).
+type ChatMessage struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	AvatarID  uint      `gorm:"not null;index" json:"avatarId"`
+	UserID    uint      `gorm:"not null;index" json:"userId"`
+	Username  string    `gorm:"size:64;not null" json:"username"`
+	Role      string    `gorm:"size:16;not null;index" json:"role"` // user | bot
+	Content   string    `gorm:"type:text;not null" json:"content"`
+	CreatedAt time.Time `json:"createdAt"`
+}

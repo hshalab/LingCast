@@ -2,7 +2,7 @@ import axios from 'axios'
 import Player from 'xgplayer'
 import 'xgplayer/dist/index.min.css'
 import FlvPlugin from 'xgplayer-flv'
-import { Copy, LoaderCircle, Power, PowerOff, Send, Video } from 'lucide-react'
+import { Copy, Eye, EyeOff, LoaderCircle, Power, PowerOff, Send, Video } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -20,7 +20,13 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
-import { api, type Avatar, type LiveSessionItem, type LiveStatus } from '@/lib/api'
+import {
+  api,
+  type Avatar,
+  type ChatMessage,
+  type LiveSessionItem,
+  type LiveStatus,
+} from '@/lib/api'
 
 function showApiError(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -38,6 +44,8 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
   const [status, setStatus] = useState<LiveStatus | null>(null)
   const [started, setStarted] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [monitorOn, setMonitorOn] = useState(false)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [avatars, setAvatars] = useState<Avatar[]>([])
@@ -81,9 +89,10 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
     }
   }, [id])
 
-  // HTTP-FLV player (xgplayer + flv plugin) — only while the stream is on.
+  // HTTP-FLV player (xgplayer + flv plugin) — only while the stream is on AND
+  // the monitor toggle is enabled (default off to save resources).
   useEffect(() => {
-    if (!id || !started || !playerHostRef.current) return
+    if (!id || !started || !monitorOn || !playerHostRef.current) return
     const player = new Player({
       el: playerHostRef.current,
       url: streamUrl,
@@ -99,7 +108,29 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       player.destroy()
       playerRef.current = null
     }
-  }, [id, started, streamUrl])
+  }, [id, started, monitorOn, streamUrl])
+
+  // Persisted chat feed (viewer id/username + bot replies), refreshed every 3s.
+  useEffect(() => {
+    if (!id) return
+    let stopped = false
+    const load = async () => {
+      try {
+        const { data } = await api.get<{ data: ChatMessage[] }>('/chat/history', {
+          params: { avatarId: id },
+        })
+        if (!stopped) setChatMessages(data.data)
+      } catch {
+        // keep previous state
+      }
+    }
+    void load()
+    const timer = window.setInterval(load, 3000)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+    }
+  }, [id])
 
   // Queue monitor: refresh every second.
   useEffect(() => {
@@ -286,17 +317,37 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
           <Card className='lg:col-span-2'>
             <CardHeader className='flex-row items-center justify-between space-y-0'>
               <CardTitle>直播画面</CardTitle>
-              <Badge variant='outline'>
-                <Video className='me-1 size-3.5' />
-                HTTP-FLV
-              </Badge>
+              <div className='flex items-center gap-2'>
+                <Badge variant='outline'>
+                  <Video className='me-1 size-3.5' />
+                  HTTP-FLV
+                </Badge>
+                <Button
+                  size='sm'
+                  variant={monitorOn ? 'default' : 'outline'}
+                  onClick={() => setMonitorOn((v) => !v)}
+                >
+                  {monitorOn ? <EyeOff className='size-4' /> : <Eye className='size-4' />}
+                  {monitorOn ? '关闭监看' : '开启监看'}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className='flex justify-center'>
-                <div
-                  ref={playerHostRef}
-                  className='aspect-[9/16] w-full max-w-[720px] rounded-lg border bg-black'
-                />
+                {monitorOn ? (
+                  <div
+                    ref={playerHostRef}
+                    className='aspect-[9/16] w-full max-w-[720px] rounded-lg border bg-black'
+                  />
+                ) : (
+                  <button
+                    onClick={() => setMonitorOn(true)}
+                    className='flex aspect-[9/16] w-full max-w-[720px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/40 text-sm text-muted-foreground transition hover:bg-muted'
+                  >
+                    <Eye className='size-8' />
+                    画面监看默认关闭，点击开启
+                  </button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -320,6 +371,43 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                     {status?.pending.map((item, i) => (
                       <li key={`${i}-${item}`} className='line-clamp-2 text-muted-foreground'>
                         {item}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className='gap-1'>
+                <CardTitle>聊天记录</CardTitle>
+                <CardDescription>观众 ID/用户名与机器人回复实时刷新。</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {chatMessages.length === 0 ? (
+                  <p className='py-4 text-center text-sm text-muted-foreground'>
+                    暂无聊天消息
+                  </p>
+                ) : (
+                  <ol className='max-h-72 space-y-2 overflow-y-auto'>
+                    {chatMessages.map((m) => (
+                      <li
+                        key={m.id}
+                        className={`rounded-lg p-2 ${
+                          m.role === 'bot' ? 'bg-muted/70' : 'bg-transparent'
+                        }`}
+                      >
+                        <p className='text-xs text-muted-foreground'>
+                          {m.role === 'bot'
+                            ? `🤖 ${m.username}`
+                            : `${m.username} #${m.userId}`}
+                          {' · '}
+                          {new Date(m.createdAt).toLocaleTimeString('zh-CN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                        <p className='mt-0.5 break-words text-sm'>{m.content}</p>
                       </li>
                     ))}
                   </ol>

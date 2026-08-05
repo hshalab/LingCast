@@ -49,6 +49,16 @@ export type LiveMessageResponse = {
   chunkCount: number
 }
 
+export type ChatMessage = {
+  id: number
+  avatarId: number
+  userId: number
+  username: string
+  role: 'user' | 'bot'
+  content: string
+  createdAt: string
+}
+
 // In the dockerized setup the app and the API share the nginx origin, so the
 // base URL defaults to '' (same origin, proxied via /api). For local Vite
 // development set VITE_API_BASE_URL to the nginx/app origin, e.g.

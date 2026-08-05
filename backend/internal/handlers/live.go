@@ -48,7 +48,9 @@ type pushLiveRequest struct {
 }
 
 type liveMessageRequest struct {
-	Text string `json:"text"`
+	Text     string `json:"text"`
+	UserID   uint   `json:"userId"`
+	Username string `json:"username"`
 }
 
 type liveMessageResponse struct {
@@ -279,12 +281,35 @@ func (h *LiveHandler) Message(c *gin.Context) {
 		return
 	}
 
+	// Persist the viewer message (identity comes from the audience client;
+	// 直播台 test messages fall back to a guest-ish snapshot).
+	sender := strings.TrimSpace(req.Username)
+	if sender == "" {
+		sender = "游客"
+	}
+	_ = h.db.Create(&models.ChatMessage{
+		AvatarID: avatar.ID,
+		UserID:   req.UserID,
+		Username: sender,
+		Role:     "user",
+		Content:  strings.TrimSpace(req.Text),
+	})
+
 	reply := h.llmChat(c, req.Text, avatar.Name)
 	chunks := splitSentences(reply)
 	if len(chunks) == 0 {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "llm returned empty reply"})
 		return
 	}
+
+	// Persist the bot's full reply as one message (monitor shows the whole
+	// reply; the worker speaks it sentence by sentence).
+	_ = h.db.Create(&models.ChatMessage{
+		AvatarID: avatar.ID,
+		Username: avatar.Name,
+		Role:     "bot",
+		Content:  reply,
+	})
 
 	key := liveQueueKey(avatar.ID)
 	historyKey := liveHistoryKey(avatar.ID)

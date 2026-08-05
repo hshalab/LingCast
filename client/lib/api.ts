@@ -20,6 +20,22 @@ export type LiveMessageResponse = {
   chunkCount: number
 }
 
+export type ChatIdentity = {
+  userId: number
+  username: string
+  isGuest: boolean
+}
+
+export type ChatMessage = {
+  id: number
+  avatarId: number
+  userId: number
+  username: string
+  role: 'user' | 'bot'
+  content: string
+  createdAt: string
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
@@ -50,9 +66,46 @@ export function getLiveStatus(avatarId: number): Promise<LiveStatus> {
 export function sendMessage(
   avatarId: number,
   text: string,
+  identity: ChatIdentity,
 ): Promise<LiveMessageResponse> {
   return request(`/api/live/${avatarId}/message`, {
     method: 'POST',
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({
+      text,
+      userId: identity.userId,
+      username: identity.username,
+    }),
   })
+}
+
+export function createGuestIdentity(): Promise<ChatIdentity> {
+  return request('/api/chat/guest', { method: 'POST' })
+}
+
+export function registerIdentity(
+  guestUserId: number,
+  username: string,
+  password: string,
+): Promise<ChatIdentity> {
+  return request('/api/chat/register', {
+    method: 'POST',
+    body: JSON.stringify({ guestUserId, username, password }),
+  })
+}
+
+export function loginIdentity(
+  guestUserId: number,
+  username: string,
+  password: string,
+): Promise<ChatIdentity> {
+  return request('/api/chat/login', {
+    method: 'POST',
+    body: JSON.stringify({ guestUserId, username, password }),
+  })
+}
+
+export function fetchChatHistory(
+  avatarId: number,
+): Promise<{ data: ChatMessage[] }> {
+  return request(`/api/chat/history?avatarId=${avatarId}`)
 }

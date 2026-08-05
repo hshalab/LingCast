@@ -33,6 +33,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 
 	avatarHandler := handlers.NewAvatarHandler(db, s3, q, cfg.AvatarInitQueueKey)
 	taskHandler := handlers.NewTaskHandler(db, q, s3)
+	chatHandler := handlers.NewChatHandler(db)
 	liveHandler := handlers.NewLiveHandler(
 		db, q, s3, cfg.LiveControlQueueKey,
 		cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel,
@@ -63,6 +64,11 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		api.POST("/live/:avatarID/push", liveHandler.Push)
 		api.POST("/live/:avatarID/message", liveHandler.Message)
 		api.GET("/live/:avatarID/status", liveHandler.Status)
+		// Audience chat identity + persisted room history.
+		api.POST("/chat/guest", chatHandler.Guest)
+		api.POST("/chat/register", chatHandler.Register)
+		api.POST("/chat/login", chatHandler.Login)
+		api.GET("/chat/history", chatHandler.History)
 	}
 
 	r.GET("/healthz", func(c *gin.Context) {
