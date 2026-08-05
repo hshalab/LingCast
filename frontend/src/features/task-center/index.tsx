@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -65,6 +66,8 @@ export function TaskCenter() {
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [tasks, setTasks] = useState<BroadcastTask[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedAvatars, setSelectedAvatars] = useState<Set<number>>(new Set())
+  const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set())
 
   const load = useCallback(async () => {
     try {
@@ -87,6 +90,16 @@ export function TaskCenter() {
     return () => window.clearInterval(timer)
   }, [load])
 
+  // Drop selections whose rows disappeared after a refresh.
+  useEffect(() => {
+    setSelectedAvatars(
+      (prev) => new Set([...prev].filter((id) => avatars.some((a) => a.id === id))),
+    )
+    setSelectedTasks(
+      (prev) => new Set([...prev].filter((id) => tasks.some((t) => t.id === id))),
+    )
+  }, [avatars, tasks])
+
   const runAction = async (fn: () => Promise<unknown>, success: string) => {
     try {
       await fn()
@@ -96,6 +109,50 @@ export function TaskCenter() {
       showApiError(error)
     }
   }
+
+  const toggleId = (
+    setter: React.Dispatch<React.SetStateAction<Set<number>>>,
+    id: number,
+  ) => {
+    setter((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const runBatch = async (
+    jobs: { id: number; fn: () => Promise<unknown> }[],
+    label: string,
+    clear: () => void,
+  ) => {
+    if (jobs.length === 0) {
+      toast.info('没有符合该操作的项目')
+      return
+    }
+    const results = await Promise.allSettled(jobs.map((job) => job.fn()))
+    const ok = results.filter((r) => r.status === 'fulfilled').length
+    toast.success(`${label}完成：成功 ${ok}/${jobs.length}`)
+    clear()
+    void load()
+  }
+
+  const avatarJobs = (
+    predicate: (a: Avatar) => boolean,
+    fn: (id: number) => Promise<unknown>,
+  ) =>
+    avatars
+      .filter((a) => selectedAvatars.has(a.id) && predicate(a))
+      .map((a) => ({ id: a.id, fn: () => fn(a.id) }))
+
+  const taskJobs = (
+    predicate: (t: BroadcastTask) => boolean,
+    fn: (id: number) => Promise<unknown>,
+  ) =>
+    tasks
+      .filter((t) => selectedTasks.has(t.id) && predicate(t))
+      .map((t) => ({ id: t.id, fn: () => fn(t.id) }))
 
   return (
     <>
@@ -140,22 +197,98 @@ export function TaskCenter() {
                 {loading ? (
                   <p className='py-8 text-center text-sm text-muted-foreground'>加载中…</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>头像</TableHead>
-                        <TableHead>音色</TableHead>
-                        <TableHead>状态</TableHead>
-                        <TableHead>创建时间</TableHead>
-                        <TableHead className='text-right'>操作</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {avatars.map((avatar) => {
-                        const meta = AVATAR_STATUS_META[avatar.status]
-                        return (
-                          <TableRow key={avatar.id}>
-                            <TableCell>
+                  <>
+                    {selectedAvatars.size > 0 && (
+                      <div className='mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-2 text-sm'>
+                        <span className='me-1 font-medium'>已选 {selectedAvatars.size} 个头像</span>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          onClick={() =>
+                            void runBatch(
+                              avatarJobs(
+                                (a) => a.status === 'initializing',
+                                (id) => api.post(`/avatars/${id}/skip`),
+                              ),
+                              '批量跳过',
+                              () => setSelectedAvatars(new Set()),
+                            )
+                          }
+                        >
+                          批量跳过
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          onClick={() =>
+                            void runBatch(
+                              avatarJobs(
+                                (a) => a.status !== 'initializing',
+                                (id) => api.post(`/avatars/${id}/retry`),
+                              ),
+                              '批量重试',
+                              () => setSelectedAvatars(new Set()),
+                            )
+                          }
+                        >
+                          批量重试/重新生成
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='destructive'
+                          onClick={() => {
+                            if (window.confirm(`确定删除选中的 ${selectedAvatars.size} 个头像？`)) {
+                              void runBatch(
+                                avatarJobs(() => true, (id) => api.delete(`/avatars/${id}`)),
+                                '批量删除',
+                                () => setSelectedAvatars(new Set()),
+                              )
+                            }
+                          }}
+                        >
+                          批量删除
+                        </Button>
+                      </div>
+                    )}
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className='w-10'>
+                            <Checkbox
+                              checked={
+                                avatars.length > 0 &&
+                                avatars.every((a) => selectedAvatars.has(a.id))
+                              }
+                              onCheckedChange={(checked) =>
+                                setSelectedAvatars(
+                                  checked
+                                    ? new Set(avatars.map((a) => a.id))
+                                    : new Set(),
+                                )
+                              }
+                            />
+                          </TableHead>
+                          <TableHead>头像</TableHead>
+                          <TableHead>音色</TableHead>
+                          <TableHead>状态</TableHead>
+                          <TableHead>创建时间</TableHead>
+                          <TableHead className='text-right'>操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {avatars.map((avatar) => {
+                          const meta = AVATAR_STATUS_META[avatar.status]
+                          return (
+                            <TableRow key={avatar.id}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedAvatars.has(avatar.id)}
+                                  onCheckedChange={() =>
+                                    toggleId(setSelectedAvatars, avatar.id)
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>
                               <div className='flex items-center gap-3'>
                                 {avatar.imageS3Url && (
                                   <img
@@ -238,12 +371,13 @@ export function TaskCenter() {
                                   删除
                                 </Button>
                               </div>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -261,23 +395,78 @@ export function TaskCenter() {
                 ) : tasks.length === 0 ? (
                   <p className='py-8 text-center text-sm text-muted-foreground'>暂无播报任务</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>ID</TableHead>
-                        <TableHead>头像</TableHead>
-                        <TableHead>脚本</TableHead>
-                        <TableHead>状态</TableHead>
-                        <TableHead>创建时间</TableHead>
-                        <TableHead className='text-right'>操作</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tasks.map((task) => {
-                        const meta = TASK_STATUS_META[task.status]
-                        return (
-                          <TableRow key={task.id}>
-                            <TableCell>#{task.id}</TableCell>
+                  <>
+                    {selectedTasks.size > 0 && (
+                      <div className='mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-2 text-sm'>
+                        <span className='me-1 font-medium'>已选 {selectedTasks.size} 个任务</span>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          onClick={() =>
+                            void runBatch(
+                              taskJobs(
+                                (t) => t.status === 'failed',
+                                (id) => api.post(`/tasks/${id}/retry`),
+                              ),
+                              '批量重试',
+                              () => setSelectedTasks(new Set()),
+                            )
+                          }
+                        >
+                          批量重试
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='destructive'
+                          onClick={() => {
+                            if (window.confirm(`确定删除选中的 ${selectedTasks.size} 个任务？`)) {
+                              void runBatch(
+                                taskJobs(() => true, (id) => api.delete(`/tasks/${id}`)),
+                                '批量删除',
+                                () => setSelectedTasks(new Set()),
+                              )
+                            }
+                          }}
+                        >
+                          批量删除
+                        </Button>
+                      </div>
+                    )}
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className='w-10'>
+                            <Checkbox
+                              checked={
+                                tasks.length > 0 && tasks.every((t) => selectedTasks.has(t.id))
+                              }
+                              onCheckedChange={(checked) =>
+                                setSelectedTasks(
+                                  checked ? new Set(tasks.map((t) => t.id)) : new Set(),
+                                )
+                              }
+                            />
+                          </TableHead>
+                          <TableHead>ID</TableHead>
+                          <TableHead>头像</TableHead>
+                          <TableHead>脚本</TableHead>
+                          <TableHead>状态</TableHead>
+                          <TableHead>创建时间</TableHead>
+                          <TableHead className='text-right'>操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {tasks.map((task) => {
+                          const meta = TASK_STATUS_META[task.status]
+                          return (
+                            <TableRow key={task.id}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedTasks.has(task.id)}
+                                  onCheckedChange={() => toggleId(setSelectedTasks, task.id)}
+                                />
+                              </TableCell>
+                              <TableCell>#{task.id}</TableCell>
                             <TableCell>{task.avatarName ?? `#${task.avatarId}`}</TableCell>
                             <TableCell className='max-w-[260px] truncate' title={task.scriptText}>
                               {task.scriptText}
@@ -322,12 +511,13 @@ export function TaskCenter() {
                                   删除
                                 </Button>
                               </div>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </>
                 )}
               </CardContent>
             </Card>
