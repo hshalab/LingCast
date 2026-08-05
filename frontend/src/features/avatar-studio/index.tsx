@@ -229,7 +229,8 @@ export function AvatarStudio() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className='grid gap-4 lg:grid-cols-2'>
+        <form onSubmit={handleSubmit} className='flex flex-col gap-4'>
+        <div className='grid gap-4 lg:grid-cols-2'>
           <Card>
             <CardHeader>
               <CardTitle>{editing ? '编辑数字人' : '创建数字人'}</CardTitle>
@@ -361,18 +362,6 @@ export function AvatarStudio() {
                   </p>
                 </div>
 
-                <Button type='submit' disabled={submitting || isInitializing}>
-                  {submitting || isInitializing ? (
-                    <LoaderCircle className='size-4 animate-spin' />
-                  ) : (
-                    <Upload className='size-4' />
-                  )}
-                  {isInitializing
-                    ? '基础视频生成中…'
-                    : editing
-                      ? '保存修改'
-                      : '创建数字人'}
-                </Button>
             </CardContent>
           </Card>
 
@@ -465,6 +454,21 @@ export function AvatarStudio() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* 提交按钮：横跨左右两个设定区域，避免歧义 */}
+        <Button type='submit' disabled={submitting || isInitializing} className='w-full'>
+          {submitting || isInitializing ? (
+            <LoaderCircle className='size-4 animate-spin' />
+          ) : (
+            <Upload className='size-4' />
+          )}
+          {isInitializing
+            ? '基础视频生成中…'
+            : editing
+              ? '保存修改'
+              : '创建数字人'}
+        </Button>
         </form>
 
           {isInitializing && (
