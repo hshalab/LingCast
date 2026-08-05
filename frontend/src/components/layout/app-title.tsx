@@ -26,7 +26,7 @@ export function AppTitle() {
               className='grid flex-1 text-start text-sm leading-tight'
             >
               <span className='truncate font-bold'>Shadcn-Admin</span>
-              <span className='truncate text-xs'>Vite + ShadcnUI</span>
+              <span className='truncate text-xs'>灵播 · 数字人直播平台</span>
             </Link>
             <ToggleSidebar />
           </div>

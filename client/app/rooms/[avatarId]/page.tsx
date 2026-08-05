@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { Bot, Heart, Tv } from 'lucide-react'
+import { ArrowLeft, Bot, Heart, Tv } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import NavHeader from '@/components/nav-header'
 import XgFlvPlayer from '@/components/xg-player'
@@ -176,11 +176,14 @@ export default function RoomPage() {
 
   return (
     <main className='flex h-dvh flex-col overflow-hidden bg-zinc-950'>
-      <NavHeader />
+      {/* 桌面端导航（手机端全屏隐藏） */}
+      <div className='hidden lg:block'>
+        <NavHeader />
+      </div>
 
-      <div className='mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6'>
-        {/* 标题行：返回 + 直播间 #id 与 数字人详情 同行 */}
-        <div className='mb-3 flex shrink-0 flex-wrap items-start justify-between gap-3'>
+      <div className='mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-0 py-0 lg:px-4 lg:py-4'>
+        {/* 标题行（仅桌面端；手机端覆盖到画面上） */}
+        <div className='mb-3 hidden shrink-0 flex-wrap items-start justify-between gap-3 lg:flex'>
           <div className='flex shrink-0 items-center gap-3'>
             <Link
               href='/'
@@ -236,7 +239,7 @@ export default function RoomPage() {
         {/* 抖音直播式布局：左画面铺满 + 模糊背景，右聊天固定 400 */}
         <div className='flex min-h-0 flex-1 flex-col gap-3 lg:flex-row'>
           {/* 左：画面区铺满，9:16 视频居中、高度撑满，两侧模糊背景 */}
-          <div className='relative min-h-0 flex-1 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950'>
+          <div className='relative min-h-0 flex-1 overflow-hidden rounded-none border-0 bg-zinc-950 lg:rounded-3xl lg:border lg:border-zinc-800'>
             {/* 模糊背景层（根据画面） */}
             {avatar?.imageS3Url && (
               <img
@@ -265,7 +268,7 @@ export default function RoomPage() {
 
                 {/* 直播间徽标 */}
                 {started && (
-                  <span className='absolute left-2 top-2 flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-red-500 px-2 py-0.5 text-xs font-medium text-white shadow-lg shadow-red-600/30'>
+                  <span className='absolute right-2 top-2 flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-red-500 px-2 py-0.5 text-xs font-medium text-white shadow-lg shadow-red-600/30 lg:left-2 lg:right-auto lg:top-2'>
                     <span className='size-1.5 animate-pulse rounded-full bg-white' />
                     直播中
                   </span>
@@ -296,6 +299,33 @@ export default function RoomPage() {
               />
               {likes > 0 ? likes : '点赞'}
             </button>
+
+            {/* 手机端顶部覆盖：返回 + 主播头像/名字 */}
+            <div className='absolute inset-x-0 top-0 z-30 flex items-start gap-2 bg-gradient-to-b from-black/70 to-transparent p-3 lg:hidden'>
+              <Link
+                href='/'
+                className='grid size-9 shrink-0 place-items-center rounded-full bg-black/50 text-white backdrop-blur'
+              >
+                <ArrowLeft className='size-5' />
+              </Link>
+              {avatar && (
+                <div className='flex min-w-0 items-center gap-2'>
+                  {avatar.imageS3Url && (
+                    <img
+                      src={avatar.imageS3Url}
+                      alt={avatar.name}
+                      className='size-9 shrink-0 rounded-full border border-white/20 object-cover'
+                    />
+                  )}
+                  <div className='min-w-0'>
+                    <p className='truncate text-sm font-semibold text-white'>
+                      {avatar.name}
+                    </p>
+                    <p className='text-[11px] text-white/70'>直播间 #{id}</p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* 移动端（抖音式）：胶囊消息 + 覆盖式输入 */}
             <div className='absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2 px-3 pb-3 lg:hidden'>

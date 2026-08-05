@@ -11,15 +11,15 @@ import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
   user: {
-    name: '数字人平台',
+    name: '灵播 LingCast',
     email: 'talking-avatar@local',
     avatar: '/avatars/shadcn.jpg',
   },
   teams: [
     {
-      name: '数字人平台',
+      name: '灵播',
       logo: Command,
-      plan: '数字人平台',
+      plan: '数字人直播平台',
     },
   ],
   navGroups: [

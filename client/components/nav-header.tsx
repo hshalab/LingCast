@@ -19,7 +19,10 @@ export default function NavHeader() {
             <span className='grid size-9 place-items-center rounded-xl bg-blue-600 text-lg'>
               <Tv className='size-5 text-white' />
             </span>
-            <span className='text-lg font-bold tracking-tight'>数字人直播间</span>
+            <span className='text-lg font-bold tracking-tight'>灵播</span>
+            <span className='hidden rounded-md bg-white/5 px-1.5 py-0.5 text-xs text-zinc-400 sm:inline'>
+              数字人直播
+            </span>
           </Link>
 
           <div className='flex items-center gap-2'>
