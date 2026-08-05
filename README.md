@@ -6,6 +6,9 @@
 输出带声音的视频/推流；观众端可观看直播、发消息，数字人通过 **DeepSeek LLM** 实时回复
 并开口说话。
 
+> 📚 [架构文档](docs/技术需求与架构文档.md) · [Roadmap / TODO](docs/TODO.md) ·
+> [开发交接说明](AGENTS.md)
+
 ## 架构
 
 ```text
@@ -46,51 +49,68 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
 
 ## 已实现功能
 
-- **Avatar Studio（创建）**：形象名称 + 头像展示 + 图片上传 + Edge-TTS 音色选择
+- [x] **Avatar Studio（创建）**：形象名称 + 头像展示 + 图片上传 + Edge-TTS 音色选择
   （列表缓存于 localStorage，默认中文女声晓晓），可填**人物设定**（年龄/身高/体重/
   族裔/感情状态/性格），提交后显示「基础视频生成中…」并轮询状态。
-- **数字人编辑**：数字人列表卡片「编辑」跳转到 Avatar Studio（`?edit=<id>`）预填
+- [x] **数字人编辑**：数字人列表卡片「编辑」跳转到 Avatar Studio（`?edit=<id>`）预填
   信息，保存即 PUT 更新（形象图片不更换）；删除用系统 AlertDialog 确认。
-- **管理员账号**：登录后可在「账号设置」修改显示名字与密码（持久化到 `admin_users`
+- [x] **管理员账号**：登录后可在「账号设置」修改显示名字与密码（持久化到 `admin_users`
   表，重启不丢）。
-- **Broadcast（离线播报）**：选择已就绪数字人 + 输入脚本 → 提交任务 → 轮询 →
+- [x] **Broadcast（离线播报）**：选择已就绪数字人 + 输入脚本 → 提交任务 → 轮询 →
   状态卡片内嵌 **xgplayer** 播放成品（9:16 竖版，最大 720×1080，模态窗播放）。
-- **客户端直播间（观众端）**：独立 Next.js + TailwindCSS 项目（`client/`，端口
+- [x] **客户端直播间（观众端）**：独立 Next.js + TailwindCSS 项目（`client/`，端口
   **3000**，不属于管理后台）：首页有导航头（游客/账号身份、注册/登录/退出）与
   **分类筛选**，列出所有开播机器人（`GET /api/live`）；进入 `/rooms/:avatarId`
   后 xgplayer 拉 HTTP-FLV 观看，聊天面板按用户展示 `用户名 #ID`，可直接向数字人
   发消息（`POST /api/live/:id/message`）。`/api` 与 `/live` 由 Next 路由处理器在
   服务端代理，浏览器无 CORS 负担。
-- **抖音式直播间**：桌面端左侧画面铺满 + 模糊背景、9:16 视频居中、右侧聊天固定
+- [x] **抖音式直播间**：桌面端左侧画面铺满 + 模糊背景、9:16 视频居中、右侧聊天固定
   400px；手机端全屏（隐藏导航）、返回与主播头像覆盖在画面上、胶囊消息 + 覆盖式
   输入框、点赞爱心动画；聊天支持智能滚动（上翻历史不抢滚动，出现「有新消息」按钮）。
-- **聊天身份与记录持久化**：游客自动分配临时 ID+用户名（`POST /api/chat/guest`）；
+- [x] **聊天身份与记录持久化**：游客自动分配临时 ID+用户名（`POST /api/chat/guest`）；
   注册把当前游客身份原地升级为账号（聊天记录不丢），登录把游客消息合并进账号，
   退出后重新获取新游客身份。用户消息与机器人回复全部入库（`chat_users` /
   `chat_messages`），`GET /api/chat/history` 供两端拉取历史。
-- **直播字幕配置**：每个数字人可在 Live Studio「字幕设置」里配置是否显示字幕、
+- [x] **直播字幕配置**：每个数字人可在 Live Studio「字幕设置」里配置是否显示字幕、
   字体（`worker/fonts/` 下的文件名）、位置（顶部/底部）、描边宽度与字号，持久化为
   Avatar 的 JSON 字段 `live_settings`；保存后自动重启直播生效。
-- **管理端用户列表**：侧边栏「用户相关 → 用户列表」展示全部聊天用户
+- [x] **管理端用户列表**：侧边栏「用户相关 → 用户列表」展示全部聊天用户
   （游客/账号 + 消息数），数据来自 `GET /api/users`。
-- **亮/暗主题**：管理端默认暗色（含白色版 logo），观众端导航头可切换亮/暗并记忆。
-- **悬浮画面监看**：Live Studio 右下角圆形 FAB，点击弹出可拖动的 9:16 视频浮窗，
+- [x] **亮/暗主题**：管理端默认暗色（含白色版 logo），观众端导航头可切换亮/暗并记忆。
+- [x] **悬浮画面监看**：Live Studio 右下角圆形 FAB，点击弹出可拖动的 9:16 视频浮窗，
   默认不渲染播放器，按需开启。
-- **LLM 消息回复**：客户端消息 → OpenAI Go SDK 调 DeepSeek Responses API
+- [x] **LLM 消息回复**：客户端消息 → OpenAI Go SDK 调 DeepSeek Responses API
   （`base_url=https://api.deepseek.com`，模型 `deepseek-v4-flash`）→ 回复按句切块
   入直播队列 → TTS → 口型 → 推流；未配置 `OPENAI_API_KEY` 时原样回读输入（测试模式）。
   创建时的人物设定会作为**内置提示词**注入，观众问年龄/身高/感情状态等时按设定回答。
-- **Edge-TTS 语音合成**：GPU-free 云端神经音色，按 avatar 的 `voice_id` 选声，
+- [x] **Edge-TTS 语音合成**：GPU-free 云端神经音色，按 avatar 的 `voice_id` 选声，
   一条句子约 1-2 秒（`TTS_ENGINE=gpt-sovits` 可切回旧克隆模型）。
-- **LivePortrait 基础视频预处理**：创建数字人时生成静音 24fps 驱动视频，仅此一次。
-- **Wav2Lip(ONNX) 口型合成**：基于预生成 base 视频，嘴部逐帧匹配语音；ONNX +
+- [x] **LivePortrait 基础视频预处理**：创建数字人时生成静音 24fps 驱动视频，仅此一次。
+- [x] **Wav2Lip(ONNX) 口型合成**：基于预生成 base 视频，嘴部逐帧匹配语音；ONNX +
   CoreML 执行器，CPU 线程数受限（默认 4），短 base 自动循环覆盖任意脚本长度。
-- **动画节奏可调**：驱动模板可换、播放速度/动作幅度可调（见“动画节奏”）。
-- **基础视频去眨眼**：驱动模板眼部表情通道已冻结（不眨眼），保留耸肩/身体微晃，
+- [x] **动画节奏可调**：驱动模板可换、播放速度/动作幅度可调（见“动画节奏”）。
+- [x] **基础视频去眨眼**：驱动模板眼部表情通道已冻结（不眨眼），保留耸肩/身体微晃，
   约 3 秒一次（`LIVEPORTRAIT_DRIVING_SPEED=0.2`）。
-- **数字人分类**：Avatar 创建时可选「直播分类」（闲聊/知识/娱乐/游戏/带货/其他），
+- [x] **数字人分类**：Avatar 创建时可选「直播分类」（闲聊/知识/娱乐/游戏/带货/其他），
   观众端首页按分类筛选直播。
-- **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
+- [ ] **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
+
+## 界面截图
+
+**管理后台（灵播）**
+
+| | | |
+| --- | --- | --- |
+| ![登录页](docs/images/admin1.png) | ![数字人列表](docs/images/admin2.png) | ![创建数字人](docs/images/admin3.png) |
+| ![播报制作](docs/images/admin4.png) | ![直播台](docs/images/admin5.png) | ![悬浮监看](docs/images/admin6.png) |
+| ![任务中心](docs/images/admin7.png) | ![用户列表](docs/images/admin8.png) | ![账号设置](docs/images/admin9.png) |
+
+**观众端（灵播）**
+
+| | | |
+| --- | --- | --- |
+| ![首页](docs/images/pc1.png) | ![直播间-桌面](docs/images/pc2.png) | ![直播间-聊天](docs/images/pc3.png) |
+| ![直播间-暗色](docs/images/pc4.png) | ![直播间-亮色](docs/images/pc5.png) | |
 
 ## 新设备快速开始
 
@@ -384,6 +404,7 @@ worker/    Python 3.11 AI Worker（uv、Redis、boto3、真实/模拟管线）
   models/    gitignore：全部权重（GPT-SoVITS / LivePortrait / Wav2Lip ONNX）
 docker-compose.yml / .env.example
 AGENTS.md   开发交接说明（新设备快速接手）
+docs/       架构文档 + Roadmap（TODO.md）+ 界面截图（images/）
 ```
 
 ## 常见问题排查
