@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import queue as queue_mod
+import requests
 import shutil
 import signal
 import subprocess
@@ -400,6 +401,51 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> 
         logger.exception("failed to set up live session for %s", payload.get("streamId"))
 
 
+def _restore_sessions(api_base_url, sessions, storage, work_root, fps, r) -> None:
+    """Re-start live sessions that are persisted in the DB after a worker
+    restart (the DB row survives but the in-memory pipe does not)."""
+    url = f"{api_base_url}/api/live"
+    for attempt in range(5):
+        try:
+            resp = requests.get(url, timeout=5)
+            resp.raise_for_status()
+            items = resp.json().get("data", [])
+            for item in items:
+                aid = int(item["avatarId"])
+                if aid in sessions:
+                    continue
+                stream_id = item.get("streamId") or f"avatar_{aid}"
+                payload = {
+                    "action": "start",
+                    "avatarId": aid,
+                    "streamId": stream_id,
+                    "imageS3Key": item.get("imageS3Key", ""),
+                    "baseVideoS3Key": item.get("baseVideoS3Key", ""),
+                    "voiceId": item.get("voiceId", ""),
+                }
+                if not payload["imageS3Key"] or not payload["baseVideoS3Key"]:
+                    logger.warning(
+                        "session for avatar %s missing S3 keys, skip restore", aid
+                    )
+                    continue
+                logger.info("restoring live session for avatar %s", aid)
+                threading.Thread(
+                    target=_setup_session,
+                    args=(payload, stream_id, storage, work_root, fps, sessions, r),
+                    daemon=True,
+                    name=f"restore-{aid}",
+                ).start()
+            return
+        except Exception as exc:
+            logger.warning(
+                "live session restore attempt %d/%d failed: %s",
+                attempt + 1,
+                5,
+                exc,
+            )
+            time.sleep(5)
+
+
 def main() -> None:
     _load_local_env()
     _check_required_env()
@@ -426,6 +472,12 @@ def main() -> None:
         args=(r, control_key, sessions, storage, work_root, fps),
         daemon=True,
         name="live-control",
+    ).start()
+    threading.Thread(
+        target=_restore_sessions,
+        args=(cfg["api_base_url"], sessions, storage, work_root, fps, r),
+        daemon=True,
+        name="live-restore",
     ).start()
 
     def _shutdown(*_args):

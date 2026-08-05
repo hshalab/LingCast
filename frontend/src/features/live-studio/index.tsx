@@ -249,7 +249,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
             </CardHeader>
             <CardContent className='flex flex-col gap-2'>
               {avatars
-                .filter((avatar) => avatar.status === 'ready')
+                .filter((avatar) => Boolean(avatar.baseVideoS3Key))
                 .map((avatar) => {
                   const live = liveSessions.some((s) => s.avatarId === avatar.id)
                   const active = avatar.id === id

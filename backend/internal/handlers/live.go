@@ -57,11 +57,14 @@ type liveStatusResponse struct {
 }
 
 type liveSessionItem struct {
-	AvatarID   uint   `json:"avatarId"`
-	AvatarName string `json:"avatarName"`
-	ImageS3URL string `json:"imageS3Url"`
-	StreamID   string `json:"streamId"`
-	Status     string `json:"status"`
+	AvatarID       uint   `json:"avatarId"`
+	AvatarName     string `json:"avatarName"`
+	ImageS3URL     string `json:"imageS3Url"`
+	ImageS3Key     string `json:"imageS3Key"`
+	BaseVideoS3Key string `json:"baseVideoS3Key"`
+	VoiceID        string `json:"voiceId"`
+	StreamID       string `json:"streamId"`
+	Status         string `json:"status"`
 }
 
 func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey string) *LiveHandler {
@@ -293,6 +296,11 @@ func (h *LiveHandler) ListSessions(c *gin.Context) {
 		if err := h.db.First(&avatar, s.AvatarID).Error; err == nil {
 			item.AvatarName = avatar.Name
 			item.ImageS3URL = h.s3.PublicURL(avatar.ImageS3Key)
+			item.ImageS3Key = avatar.ImageS3Key
+			item.VoiceID = avatar.VoiceID
+			if avatar.BaseVideoS3Key != nil {
+				item.BaseVideoS3Key = *avatar.BaseVideoS3Key
+			}
 		}
 		items = append(items, item)
 	}
