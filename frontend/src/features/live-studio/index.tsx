@@ -292,7 +292,12 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
               </Badge>
             </CardHeader>
             <CardContent>
-              <div ref={playerHostRef} className='aspect-[9/16] w-full rounded-lg border bg-black' />
+              <div className='flex justify-center'>
+                <div
+                  ref={playerHostRef}
+                  className='aspect-[9/16] w-full max-w-[720px] rounded-lg border bg-black'
+                />
+              </div>
             </CardContent>
           </Card>
 
