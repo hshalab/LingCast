@@ -99,6 +99,10 @@
 - ✅ 播报成品预览：`broadcast/index.tsx` 状态卡片用内联 `XgVideo`（xgplayer），
   9:16 竖版最大 720×1080，模态窗播放。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
+- ⬜ 待实现（详见 [docs/TODO.md](docs/TODO.md) Phase 4）：口型变形修复
+  （GFPGAN/CodeFormer 嘴部局部超分 + 羽化遮罩）、口型性能与直播卡顿
+  （异步双缓冲管线 + base 动画回退）、长期记忆（Go API 滑动窗口上下文）、
+  私有知识库（RedisStack 向量检索 RAG）。
 - ⬜ Linux/CUDA 生产部署未实测（代码路径已预留）。
 
 ## 4. 目录速览

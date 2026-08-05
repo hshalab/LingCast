@@ -108,6 +108,20 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   live-room AI replies in the UI language.
 - [ ] **Mock pipeline** (`AI_MODE=mock`): lightweight placeholder for Docker Worker image demos.
 
+### Planned (roadmap)
+
+- [ ] **Lip-sync deformation fix**: instead of retraining Wav2Lip, patch only the mouth
+  bounding box with GFPGAN/CodeFormer super-resolution via a feathered mask (~80% less
+  compute than full-frame restoration).
+- [ ] **Live latency / stutter fix**: async double-buffered pipeline (producer thread →
+  frame queue → consumer FFmpeg pipe), seamlessly falling back to the base animation +
+  silence when the queue is empty so the stream never stalls.
+- [ ] **Long-term memory**: sliding-window chat context (last N messages per viewer)
+  assembled by the Go API and injected into the LLM.
+- [ ] **Private knowledge base (RAG)**: RedisStack vector search + lightweight embeddings
+  (e.g. bge-small); top-k knowledge injected into the system prompt so the avatar answers
+  strictly from the knowledge base.
+
 ## Screenshots
 
 **Admin console (LingCast)**

@@ -92,6 +92,49 @@ AMD GPUs using ROCm.
    （`LIVEPORTRAIT_IDLE_BASE_SECONDS` 控制，默认 10s）。
 2. [ ] 会话保持 / 断流重连 / 多流并发资源调度（未开始）。
 
+---
+
+## Phase 4: 直播体验与智能升级（口型 / 性能 / 记忆 / 知识库）
+
+**Goal:** 从「能用」走向「好用」：修复口型变形、消除直播卡顿，并让数字人
+具备长期记忆与私有知识库（RAG），减少多轮对话降智与专业问答幻觉。
+
+### Task 4.1 口型变形修复（Lip-sync Deformation）— [ ]
+
+- **不重训 Wav2Lip**（通病：为强行匹配口型会过度扭曲下半张脸、下巴变形、
+  边缘模糊）。标准解法是引入 **GFPGAN 或 CodeFormer** 做局部面部修复。
+- 只在 Wav2Lip 输出的**嘴部边界框（Bounding Box）区域**应用超分修复，
+  通过**羽化遮罩（Feathered Mask）**把高清嘴部贴回原帧，比全帧修复省约
+  80% 计算量。
+- 直播管线仅对说话段启用；离线播报成品复用同一后处理模块。
+
+### Task 4.2 口型性能与推流卡顿（Latency / Streaming Stutter）— [ ]
+
+- 根因：两段 10 秒处理之间的真空期会让 SRS 推流卡死。重构为
+  **异步双缓冲（Asynchronous Double-Buffering）**：
+  - **生产线程**：持续执行 TTS → Wav2Lip，把音视频帧压入**内存队列（Queue）**。
+  - **消费推流线程**：死循环读队列写 FFmpeg stdin；队列为空时**无缝回退**
+    预生成的 base 动画帧 + 静音音频，保持推流不中断，直到生产线程追上。
+- 切块粒度更细（短句优先），与现有 TTS 异步预取叠加，减少单句等待。
+
+### Task 4.3 长期记忆（Long-term Memory）— [ ]
+
+- 聊天记录已入库（`chat_messages`），由 **Go API 侧实现滑动窗口上下文**：
+  收到观众弹幕时，查询该观众最近 N 条（如 5 条）记录，按时间顺序组装
+  `messages` 数组传给 DeepSeek。
+- Token 控制：窗口外的旧对话丢弃，或由轻量模型做摘要（Summarization）后
+  保留进上下文。
+
+### Task 4.4 私有知识库（RAG）— [ ]
+
+- **轻量向量检索**：不引入 Milvus/Pinecone，直接在现有 Redis 8.2 上启用
+  RedisStack（RediSearch）做 KNN。
+- **Embedding**：上传私有知识（TXT/PDF）→ 切段 → 轻量 Embedding API
+  （如 BAAI bge-small）→ 向量入库。
+- **查询与拼接**：观众提问先 Embedding → Redis KNN 检索最相关 3 条 →
+  作为 `<Context>` 注入 DeepSeek System Prompt，**强制只根据知识库回答**，
+  减少带货/专业问答幻觉。
+
 ## Strict Rules for Execution
 
 1. 先给出 Phase 1 所需的精确命令与代码调整，测试通过后再进入下一阶段。
