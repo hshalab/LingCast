@@ -13,6 +13,7 @@ import { Route as ClerkRouteRouteImport } from './routes/clerk/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAvatarStudioRouteImport } from './routes/_authenticated/avatar-studio'
+import { Route as AuthenticatedAvatarLibraryRouteImport } from './routes/_authenticated/avatar-library'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors404RouteImport } from './routes/(errors)/404'
@@ -59,6 +60,12 @@ const AuthenticatedAvatarStudioRoute =
   AuthenticatedAvatarStudioRouteImport.update({
     id: '/avatar-studio',
     path: '/avatar-studio',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAvatarLibraryRoute =
+  AuthenticatedAvatarLibraryRouteImport.update({
+    id: '/avatar-library',
+    path: '/avatar-library',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const errors503Route = errors503RouteImport.update({
@@ -218,6 +225,7 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -246,6 +254,7 @@ export interface FileRoutesByTo {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -280,6 +289,7 @@ export interface FileRoutesById {
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
+  '/_authenticated/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/_authenticated/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -313,6 +323,7 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/avatar-library'
     | '/avatar-studio'
     | '/errors/$error'
     | '/settings/account'
@@ -341,6 +352,7 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/avatar-library'
     | '/avatar-studio'
     | '/'
     | '/errors/$error'
@@ -374,6 +386,7 @@ export interface FileRouteTypes {
     | '/(errors)/404'
     | '/(errors)/500'
     | '/(errors)/503'
+    | '/_authenticated/avatar-library'
     | '/_authenticated/avatar-studio'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
@@ -435,6 +448,13 @@ declare module '@tanstack/react-router' {
       path: '/avatar-studio'
       fullPath: '/avatar-studio'
       preLoaderRoute: typeof AuthenticatedAvatarStudioRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/avatar-library': {
+      id: '/_authenticated/avatar-library'
+      path: '/avatar-library'
+      fullPath: '/avatar-library'
+      preLoaderRoute: typeof AuthenticatedAvatarLibraryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/(errors)/503': {
@@ -654,6 +674,7 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
+  AuthenticatedAvatarLibraryRoute: typeof AuthenticatedAvatarLibraryRoute
   AuthenticatedAvatarStudioRoute: typeof AuthenticatedAvatarStudioRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -666,6 +687,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
+  AuthenticatedAvatarLibraryRoute: AuthenticatedAvatarLibraryRoute,
   AuthenticatedAvatarStudioRoute: AuthenticatedAvatarStudioRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,

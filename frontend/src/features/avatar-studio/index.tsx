@@ -81,7 +81,7 @@ function useTaskPolling(taskId: number | null) {
   return task
 }
 
-export function AvatarStudio() {
+export function AvatarStudio({ initialAvatarId }: { initialAvatarId?: string }) {
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [selectedAvatarId, setSelectedAvatarId] = useState('')
   const [name, setName] = useState('')
@@ -107,6 +107,14 @@ export function AvatarStudio() {
   useEffect(() => {
     void loadAvatars()
   }, [loadAvatars])
+
+  // Preselect an avatar when arriving from the library page (?avatarId=...).
+  useEffect(() => {
+    if (!initialAvatarId || selectedAvatarId !== '') return
+    if (avatars.some((avatar) => String(avatar.id) === initialAvatarId)) {
+      setSelectedAvatarId(initialAvatarId)
+    }
+  }, [initialAvatarId, avatars, selectedAvatarId])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
