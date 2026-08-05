@@ -36,14 +36,19 @@ def _ensure_nltk_resources() -> None:
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("nltk unavailable (%s); GPT-SoVITS English text may fail", exc)
         return
-    resources = [
-        "averaged_perceptron_tagger",
-        "averaged_perceptron_tagger_eng",
-        "cmudict",
-        "punkt",
-        "punkt_tab",
-    ]
-    for name in resources:
+    resources = {
+        "averaged_perceptron_tagger": "taggers/averaged_perceptron_tagger",
+        "averaged_perceptron_tagger_eng": "taggers/averaged_perceptron_tagger_eng",
+        "cmudict": "corpora/cmudict",
+        "punkt": "tokenizers/punkt",
+        "punkt_tab": "tokenizers/punkt_tab",
+    }
+    for name, resource_id in resources.items():
+        try:
+            nltk.data.find(resource_id)
+            continue  # already installed locally: skip the network round-trip
+        except LookupError:
+            pass
         try:
             nltk.download(name, quiet=True)
         except Exception as exc:
