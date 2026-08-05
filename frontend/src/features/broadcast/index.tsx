@@ -173,7 +173,9 @@ export function Broadcast({
             </CardHeader>
             <CardContent className='flex justify-center'>
               <Button asChild>
-                <Link to='/avatar-studio'>去创建数字人</Link>
+                <Link to='/avatar-studio' search={{ edit: undefined }}>
+                  去创建数字人
+                </Link>
               </Button>
             </CardContent>
           </Card>

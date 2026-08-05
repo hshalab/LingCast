@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { CheckCircle2, LoaderCircle, Play, Upload, UserRound, Volume2, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link } from '@tanstack/react-router'
+import { getRouteApi, Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -45,7 +45,13 @@ function showApiError(error: unknown) {
 
 const PREVIEW_TEXT = '你好，我是你的数字人助理，很高兴认识你。'
 
+const routeApi = getRouteApi('/_authenticated/avatar-studio')
+
 export function AvatarStudio() {
+  const { edit: editId } = routeApi.useSearch()
+  const navigate = routeApi.useNavigate()
+  const editing = Boolean(editId)
+  const [editingAvatar, setEditingAvatar] = useState<Avatar | null>(null)
   const [name, setName] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [voices] = useState<EdgeVoice[]>(() => {
@@ -71,6 +77,29 @@ export function AvatarStudio() {
     () => voices.find((voice) => voice.id === voiceId) ?? voices[0],
     [voices, voiceId],
   )
+
+  // Edit mode: pre-fill the form from the existing avatar.
+  useEffect(() => {
+    if (!editId) {
+      setEditingAvatar(null)
+      return
+    }
+    api
+      .get<Avatar>(`/avatars/${editId}`)
+      .then(({ data }) => {
+        setEditingAvatar(data)
+        setName(data.name ?? '')
+        setCategory(data.category ?? '其他')
+        setVoiceId(data.voiceId ?? DEFAULT_VOICE_ID)
+        setAge(data.age != null ? String(data.age) : '')
+        setHeightCm(data.heightCm != null ? String(data.heightCm) : '')
+        setWeightKg(data.weightKg != null ? String(data.weightKg) : '')
+        setEthnicity(data.ethnicity ?? '')
+        setRelationshipStatus(data.relationshipStatus ?? '单身')
+        setPersonality(data.personality ?? '')
+      })
+      .catch(() => toast.error('加载数字人信息失败'))
+  }, [editId])
 
   // Poll the avatar's initialization status after creation.
   useEffect(() => {
@@ -116,7 +145,7 @@ export function AvatarStudio() {
       toast.error('请填写形象名称')
       return
     }
-    if (!imageFile) {
+    if (!editing && !imageFile) {
       toast.error('请上传形象图片')
       return
     }
@@ -124,9 +153,27 @@ export function AvatarStudio() {
     setSubmitting(true)
     setInitFailed(false)
     try {
+      const profile = {
+        name: name.trim(),
+        category,
+        voiceId,
+        age: age ? Number(age) : null,
+        heightCm: heightCm ? Number(heightCm) : null,
+        weightKg: weightKg ? Number(weightKg) : null,
+        ethnicity: ethnicity.trim(),
+        relationshipStatus,
+        personality: personality.trim(),
+      }
+      if (editing && editId) {
+        await api.put<Avatar>(`/avatars/${editId}`, profile)
+        toast.success('数字人信息已更新')
+        void navigate({ to: '/avatar-library' })
+        return
+      }
+
       const form = new FormData()
       form.append('name', name.trim())
-      form.append('image', imageFile)
+      form.append('image', imageFile!)
       form.append('voice_id', voiceId)
       form.append('category', category)
       form.append('age', age.trim())
@@ -137,11 +184,11 @@ export function AvatarStudio() {
       form.append('personality', personality.trim())
       const { data } = await api.post<Avatar>('/avatars', form)
       setCreated(data)
-      setSubmitting(false)
       toast.info('已提交，正在生成基础视频…')
     } catch (error) {
-      setSubmitting(false)
       showApiError(error)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -184,20 +231,27 @@ export function AvatarStudio() {
           </p>
         </div>
 
-        <div className='grid gap-4 lg:grid-cols-2'>
+        <form onSubmit={handleSubmit} className='grid gap-4 lg:grid-cols-2'>
           <Card>
             <CardHeader>
-              <CardTitle>创建数字人</CardTitle>
+              <CardTitle>{editing ? '编辑数字人' : '创建数字人'}</CardTitle>
               <CardDescription>
-                提交后进入基础视频生成阶段（LivePortrait 预处理），完成后即可用于播报与直播。
+                {editing
+                  ? '修改数字人的基本信息与人物设定；形象图片与基础视频不受影响。'
+                  : '提交后进入基础视频生成阶段（LivePortrait 预处理），完成后即可用于播报与直播。'}
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className='flex flex-col gap-5'>
+            <CardContent className='flex flex-col gap-5'>
                 {/* 头像（头部展示）：上传形象图片后显示为圆形头像 */}
                 <div className='flex items-center gap-4'>
                   <div className='grid size-20 shrink-0 place-items-center overflow-hidden rounded-full border-4 border-primary/30 bg-muted'>
-                    {imageFile ? (
+                    {editing && editingAvatar ? (
+                      <img
+                        src={editingAvatar.imageS3Url}
+                        alt='avatar'
+                        className='size-full object-cover'
+                      />
+                    ) : imageFile ? (
                       <img
                         src={URL.createObjectURL(imageFile)}
                         alt='avatar'
@@ -232,15 +286,26 @@ export function AvatarStudio() {
                     id='avatar-image'
                     type='file'
                     accept='image/*'
-                    disabled={isInitializing}
+                    disabled={isInitializing || editing}
                     onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
                   />
-                  {imageFile && (
+                  {editing && editingAvatar ? (
+                    <img
+                      src={editingAvatar.imageS3Url}
+                      alt='preview'
+                      className='mt-1 aspect-[9/16] w-24 rounded-lg border object-cover'
+                    />
+                  ) : imageFile ? (
                     <img
                       src={URL.createObjectURL(imageFile)}
                       alt='preview'
                       className='mt-1 aspect-[9/16] w-24 rounded-lg border object-cover'
                     />
+                  ) : null}
+                  {editing && (
+                    <p className='text-xs text-muted-foreground'>
+                      编辑模式不更换形象图片；如需新形象请重新创建。
+                    </p>
                   )}
                 </div>
 
@@ -298,102 +363,111 @@ export function AvatarStudio() {
                   </p>
                 </div>
 
-                <div className='rounded-xl border bg-muted/30 p-4'>
-                  <p className='mb-3 text-sm font-medium'>人物设定（对话时内置到 AI 提示词）</p>
-                  <div className='grid grid-cols-2 gap-3'>
-                    <div className='flex flex-col gap-1.5'>
-                      <Label htmlFor='avatar-age'>年龄</Label>
-                      <Input
-                        id='avatar-age'
-                        type='number'
-                        min={1}
-                        max={120}
-                        value={age}
-                        onChange={(e) => setAge(e.target.value)}
-                        placeholder='如 25'
-                        disabled={isInitializing}
-                      />
-                    </div>
-                    <div className='flex flex-col gap-1.5'>
-                      <Label htmlFor='avatar-height'>身高 (cm)</Label>
-                      <Input
-                        id='avatar-height'
-                        type='number'
-                        min={1}
-                        value={heightCm}
-                        onChange={(e) => setHeightCm(e.target.value)}
-                        placeholder='如 165'
-                        disabled={isInitializing}
-                      />
-                    </div>
-                    <div className='flex flex-col gap-1.5'>
-                      <Label htmlFor='avatar-weight'>体重 (kg)</Label>
-                      <Input
-                        id='avatar-weight'
-                        type='number'
-                        min={1}
-                        value={weightKg}
-                        onChange={(e) => setWeightKg(e.target.value)}
-                        placeholder='如 50'
-                        disabled={isInitializing}
-                      />
-                    </div>
-                    <div className='flex flex-col gap-1.5'>
-                      <Label htmlFor='avatar-ethnicity'>族裔</Label>
-                      <Input
-                        id='avatar-ethnicity'
-                        value={ethnicity}
-                        onChange={(e) => setEthnicity(e.target.value)}
-                        placeholder='如 汉族'
-                        disabled={isInitializing}
-                      />
-                    </div>
-                    <div className='flex flex-col gap-1.5'>
-                      <Label htmlFor='avatar-relationship'>感情状态</Label>
-                      <Select
-                        value={relationshipStatus}
-                        onValueChange={setRelationshipStatus}
-                        disabled={isInitializing}
-                      >
-                        <SelectTrigger id='avatar-relationship' className='w-full'>
-                          <SelectValue placeholder='选择感情状态' />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {['单身', '恋爱中', '已婚', '保密'].map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className='col-span-2 flex flex-col gap-1.5'>
-                      <Label htmlFor='avatar-personality'>性格</Label>
-                      <Input
-                        id='avatar-personality'
-                        value={personality}
-                        onChange={(e) => setPersonality(e.target.value)}
-                        placeholder='如 活泼开朗、喜欢聊天、偶尔调皮'
-                        disabled={isInitializing}
-                      />
-                    </div>
-                  </div>
-                  <p className='mt-2 text-xs text-muted-foreground'>
-                    观众在直播间问起这些信息时，数字人会按设定回答。
-                  </p>
-                </div>
-
                 <Button type='submit' disabled={submitting || isInitializing}>
                   {submitting || isInitializing ? (
                     <LoaderCircle className='size-4 animate-spin' />
                   ) : (
                     <Upload className='size-4' />
                   )}
-                  {isInitializing ? '基础视频生成中…' : '创建数字人'}
+                  {isInitializing
+                    ? '基础视频生成中…'
+                    : editing
+                      ? '保存修改'
+                      : '创建数字人'}
                 </Button>
-              </form>
             </CardContent>
           </Card>
+
+          {/* 右：人物设定 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>人物设定</CardTitle>
+              <CardDescription>
+                这些属性会作为内置提示词注入 AI 对话，观众问起时按设定回答。
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='grid grid-cols-2 gap-3'>
+                <div className='flex flex-col gap-1.5'>
+                  <Label htmlFor='avatar-age'>年龄</Label>
+                  <Input
+                    id='avatar-age'
+                    type='number'
+                    min={1}
+                    max={120}
+                    value={age}
+                    onChange={(e) => setAge(e.target.value)}
+                    placeholder='如 25'
+                    disabled={isInitializing}
+                  />
+                </div>
+                <div className='flex flex-col gap-1.5'>
+                  <Label htmlFor='avatar-height'>身高 (cm)</Label>
+                  <Input
+                    id='avatar-height'
+                    type='number'
+                    min={1}
+                    value={heightCm}
+                    onChange={(e) => setHeightCm(e.target.value)}
+                    placeholder='如 165'
+                    disabled={isInitializing}
+                  />
+                </div>
+                <div className='flex flex-col gap-1.5'>
+                  <Label htmlFor='avatar-weight'>体重 (kg)</Label>
+                  <Input
+                    id='avatar-weight'
+                    type='number'
+                    min={1}
+                    value={weightKg}
+                    onChange={(e) => setWeightKg(e.target.value)}
+                    placeholder='如 50'
+                    disabled={isInitializing}
+                  />
+                </div>
+                <div className='flex flex-col gap-1.5'>
+                  <Label htmlFor='avatar-ethnicity'>族裔</Label>
+                  <Input
+                    id='avatar-ethnicity'
+                    value={ethnicity}
+                    onChange={(e) => setEthnicity(e.target.value)}
+                    placeholder='如 汉族'
+                    disabled={isInitializing}
+                  />
+                </div>
+                <div className='flex flex-col gap-1.5'>
+                  <Label htmlFor='avatar-relationship'>感情状态</Label>
+                  <Select
+                    value={relationshipStatus}
+                    onValueChange={setRelationshipStatus}
+                    disabled={isInitializing}
+                  >
+                    <SelectTrigger id='avatar-relationship' className='w-full'>
+                      <SelectValue placeholder='选择感情状态' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['单身', '恋爱中', '已婚', '保密'].map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className='col-span-2 flex flex-col gap-1.5'>
+                  <Label htmlFor='avatar-personality'>性格</Label>
+                  <Input
+                    id='avatar-personality'
+                    value={personality}
+                    onChange={(e) => setPersonality(e.target.value)}
+                    placeholder='如 活泼开朗、喜欢聊天、偶尔调皮'
+                    disabled={isInitializing}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </form>
 
           {isInitializing && (
             <Card>
@@ -465,7 +539,6 @@ export function AvatarStudio() {
               </CardHeader>
             </Card>
           )}
-        </div>
 
         <VideoPlayerDialog
           open={previewOpen}
