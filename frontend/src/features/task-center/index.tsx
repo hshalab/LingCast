@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { Clapperboard, ListChecks, RefreshCw, RotateCcw, SkipForward, Trash2 } from 'lucide-react'
+import { Eye, ListChecks, RefreshCw, RotateCcw, SkipForward, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -496,8 +496,8 @@ export function TaskCenter() {
                                       taskId: String(task.id),
                                     }}
                                   >
-                                    <Clapperboard className='size-3.5' />
-                                    去制作
+                                    <Eye className='size-3.5' />
+                                    查看
                                   </Link>
                                 </Button>
                                 {task.status === 'failed' && (

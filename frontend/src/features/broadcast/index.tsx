@@ -1,5 +1,7 @@
 import axios from 'axios'
 import { LoaderCircle, Play, Send, Video } from 'lucide-react'
+import Player from 'xgplayer'
+import 'xgplayer/dist/index.min.css'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -17,6 +19,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Table,
   TableBody,
@@ -108,6 +116,8 @@ export function Broadcast({
   const [script, setScript] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [taskId, setTaskId] = useState<number | null>(null)
+  const [playUrl, setPlayUrl] = useState<string | null>(null)
+  const playerHostRef = useRef<HTMLDivElement>(null)
 
   const task = useTaskPolling(taskId)
   const historyRef = useRef<HTMLDivElement>(null)
@@ -116,6 +126,21 @@ export function Broadcast({
   const selectedVoiceLabel =
     EDGE_TTS_VOICES.find((voice) => voice.id === selectedAvatar?.voiceId)?.label ??
     selectedAvatar?.voiceId
+
+  // Third-party player (xgplayer) inside the modal: created per video.
+  useEffect(() => {
+    if (!playUrl || !playerHostRef.current) return
+    const player = new Player({
+      el: playerHostRef.current,
+      url: playUrl,
+      autoplay: true,
+      fluid: true,
+      playbackRate: [0.75, 1, 1.25, 1.5, 2],
+    })
+    return () => {
+      player.destroy()
+    }
+  }, [playUrl])
 
   const loadAvatars = useCallback(async () => {
     try {
@@ -378,15 +403,13 @@ export function Broadcast({
                         </TableCell>
                         <TableCell className='text-right'>
                           {item.status === 'completed' && item.outputVideoS3Url ? (
-                            <Button asChild variant='outline' size='sm'>
-                              <a
-                                href={item.outputVideoS3Url}
-                                target='_blank'
-                                rel='noreferrer'
-                              >
-                                <Play className='size-3.5' />
-                                播放
-                              </a>
+                            <Button
+                              variant='outline'
+                              size='sm'
+                              onClick={() => setPlayUrl(item.outputVideoS3Url!)}
+                            >
+                              <Play className='size-3.5' />
+                              播放
                             </Button>
                           ) : (
                             <span className='text-xs text-muted-foreground'>-</span>
@@ -400,6 +423,15 @@ export function Broadcast({
             )}
           </CardContent>
         </Card>
+
+        <Dialog open={playUrl !== null} onOpenChange={(open) => !open && setPlayUrl(null)}>
+          <DialogContent className='sm:max-w-3xl'>
+            <DialogHeader>
+              <DialogTitle>播报成品</DialogTitle>
+            </DialogHeader>
+            <div ref={playerHostRef} className='w-full' />
+          </DialogContent>
+        </Dialog>
       </Main>
     </>
   )

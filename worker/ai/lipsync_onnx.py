@@ -370,7 +370,9 @@ class Wav2LipOnnxLipSync:
             "-i", str(video),
             "-i", str(wav),
             "-map", "0:v:0", "-map", "1:a:0",
-            "-c:v", "copy",
+            # Re-encode to H.264: the raw Wav2Lip writer produces MPEG-4 Part 2
+            # (mp4v) which browsers cannot decode (black screen in any player).
+            "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "128k",
             "-shortest",
             str(final),
