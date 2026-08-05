@@ -5,6 +5,9 @@ import './globals.css'
 export const metadata: Metadata = {
   title: '灵播 LingCast',
   description: 'AI 数字人直播平台：观看数字人直播，并与 TA 实时互动',
+  icons: {
+    icon: '/logo.svg',
+  },
 }
 
 export default function RootLayout({

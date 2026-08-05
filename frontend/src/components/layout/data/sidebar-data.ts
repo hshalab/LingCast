@@ -1,6 +1,5 @@
 import {
   Clapperboard,
-  Command,
   Images,
   ListChecks,
   RadioTower,
@@ -18,7 +17,7 @@ export const sidebarData: SidebarData = {
   teams: [
     {
       name: '灵播',
-      logo: Command,
+      logo: '/images/logo.svg',
       plan: '数字人直播平台',
     },
   ],

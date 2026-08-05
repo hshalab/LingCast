@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { Tv } from 'lucide-react'
 import { useState } from 'react'
 import AuthModal from '@/components/auth-modal'
 import { useIdentity } from '@/lib/identity'
@@ -16,9 +15,8 @@ export default function NavHeader() {
       <header className='sticky top-0 z-40 border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur'>
         <div className='mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6'>
           <Link href='/' className='flex items-center gap-2'>
-            <span className='grid size-9 place-items-center rounded-xl bg-blue-600 text-lg'>
-              <Tv className='size-5 text-white' />
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src='/logo.svg' alt='灵播' className='size-9 rounded-xl' />
             <span className='text-lg font-bold tracking-tight'>灵播</span>
             <span className='hidden rounded-md bg-white/5 px-1.5 py-0.5 text-xs text-zinc-400 sm:inline'>
               数字人直播
