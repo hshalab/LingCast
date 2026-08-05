@@ -303,7 +303,7 @@ func (h *LiveHandler) Message(c *gin.Context) {
 		Content:  strings.TrimSpace(req.Text),
 	})
 
-	reply := h.llmChat(c, req.Text, avatar.Name)
+	reply := h.llmChat(c, req.Text, avatar)
 	chunks := splitSentences(reply)
 	if len(chunks) == 0 {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "llm returned empty reply"})
@@ -333,7 +333,7 @@ func (h *LiveHandler) Message(c *gin.Context) {
 // llmChat sends the user text to the LLM through the OpenAI SDK pointed at the
 // configured base URL (DeepSeek by default, Responses API) and returns the
 // assistant's reply. Without an API key the input is spoken verbatim (test).
-func (h *LiveHandler) llmChat(c *gin.Context, userText, avatarName string) string {
+func (h *LiveHandler) llmChat(c *gin.Context, userText string, avatar models.Avatar) string {
 	if strings.TrimSpace(h.openAIAPIKey) == "" {
 		log.Printf("[llm] OPENAI_API_KEY not set, speaking the input verbatim")
 		return userText
@@ -344,9 +344,8 @@ func (h *LiveHandler) llmChat(c *gin.Context, userText, avatarName string) strin
 		option.WithAPIKey(h.openAIAPIKey),
 	)
 	resp, err := client.Responses.New(c.Request.Context(), responses.ResponseNewParams{
-		Model: h.openAIModel,
-		Instructions: openai.String("你是一个直播间里的数字人主播「" + avatarName +
-			"」，用简短、口语化、中文回复观众消息，单次回复不超过3句话。"),
+		Model:           h.openAIModel,
+		Instructions:    openai.String(chatSystemPrompt(avatar)),
 		Input:           responses.ResponseNewParamsInputUnion{OfString: openai.String(userText)},
 		Temperature:     openai.Float(0.8),
 		MaxOutputTokens: openai.Int(300),
@@ -361,6 +360,39 @@ func (h *LiveHandler) llmChat(c *gin.Context, userText, avatarName string) strin
 	}
 	log.Printf("[llm] %s -> %s", userText, reply)
 	return reply
+}
+
+// chatSystemPrompt builds the LLM persona prompt for one avatar. The
+// avatar's creation-time profile (age/height/weight/ethnicity/relationship/
+// personality) is baked in so viewers can ask about it naturally.
+func chatSystemPrompt(a models.Avatar) string {
+	profile := []string{}
+	if a.Age != nil {
+		profile = append(profile, fmt.Sprintf("年龄 %d 岁", *a.Age))
+	}
+	if a.HeightCm != nil {
+		profile = append(profile, fmt.Sprintf("身高 %d 厘米", *a.HeightCm))
+	}
+	if a.WeightKg != nil {
+		profile = append(profile, fmt.Sprintf("体重 %d 公斤", *a.WeightKg))
+	}
+	if s := strings.TrimSpace(a.Ethnicity); s != "" {
+		profile = append(profile, "族裔 "+s)
+	}
+	if s := strings.TrimSpace(a.RelationshipStatus); s != "" {
+		profile = append(profile, "感情状态 "+s)
+	}
+	if s := strings.TrimSpace(a.Personality); s != "" {
+		profile = append(profile, "性格 "+s)
+	}
+
+	persona := "你是一个直播间里的数字人主播「" + a.Name + "」。"
+	if len(profile) > 0 {
+		persona += "你的人物设定：" + strings.Join(profile, "，") + "。"
+	}
+	persona += "用简短、口语化、中文回复观众消息，单次回复不超过3句话。" +
+		"观众问起你的年龄、身高、体重、族裔、感情状态或性格时，严格按照设定回答。"
+	return persona
 }
 
 // Status handles GET /api/live/:avatarID/status. It returns the live session

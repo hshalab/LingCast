@@ -40,8 +40,9 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
 
 ## 已实现功能
 
-- **Avatar Studio（创建）**：形象名称 + 图片上传 + Edge-TTS 音色选择（列表缓存于
-  localStorage，默认中文女声晓晓）；提交后显示「基础视频生成中…」并轮询状态。
+- **Avatar Studio（创建）**：形象名称 + 头像展示 + 图片上传 + Edge-TTS 音色选择
+  （列表缓存于 localStorage，默认中文女声晓晓），可填**人物设定**（年龄/身高/体重/
+  族裔/感情状态/性格），提交后显示「基础视频生成中…」并轮询状态。
 - **Broadcast（离线播报）**：选择已就绪数字人 + 输入脚本 → 提交任务 → 轮询 →
   状态卡片内嵌 **xgplayer** 播放成品（9:16 竖版，最大 720×1080，模态窗播放）。
 - **客户端直播间（观众端）**：独立 Next.js + TailwindCSS 项目（`client/`，端口
@@ -64,6 +65,7 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
 - **LLM 消息回复**：客户端消息 → OpenAI Go SDK 调 DeepSeek Responses API
   （`base_url=https://api.deepseek.com`，模型 `deepseek-v4-flash`）→ 回复按句切块
   入直播队列 → TTS → 口型 → 推流；未配置 `OPENAI_API_KEY` 时原样回读输入（测试模式）。
+  创建时的人物设定会作为**内置提示词**注入，观众问年龄/身高/感情状态等时按设定回答。
 - **Edge-TTS 语音合成**：GPU-free 云端神经音色，按 avatar 的 `voice_id` 选声，
   一条句子约 1-2 秒（`TTS_ENGINE=gpt-sovits` 可切回旧克隆模型）。
 - **LivePortrait 基础视频预处理**：创建数字人时生成静音 24fps 驱动视频，仅此一次。

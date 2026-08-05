@@ -30,8 +30,9 @@
 
 ## 3. 当前实现状态
 
-- ✅ Avatar Studio（创建）：形象名称/图片/Edge-TTS 音色（localStorage 缓存，
-  默认 zh-CN-XiaoxiaoNeural），提交后轮询 `GET /api/avatars/:id` 直到 ready。
+- ✅ Avatar Studio（创建）：形象名称/头像展示/图片/Edge-TTS 音色（localStorage 缓存，
+  默认 zh-CN-XiaoxiaoNeural）+ 人物设定（年龄/身高/体重/族裔/感情状态/性格），提交后
+  轮询 `GET /api/avatars/:id` 直到 ready。
 - ✅ Broadcast（离线播报）页面：选数字人 + 脚本 → 任务轮询 → 播放成品。
 - ✅ 客户端直播间（观众端）：**独立 Next.js + TailwindCSS 项目**（`client/`，端口
   **3000**，不属于管理后台）——首页有导航头（身份/注册/登录/退出）与**分类筛选**
@@ -59,7 +60,8 @@
 - ✅ LLM 回复链路：Go 后端用 `github.com/openai/openai-go` Responses API 调 DeepSeek
   （`OPENAI_BASE_URL=https://api.deepseek.com`、`OPENAI_MODEL=deepseek-v4-flash`，
   该模型是 DeepSeek 唯一支持 Responses 的模型），回复 `splitSentences` 入
-  `live_queue:{id}` + `live_history:{id}`；无 `OPENAI_API_KEY` 时原样回读输入。
+  `live_queue:{id}` + `live_history:{id}`；`chatSystemPrompt()` 会把 Avatar 的人物
+  设定拼进 system prompt（有单测 `live_test.go`）；无 `OPENAI_API_KEY` 时原样回读输入。
 - ✅ Go API：`POST /api/avatars`、`GET /api/avatars`、`POST /api/tasks`、
   `GET /api/tasks/:id`、`POST /api/tasks/:id/status`（Worker 回调）。
 - ✅ 两段式管线：创建时 `avatar_init` 队列 → LivePortrait 生成静音 24fps base 视频

@@ -58,6 +58,14 @@ type Avatar struct {
 	// Category groups avatars for the audience home page filter
 	// (闲聊/知识/娱乐/游戏/带货/其他; empty -> 其他).
 	Category string `gorm:"size:32;not null;default:其他" json:"category"`
+	// Persona profile: used both as creation metadata and as the built-in
+	// prompt for LLM chat (age/height/weight/ethnicity/relationship/personality).
+	Age                *int   `gorm:"null" json:"age,omitempty"`
+	HeightCm           *int   `gorm:"null" json:"heightCm,omitempty"`
+	WeightKg           *int   `gorm:"null" json:"weightKg,omitempty"`
+	Ethnicity          string `gorm:"size:32" json:"ethnicity,omitempty"`
+	RelationshipStatus string `gorm:"size:16" json:"relationshipStatus,omitempty"`
+	Personality        string `gorm:"size:255" json:"personality,omitempty"`
 	// VoiceID selects the Edge-TTS voice used for broadcast/live speech.
 	VoiceID string `gorm:"size:64;not null;default:zh-CN-XiaoxiaoNeural" json:"voiceId"`
 	// BaseVideoS3Key points to the pre-processed LivePortrait driving clip

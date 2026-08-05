@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { CheckCircle2, LoaderCircle, Play, Upload, Volume2, XCircle } from 'lucide-react'
+import { CheckCircle2, LoaderCircle, Play, Upload, UserRound, Volume2, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -55,6 +55,12 @@ export function AvatarStudio() {
   })
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID)
   const [category, setCategory] = useState('闲聊')
+  const [age, setAge] = useState('')
+  const [heightCm, setHeightCm] = useState('')
+  const [weightKg, setWeightKg] = useState('')
+  const [ethnicity, setEthnicity] = useState('')
+  const [relationshipStatus, setRelationshipStatus] = useState('单身')
+  const [personality, setPersonality] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [previewing, setPreviewing] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -123,6 +129,12 @@ export function AvatarStudio() {
       form.append('image', imageFile)
       form.append('voice_id', voiceId)
       form.append('category', category)
+      form.append('age', age.trim())
+      form.append('height_cm', heightCm.trim())
+      form.append('weight_kg', weightKg.trim())
+      form.append('ethnicity', ethnicity.trim())
+      form.append('relationship_status', relationshipStatus)
+      form.append('personality', personality.trim())
       const { data } = await api.post<Avatar>('/avatars', form)
       setCreated(data)
       setSubmitting(false)
@@ -182,6 +194,27 @@ export function AvatarStudio() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className='flex flex-col gap-5'>
+                {/* 头像（头部展示）：上传形象图片后显示为圆形头像 */}
+                <div className='flex items-center gap-4'>
+                  <div className='grid size-20 shrink-0 place-items-center overflow-hidden rounded-full border-4 border-primary/30 bg-muted'>
+                    {imageFile ? (
+                      <img
+                        src={URL.createObjectURL(imageFile)}
+                        alt='avatar'
+                        className='size-full object-cover'
+                      />
+                    ) : (
+                      <UserRound className='size-9 text-muted-foreground' />
+                    )}
+                  </div>
+                  <div>
+                    <p className='font-medium'>{name.trim() || '数字人头像'}</p>
+                    <p className='text-xs text-muted-foreground'>
+                      上传形象图片后自动作为头像展示，也用于生成直播画面。
+                    </p>
+                  </div>
+                </div>
+
                 <div className='flex flex-col gap-2'>
                   <Label htmlFor='avatar-name'>形象名称</Label>
                   <Input
@@ -262,6 +295,91 @@ export function AvatarStudio() {
                   </Select>
                   <p className='text-xs text-muted-foreground'>
                     观看端首页按此分类筛选直播。
+                  </p>
+                </div>
+
+                <div className='rounded-xl border bg-muted/30 p-4'>
+                  <p className='mb-3 text-sm font-medium'>人物设定（对话时内置到 AI 提示词）</p>
+                  <div className='grid grid-cols-2 gap-3'>
+                    <div className='flex flex-col gap-1.5'>
+                      <Label htmlFor='avatar-age'>年龄</Label>
+                      <Input
+                        id='avatar-age'
+                        type='number'
+                        min={1}
+                        max={120}
+                        value={age}
+                        onChange={(e) => setAge(e.target.value)}
+                        placeholder='如 25'
+                        disabled={isInitializing}
+                      />
+                    </div>
+                    <div className='flex flex-col gap-1.5'>
+                      <Label htmlFor='avatar-height'>身高 (cm)</Label>
+                      <Input
+                        id='avatar-height'
+                        type='number'
+                        min={1}
+                        value={heightCm}
+                        onChange={(e) => setHeightCm(e.target.value)}
+                        placeholder='如 165'
+                        disabled={isInitializing}
+                      />
+                    </div>
+                    <div className='flex flex-col gap-1.5'>
+                      <Label htmlFor='avatar-weight'>体重 (kg)</Label>
+                      <Input
+                        id='avatar-weight'
+                        type='number'
+                        min={1}
+                        value={weightKg}
+                        onChange={(e) => setWeightKg(e.target.value)}
+                        placeholder='如 50'
+                        disabled={isInitializing}
+                      />
+                    </div>
+                    <div className='flex flex-col gap-1.5'>
+                      <Label htmlFor='avatar-ethnicity'>族裔</Label>
+                      <Input
+                        id='avatar-ethnicity'
+                        value={ethnicity}
+                        onChange={(e) => setEthnicity(e.target.value)}
+                        placeholder='如 汉族'
+                        disabled={isInitializing}
+                      />
+                    </div>
+                    <div className='flex flex-col gap-1.5'>
+                      <Label htmlFor='avatar-relationship'>感情状态</Label>
+                      <Select
+                        value={relationshipStatus}
+                        onValueChange={setRelationshipStatus}
+                        disabled={isInitializing}
+                      >
+                        <SelectTrigger id='avatar-relationship' className='w-full'>
+                          <SelectValue placeholder='选择感情状态' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {['单身', '恋爱中', '已婚', '保密'].map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className='col-span-2 flex flex-col gap-1.5'>
+                      <Label htmlFor='avatar-personality'>性格</Label>
+                      <Input
+                        id='avatar-personality'
+                        value={personality}
+                        onChange={(e) => setPersonality(e.target.value)}
+                        placeholder='如 活泼开朗、喜欢聊天、偶尔调皮'
+                        disabled={isInitializing}
+                      />
+                    </div>
+                  </div>
+                  <p className='mt-2 text-xs text-muted-foreground'>
+                    观众在直播间问起这些信息时，数字人会按设定回答。
                   </p>
                 </div>
 

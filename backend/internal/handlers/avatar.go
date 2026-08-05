@@ -31,18 +31,24 @@ type AvatarHandler struct {
 }
 
 type avatarResponse struct {
-	ID             uint                `json:"id"`
-	Name           string              `json:"name"`
-	ImageS3Key     string              `json:"imageS3Key"`
-	ImageS3URL     string              `json:"imageS3Url"`
-	Category       string              `json:"category"`
-	VoiceID        string              `json:"voiceId"`
-	BaseVideoS3Key *string             `json:"baseVideoS3Key,omitempty"`
-	BaseVideoS3URL *string             `json:"baseVideoS3Url,omitempty"`
-	Status         string              `json:"status"`
-	InitQueuePos   *int                `json:"initQueuePos,omitempty"`
-	LiveSettings   models.LiveSettings `json:"liveSettings"`
-	CreatedAt      time.Time           `json:"createdAt"`
+	ID                 uint                `json:"id"`
+	Name               string              `json:"name"`
+	ImageS3Key         string              `json:"imageS3Key"`
+	ImageS3URL         string              `json:"imageS3Url"`
+	Category           string              `json:"category"`
+	Age                *int                `json:"age,omitempty"`
+	HeightCm           *int                `json:"heightCm,omitempty"`
+	WeightKg           *int                `json:"weightKg,omitempty"`
+	Ethnicity          string              `json:"ethnicity,omitempty"`
+	RelationshipStatus string              `json:"relationshipStatus,omitempty"`
+	Personality        string              `json:"personality,omitempty"`
+	VoiceID            string              `json:"voiceId"`
+	BaseVideoS3Key     *string             `json:"baseVideoS3Key,omitempty"`
+	BaseVideoS3URL     *string             `json:"baseVideoS3Url,omitempty"`
+	Status             string              `json:"status"`
+	InitQueuePos       *int                `json:"initQueuePos,omitempty"`
+	LiveSettings       models.LiveSettings `json:"liveSettings"`
+	CreatedAt          time.Time           `json:"createdAt"`
 }
 
 func NewAvatarHandler(db *gorm.DB, s3 *storage.Client, q *queue.Queue, avatarInitQueueKey string) *AvatarHandler {
@@ -64,6 +70,12 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 		voiceID = models.DefaultEdgeVoice
 	}
 	category := normalizeCategory(c.PostForm("category"))
+	age := optionalInt(c.PostForm("age"))
+	heightCm := optionalInt(c.PostForm("height_cm"))
+	weightKg := optionalInt(c.PostForm("weight_kg"))
+	ethnicity := strings.TrimSpace(c.PostForm("ethnicity"))
+	relationshipStatus := strings.TrimSpace(c.PostForm("relationship_status"))
+	personality := strings.TrimSpace(c.PostForm("personality"))
 
 	imageHeader, err := c.FormFile("image")
 	if err != nil {
@@ -78,11 +90,17 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 	}
 
 	avatar := models.Avatar{
-		Name:       name,
-		ImageS3Key: imageKey,
-		Category:   category,
-		VoiceID:    voiceID,
-		Status:     models.AvatarStatusInitializing,
+		Name:               name,
+		ImageS3Key:         imageKey,
+		Category:           category,
+		Age:                age,
+		HeightCm:           heightCm,
+		WeightKg:           weightKg,
+		Ethnicity:          ethnicity,
+		RelationshipStatus: relationshipStatus,
+		Personality:        personality,
+		VoiceID:            voiceID,
+		Status:             models.AvatarStatusInitializing,
 	}
 	if err := h.db.Create(&avatar).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "save avatar failed: " + err.Error()})
@@ -411,15 +429,21 @@ func (h *AvatarHandler) uploadFormFile(c *gin.Context, header *multipart.FileHea
 func toAvatarResponse(a models.Avatar, s3 *storage.Client) avatarResponse {
 	liveSettings := parseLiveSettings(a.LiveSettings)
 	resp := avatarResponse{
-		ID:           a.ID,
-		Name:         a.Name,
-		ImageS3Key:   a.ImageS3Key,
-		ImageS3URL:   s3.PublicURL(a.ImageS3Key),
-		Category:     normalizeCategory(a.Category),
-		VoiceID:      a.VoiceID,
-		Status:       a.Status,
-		LiveSettings: liveSettings,
-		CreatedAt:    a.CreatedAt,
+		ID:                 a.ID,
+		Name:               a.Name,
+		ImageS3Key:         a.ImageS3Key,
+		ImageS3URL:         s3.PublicURL(a.ImageS3Key),
+		Category:           normalizeCategory(a.Category),
+		Age:                a.Age,
+		HeightCm:           a.HeightCm,
+		WeightKg:           a.WeightKg,
+		Ethnicity:          a.Ethnicity,
+		RelationshipStatus: a.RelationshipStatus,
+		Personality:        a.Personality,
+		VoiceID:            a.VoiceID,
+		Status:             a.Status,
+		LiveSettings:       liveSettings,
+		CreatedAt:          a.CreatedAt,
 	}
 	if a.BaseVideoS3Key != nil {
 		key := *a.BaseVideoS3Key
@@ -436,6 +460,16 @@ func normalizeCategory(c string) string {
 		return "其他"
 	}
 	return c
+}
+
+// optionalInt parses a form value into *int, returning nil for empty/invalid
+// or non-positive input (the profile numeric fields are all optional).
+func optionalInt(raw string) *int {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n <= 0 {
+		return nil
+	}
+	return &n
 }
 
 // parseLiveSettings decodes the avatar's JSON live settings, falling back to
