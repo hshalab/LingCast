@@ -4,7 +4,7 @@ import 'xgplayer/dist/index.min.css'
 import FlvPlugin from 'xgplayer-flv'
 import { Copy, Eye, EyeOff, LoaderCircle, Power, PowerOff, Send, Video, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -49,6 +49,7 @@ function showApiError(error: unknown) {
 
 export function LiveStudio({ avatarId }: { avatarId: string }) {
   const id = Number(avatarId)
+  const navigate = useNavigate()
   const playerHostRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<Player | null>(null)
   const [status, setStatus] = useState<LiveStatus | null>(null)
@@ -127,8 +128,9 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
   }
 
   // Avatar switcher data: ready avatars + which ones are live, every 3s.
+  // Without ?avatarId= we still load the list and auto-select the first
+  // ready avatar so the page never shows an empty/NaN state.
   useEffect(() => {
-    if (!id) return
     let stopped = false
     const refresh = async () => {
       try {
@@ -139,6 +141,16 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
         if (stopped) return
         setAvatars(avatarResp.data.data)
         setLiveSessions(liveResp.data.data)
+        if (!Number.isFinite(id)) {
+          const ready = avatarResp.data.data.find((a) => Boolean(a.baseVideoS3Key))
+          if (ready) {
+            void navigate({
+              to: '/live-studio',
+              search: { avatarId: String(ready.id) },
+              replace: true,
+            })
+          }
+        }
       } catch {
         // keep previous data
       }
@@ -149,7 +161,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       stopped = true
       window.clearInterval(timer)
     }
-  }, [id])
+  }, [id, navigate])
 
   // HTTP-FLV player (xgplayer + flv plugin) — only while the floating monitor
   // is open AND the stream is on (default closed to save resources).
