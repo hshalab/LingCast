@@ -63,7 +63,7 @@ export default function RoomPage() {
   }
 
   return (
-    <main className='mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-5 sm:px-6'>
+    <main className='mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-5 sm:px-6'>
       <header className='mb-4 flex items-center gap-3'>
         <Link
           href='/'
@@ -89,8 +89,9 @@ export default function RoomPage() {
         </span>
       </header>
 
-      <div className='flex flex-col gap-4'>
-        <div className='flex justify-center rounded-2xl border border-zinc-800 bg-black p-3'>
+      {/* 左右结构：桌面端画面在左、聊天在右，两边同时可见，无需滚动 */}
+      <div className='flex flex-col gap-4 lg:flex-row lg:items-stretch'>
+        <div className='flex flex-1 justify-center rounded-2xl border border-zinc-800 bg-black p-3'>
           {started ? (
             <XgFlvPlayer
               url={streamUrl}
@@ -104,7 +105,7 @@ export default function RoomPage() {
           )}
         </div>
 
-        <section className='flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/50'>
+        <section className='flex w-full flex-col rounded-2xl border border-zinc-800 bg-zinc-900/50 lg:w-[380px] lg:shrink-0'>
           <div className='border-b border-zinc-800 px-4 py-3'>
             <h2 className='font-medium'>互动聊天</h2>
             <p className='text-xs text-zinc-500'>
@@ -114,7 +115,7 @@ export default function RoomPage() {
 
           <div
             ref={chatRef}
-            className='flex h-64 flex-col gap-2 overflow-y-auto px-4 py-3'
+            className='flex min-h-56 flex-1 flex-col gap-2 overflow-y-auto px-4 py-3'
           >
             {messages.length === 0 ? (
               <p className='py-10 text-center text-sm text-zinc-500'>
