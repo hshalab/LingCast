@@ -156,51 +156,76 @@ export default function RoomPage() {
 
       <div className='mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6'>
         {/* 标题行：返回 + 直播间 #id 与 数字人详情 同行 */}
-        <div className='mb-3 flex shrink-0 flex-wrap items-center gap-3'>
-          <Link
-            href='/'
-            className='shrink-0 rounded-full border border-zinc-800 bg-zinc-900/60 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-600'
-          >
-            ← 返回列表
-          </Link>
-          <div className='min-w-0 shrink-0'>
-            <h1 className='flex items-center gap-2 text-lg font-bold text-zinc-100'>
-              直播间
-              <span className='rounded-md bg-gradient-to-r from-blue-600 to-violet-600 px-1.5 py-0.5 text-xs font-semibold text-white'>
-                #{id}
-              </span>
-            </h1>
+        <div className='mb-3 flex shrink-0 flex-wrap items-start justify-between gap-3'>
+          <div className='flex shrink-0 items-center gap-3'>
+            <Link
+              href='/'
+              className='shrink-0 rounded-full border border-zinc-800 bg-zinc-900/60 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-600'
+            >
+              ← 返回列表
+            </Link>
+            <div className='min-w-0 shrink-0'>
+              <h1 className='flex items-center gap-2 text-lg font-bold text-zinc-100'>
+                直播间
+                <span className='rounded-md bg-gradient-to-r from-blue-600 to-violet-600 px-1.5 py-0.5 text-xs font-semibold text-white'>
+                  #{id}
+                </span>
+              </h1>
+            </div>
           </div>
 
-          {/* 数字人详情：与标题同一行，横排展示 */}
+          {/* 数字人详情：靠右的纵向资料卡 */}
           {avatar && (
-            <div className='flex min-w-[260px] flex-1 flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-2.5 text-xs backdrop-blur'>
-              <span className='font-semibold text-white'>
+            <div className='ml-auto shrink-0 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-xs backdrop-blur'>
+              <p className='font-semibold text-white'>
                 {avatar.name} <span className='text-zinc-500'>#{avatar.id}</span>
-              </span>
-              {avatar.category && (
-                <span className='rounded-md bg-white/5 px-1.5 py-0.5 text-zinc-300'>
-                  {avatar.category}
-                </span>
-              )}
-              {avatar.age != null && (
-                <span className='text-zinc-400'>年龄 {avatar.age}岁</span>
-              )}
-              {avatar.heightCm != null && (
-                <span className='text-zinc-400'>身高 {avatar.heightCm}cm</span>
-              )}
-              {avatar.weightKg != null && (
-                <span className='text-zinc-400'>体重 {avatar.weightKg}kg</span>
-              )}
-              {avatar.ethnicity && (
-                <span className='text-zinc-400'>族裔 {avatar.ethnicity}</span>
-              )}
-              {avatar.relationshipStatus && (
-                <span className='text-zinc-400'>感情 {avatar.relationshipStatus}</span>
-              )}
-              {avatar.personality && (
-                <span className='text-zinc-400'>性格 {avatar.personality}</span>
-              )}
+              </p>
+              <div className='mt-2 flex flex-col gap-1.5 text-zinc-400'>
+                {avatar.category && (
+                  <span className='flex items-center gap-2'>
+                    <span className='w-10 shrink-0 text-zinc-600'>分类</span>
+                    <span className='rounded-md bg-white/5 px-1.5 py-0.5 text-zinc-300'>
+                      {avatar.category}
+                    </span>
+                  </span>
+                )}
+                {avatar.age != null && (
+                  <span>
+                    <span className='mr-2 text-zinc-600'>年龄</span>
+                    {avatar.age}岁
+                  </span>
+                )}
+                {avatar.heightCm != null && (
+                  <span>
+                    <span className='mr-2 text-zinc-600'>身高</span>
+                    {avatar.heightCm}cm
+                  </span>
+                )}
+                {avatar.weightKg != null && (
+                  <span>
+                    <span className='mr-2 text-zinc-600'>体重</span>
+                    {avatar.weightKg}kg
+                  </span>
+                )}
+                {avatar.ethnicity && (
+                  <span>
+                    <span className='mr-2 text-zinc-600'>族裔</span>
+                    {avatar.ethnicity}
+                  </span>
+                )}
+                {avatar.relationshipStatus && (
+                  <span>
+                    <span className='mr-2 text-zinc-600'>感情</span>
+                    {avatar.relationshipStatus}
+                  </span>
+                )}
+                {avatar.personality && (
+                  <span>
+                    <span className='mr-2 text-zinc-600'>性格</span>
+                    {avatar.personality}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>
