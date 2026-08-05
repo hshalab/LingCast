@@ -36,3 +36,6 @@ tmp/
 .idea/
 .vscode/
 *.swp
+
+# Worker runtime logs/pids
+worker/logs/
