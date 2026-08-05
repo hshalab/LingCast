@@ -37,6 +37,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 
 	api := r.Group("/api")
 	{
+		api.POST("/tts/preview", handlers.PreviewTTS)
 		api.POST("/avatars", avatarHandler.Create)
 		api.GET("/avatars", avatarHandler.List)
 		api.GET("/avatars/:id", avatarHandler.Get)

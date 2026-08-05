@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { CheckCircle2, LoaderCircle, Upload, XCircle } from 'lucide-react'
+import { CheckCircle2, LoaderCircle, Upload, Volume2, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -42,6 +42,8 @@ function showApiError(error: unknown) {
   toast.error('请求失败，请稍后重试')
 }
 
+const PREVIEW_TEXT = '你好，我是你的数字人助理，很高兴认识你。'
+
 export function AvatarStudio() {
   const [name, setName] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -52,6 +54,7 @@ export function AvatarStudio() {
   })
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID)
   const [submitting, setSubmitting] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
   const [created, setCreated] = useState<Avatar | null>(null)
   const [initFailed, setInitFailed] = useState(false)
 
@@ -128,6 +131,27 @@ export function AvatarStudio() {
 
   const isInitializing = created != null && created.status === 'initializing'
 
+  const handlePreview = async () => {
+    if (previewing) return
+    setPreviewing(true)
+    try {
+      const { data } = await api.post<Blob>(
+        '/tts/preview',
+        { voiceId, text: PREVIEW_TEXT },
+        { responseType: 'blob' },
+      )
+      const url = URL.createObjectURL(data)
+      const audio = new Audio(url)
+      audio.onended = () => URL.revokeObjectURL(url)
+      await audio.play()
+      toast.info('正在播放试听…')
+    } catch (error) {
+      showApiError(error)
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
   return (
     <>
       <Header fixed>
@@ -185,18 +209,34 @@ export function AvatarStudio() {
 
                 <div className='flex flex-col gap-2'>
                   <Label htmlFor='avatar-voice'>播报音色</Label>
-                  <Select value={voiceId} onValueChange={setVoiceId} disabled={isInitializing}>
-                    <SelectTrigger id='avatar-voice' className='w-full'>
-                      <SelectValue placeholder='选择音色' />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {voices.map((voice) => (
-                        <SelectItem key={voice.id} value={voice.id}>
-                          {voice.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className='flex items-center gap-2'>
+                    <Select value={voiceId} onValueChange={setVoiceId} disabled={isInitializing}>
+                      <SelectTrigger id='avatar-voice' className='w-full'>
+                        <SelectValue placeholder='选择音色' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {voices.map((voice) => (
+                          <SelectItem key={voice.id} value={voice.id}>
+                            {voice.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='icon'
+                      onClick={() => void handlePreview()}
+                      disabled={previewing || isInitializing}
+                      title={`试听：${selectedVoice?.label ?? voiceId}`}
+                    >
+                      {previewing ? (
+                        <LoaderCircle className='size-4 animate-spin' />
+                      ) : (
+                        <Volume2 className='size-4' />
+                      )}
+                    </Button>
+                  </div>
                   <p className='text-xs text-muted-foreground'>
                     当前：{selectedVoice?.label ?? voiceId}（Edge-TTS，云端合成，无需 GPU）
                   </p>

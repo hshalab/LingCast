@@ -12,7 +12,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/api ./c
 # ---- runtime stage ----
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata python3 py3-pip \
+    && python3 -m pip install --no-cache-dir --break-system-packages edge-tts
 
 COPY --from=builder /out/api /usr/local/bin/api
 
