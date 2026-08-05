@@ -276,8 +276,8 @@ export default function RoomPage() {
                   {hearts.map((h) => (
                     <span
                       key={h.id}
-                      className='absolute bottom-12 animate-[float-up_1.2s_ease-out_forwards] text-2xl'
-                      style={{ left: `${h.x}%` }}
+                      className='absolute bottom-20 animate-[float-up_1.2s_ease-out_forwards] text-2xl'
+                      style={{ right: `${h.x}%` }}
                     >
                       <Heart className='size-5 fill-rose-500 text-rose-500 drop-shadow' />
                     </span>
@@ -289,17 +289,55 @@ export default function RoomPage() {
             {/* 点赞按钮 */}
             <button
               onClick={like}
-              className='absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-4 py-1.5 text-sm text-zinc-200 backdrop-blur transition hover:border-rose-500 hover:text-rose-400'
+              className='absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-4 py-2 text-sm text-zinc-200 backdrop-blur transition hover:border-rose-500 hover:text-rose-400 lg:flex'
             >
               <Heart
                 className={`size-4 ${likes > 0 ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'}`}
               />
               {likes > 0 ? likes : '点赞'}
             </button>
+
+            {/* 移动端（抖音式）：胶囊消息 + 覆盖式输入 */}
+            <div className='absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2 px-3 pb-3 lg:hidden'>
+              <div className='pointer-events-none flex flex-col items-start gap-1.5'>
+                {messages.slice(-3).map((m) => (
+                  <span
+                    key={m.id}
+                    className='max-w-[85%] truncate rounded-full bg-black/55 px-3 py-1.5 text-xs text-white/95 backdrop-blur'
+                  >
+                    <span
+                      className={
+                        m.role === 'bot' ? 'text-violet-300' : 'text-blue-300'
+                      }
+                    >
+                      {m.username}：
+                    </span>
+                    {m.content}
+                  </span>
+                ))}
+              </div>
+              <div className='flex items-center gap-2'>
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && void send()}
+                  placeholder={identity ? '发条消息…' : '获取身份后即可发言'}
+                  disabled={!started || !identity || sending}
+                  className='min-w-0 flex-1 rounded-full border border-white/15 bg-black/60 px-4 py-2 text-sm text-white outline-none backdrop-blur transition placeholder:text-zinc-400 focus:border-blue-500 disabled:opacity-50'
+                />
+                <button
+                  onClick={() => void send()}
+                  disabled={sending || !input.trim() || !started || !identity}
+                  className='shrink-0 rounded-full bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-blue-600/25 transition hover:brightness-110 disabled:opacity-40'
+                >
+                  {sending ? '发送中…' : '发送'}
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* 右：聊天面板，固定 400 宽 */}
-          <section className='flex h-80 min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/70 backdrop-blur lg:h-auto lg:w-[400px]'>
+          <section className='hidden min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/70 backdrop-blur lg:flex lg:w-[400px]'>
             <div className='flex shrink-0 items-center justify-between border-b border-zinc-800 px-4 py-3'>
               <div>
                 <h2 className='font-semibold text-zinc-100'>互动聊天</h2>
