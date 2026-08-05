@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { LoaderCircle, Send, Video } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -24,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { EDGE_TTS_VOICES } from '@/features/avatar-studio/voices'
 import { api, type Avatar, type BroadcastTask } from '@/lib/api'
 
 function showApiError(error: unknown) {
@@ -78,6 +80,10 @@ export function Broadcast({ initialAvatarId }: { initialAvatarId?: string }) {
 
   const task = useTaskPolling(taskId)
   const selectedAvatar = avatars.find((a) => String(a.id) === selectedAvatarId)
+  const readyAvatars = avatars.filter((avatar) => avatar.status === 'ready')
+  const selectedVoiceLabel =
+    EDGE_TTS_VOICES.find((voice) => voice.id === selectedAvatar?.voiceId)?.label ??
+    selectedAvatar?.voiceId
 
   const loadAvatars = useCallback(async () => {
     try {
@@ -145,15 +151,31 @@ export function Broadcast({ initialAvatarId }: { initialAvatarId?: string }) {
         </div>
 
         <div className='grid gap-4 lg:grid-cols-2'>
-          <Card>
-            <CardHeader>
-              <CardTitle>任务配置</CardTitle>
-              <CardDescription>
-                数字人需已完成基础视频生成（状态为「就绪」）。
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className='flex flex-col gap-5'>
+          {readyAvatars.length === 0 ? (
+            <Card>
+              <CardHeader className='items-center text-center'>
+                <CardTitle>还没有可用的数字人</CardTitle>
+                <CardDescription>
+                  播报需要已完成基础视频生成的数字人（状态为「就绪」）。
+                  请先到 Avatar Studio 创建。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className='flex justify-center'>
+                <Button asChild>
+                  <Link to='/avatar-studio'>去创建数字人</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>任务配置</CardTitle>
+                <CardDescription>
+                  数字人需已完成基础视频生成（状态为「就绪」）。
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit} className='flex flex-col gap-5'>
                 <div className='flex flex-col gap-2'>
                   <Label htmlFor='avatar-select'>选择数字人</Label>
                   <Select value={selectedAvatarId} onValueChange={setSelectedAvatarId}>
@@ -173,12 +195,18 @@ export function Broadcast({ initialAvatarId }: { initialAvatarId?: string }) {
                       ))}
                     </SelectContent>
                   </Select>
-                  {selectedAvatar?.imageS3Url && (
-                    <img
-                      src={selectedAvatar.imageS3Url}
-                      alt={selectedAvatar.name}
-                      className='mt-1 h-24 w-24 rounded-lg border object-cover'
-                    />
+                  {selectedAvatar && (
+                    <div className='mt-1 flex items-center gap-3 rounded-lg border p-3'>
+                      <img
+                        src={selectedAvatar.imageS3Url}
+                        alt={selectedAvatar.name}
+                        className='h-16 w-16 rounded-lg border object-cover'
+                      />
+                      <div className='min-w-0 text-sm'>
+                        <p className='truncate font-medium'>{selectedAvatar.name} (#{selectedAvatar.id})</p>
+                        <p className='truncate text-muted-foreground'>音色：{selectedVoiceLabel}</p>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -197,9 +225,10 @@ export function Broadcast({ initialAvatarId }: { initialAvatarId?: string }) {
                   {submitting ? <LoaderCircle className='size-4 animate-spin' /> : <Send className='size-4' />}
                   提交任务
                 </Button>
-              </form>
-            </CardContent>
-          </Card>
+                </form>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className='flex-row items-center justify-between space-y-0'>

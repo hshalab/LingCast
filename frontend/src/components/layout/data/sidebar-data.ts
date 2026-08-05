@@ -116,7 +116,7 @@ export const sidebarData: SidebarData = {
           icon: Clapperboard,
         },
         {
-          title: 'Broadcast',
+          title: '播报制作',
           url: '/broadcast',
           icon: Video,
         },

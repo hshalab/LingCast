@@ -15,6 +15,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api, type Avatar } from '@/lib/api'
 
@@ -39,6 +45,7 @@ export function AvatarLibrary() {
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<Avatar | null>(null)
 
   const loadAvatars = useCallback(async () => {
     setLoading(true)
@@ -129,12 +136,26 @@ export function AvatarLibrary() {
             {avatars.map((avatar) => (
               <Card key={avatar.id} className='overflow-hidden'>
                 {avatar.imageS3Url ? (
-                  <img
-                    src={avatar.imageS3Url}
-                    alt={avatar.name}
-                    className='aspect-video w-full border-b object-cover'
-                    loading='lazy'
-                  />
+                  <button
+                    type='button'
+                    className='group relative block w-full'
+                    disabled={avatar.status !== 'ready'}
+                    onClick={() => setPreview(avatar)}
+                  >
+                    <img
+                      src={avatar.imageS3Url}
+                      alt={avatar.name}
+                      className='aspect-video w-full border-b object-cover'
+                      loading='lazy'
+                    />
+                    {avatar.status === 'ready' && (
+                      <span className='absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30'>
+                        <span className='rounded-full bg-black/60 px-3 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100'>
+                          ▶ 预览默认视频
+                        </span>
+                      </span>
+                    )}
+                  </button>
                 ) : (
                   <div className='flex aspect-video w-full items-center justify-center border-b bg-muted'>
                     <ImageIcon className='size-8 text-muted-foreground' />
@@ -194,6 +215,23 @@ export function AvatarLibrary() {
             ))}
           </div>
         )}
+
+        <Dialog open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
+          <DialogContent className='sm:max-w-2xl'>
+            <DialogHeader>
+              <DialogTitle>{preview?.name} · 默认驱动视频</DialogTitle>
+            </DialogHeader>
+            {preview?.baseVideoS3Url && (
+              <video
+                src={preview.baseVideoS3Url}
+                controls
+                autoPlay
+                playsInline
+                className='aspect-video w-full rounded-lg border bg-black'
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </Main>
     </>
   )

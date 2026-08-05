@@ -246,15 +246,25 @@ export function AvatarStudio() {
                   「{created.name}」的基础视频已就绪，可以开始播报或直播了。
                 </CardDescription>
               </CardHeader>
-              <CardContent className='flex gap-2'>
-                <Button asChild>
-                  <Link to='/broadcast' search={{ avatarId: String(created.id) }}>
-                    去播报
-                  </Link>
-                </Button>
-                <Button asChild variant='outline'>
-                  <Link to='/avatar-library'>数字人列表</Link>
-                </Button>
+              <CardContent className='flex flex-col gap-3'>
+                {created.baseVideoS3Url && (
+                  <video
+                    src={created.baseVideoS3Url}
+                    controls
+                    playsInline
+                    className='aspect-video w-full rounded-lg border bg-black'
+                  />
+                )}
+                <div className='flex gap-2'>
+                  <Button asChild>
+                    <Link to='/broadcast' search={{ avatarId: String(created.id) }}>
+                      去播报
+                    </Link>
+                  </Button>
+                  <Button asChild variant='outline'>
+                    <Link to='/avatar-library'>数字人列表</Link>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
