@@ -42,7 +42,10 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
   const [sending, setSending] = useState(false)
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [liveSessions, setLiveSessions] = useState<LiveSessionItem[]>([])
-  const streamUrl = `${import.meta.env.VITE_API_BASE_URL ?? ''}/live/avatar_${id}.flv`
+  // Full pull URL: dev uses VITE_API_BASE_URL, dockerized app falls back to
+  // the current origin (e.g. http://localhost:8080).
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const streamUrl = `${import.meta.env.VITE_API_BASE_URL || origin}/live/avatar_${id}.flv`
 
   // Check whether the live session already exists on load.
   useEffect(() => {
@@ -225,7 +228,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
         <Card>
           <CardContent className='flex flex-wrap items-center gap-2 py-3 text-sm'>
             <span className='text-muted-foreground'>拉流地址：</span>
-            <code className='truncate rounded bg-muted px-2 py-1'>{streamUrl}</code>
+            <code className='break-all rounded bg-muted px-2 py-1'>{streamUrl}</code>
             <Button variant='ghost' size='sm' onClick={() => void copyStreamUrl()}>
               <Copy className='size-3.5' />
               复制
