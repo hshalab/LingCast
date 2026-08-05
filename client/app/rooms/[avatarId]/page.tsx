@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import AuthModal from '@/components/auth-modal'
+import NavHeader from '@/components/nav-header'
 import XgFlvPlayer from '@/components/xg-player'
 import {
   fetchChatHistory,
@@ -28,11 +28,10 @@ export default function RoomPage() {
   const { avatarId } = useParams<{ avatarId: string }>()
   const id = Number(avatarId)
   const [started, setStarted] = useState(false)
-  const { identity, loading: identityLoading, ensureIdentity, logout } = useIdentity()
+  const { identity } = useIdentity()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
   const streamUrl = `/live/avatar_${id}.flv`
 
@@ -117,31 +116,34 @@ export default function RoomPage() {
   }
 
   return (
-    <main className='mx-auto flex h-dvh w-full max-w-6xl flex-col overflow-hidden px-4 py-4 sm:px-6'>
-      <header className='mb-3 flex shrink-0 flex-wrap items-center gap-3'>
-        <Link
-          href='/'
-          className='rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-600'
-        >
-          ← 返回列表
-        </Link>
-        <div>
-          <h1 className='text-lg font-bold'>直播间 #{id}</h1>
-          <p className='text-xs text-zinc-500'>
-            拉流地址：
-            <code className='ml-1 break-all text-zinc-400'>{streamUrl}</code>
-          </p>
-        </div>
-        <span
-          className={`ml-auto shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-            started
-              ? 'bg-red-600 text-white'
-              : 'border border-zinc-700 text-zinc-400'
-          }`}
-        >
-          {started ? '● 直播中' : '未开播'}
-        </span>
-      </header>
+    <main className='flex h-dvh flex-col overflow-hidden'>
+      <NavHeader />
+
+      <div className='mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6'>
+        <header className='mb-3 flex shrink-0 flex-wrap items-center gap-3'>
+          <Link
+            href='/'
+            className='rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-600'
+          >
+            ← 返回列表
+          </Link>
+          <div>
+            <h1 className='text-lg font-bold'>直播间 #{id}</h1>
+            <p className='text-xs text-zinc-500'>
+              拉流地址：
+              <code className='ml-1 break-all text-zinc-400'>{streamUrl}</code>
+            </p>
+          </div>
+          <span
+            className={`ml-auto shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
+              started
+                ? 'bg-red-600 text-white'
+                : 'border border-zinc-700 text-zinc-400'
+            }`}
+          >
+            {started ? '● 直播中' : '未开播'}
+          </span>
+        </header>
 
       {/* 左右结构：桌面端画面在左、聊天在右，整页 100% 视口高，内容超高时各区域内部滚动 */}
       <div className='flex min-h-0 flex-1 flex-col gap-3 lg:flex-row'>
@@ -161,50 +163,7 @@ export default function RoomPage() {
 
         <section className='flex min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 lg:h-full lg:w-[380px]'>
           <div className='shrink-0 border-b border-zinc-800 px-4 py-3'>
-            <div className='flex items-center justify-between gap-2'>
-              <h2 className='font-medium'>互动聊天</h2>
-              {identity ? (
-                <span className='flex items-center gap-1.5 text-xs text-zinc-400'>
-                  <span
-                    className={`rounded px-1.5 py-0.5 ${
-                      identity.isGuest ? 'bg-zinc-800 text-zinc-400' : 'bg-blue-600/20 text-blue-300'
-                    }`}
-                  >
-                    {identity.isGuest ? '游客' : '账号'}
-                  </span>
-                  <span className='font-medium text-zinc-300'>{identity.username}</span>
-                  <span className='text-zinc-600'>#{identity.userId}</span>
-                  {identity.isGuest ? (
-                    <>
-                      <button
-                        onClick={() => setAuthMode(authMode === 'register' ? null : 'register')}
-                        className='text-blue-400 hover:text-blue-300'
-                      >
-                        注册
-                      </button>
-                      <button
-                        onClick={() => setAuthMode(authMode === 'login' ? null : 'login')}
-                        className='text-blue-400 hover:text-blue-300'
-                      >
-                        登录
-                      </button>
-                    </>
-                  ) : (
-                    <button onClick={() => void logout()} className='text-zinc-500 hover:text-zinc-300'>
-                      退出
-                    </button>
-                  )}
-                </span>
-              ) : (
-                <button
-                  onClick={() => void ensureIdentity()}
-                  disabled={identityLoading}
-                  className='text-xs text-blue-400 hover:text-blue-300'
-                >
-                  {identityLoading ? '获取身份中…' : '获取游客身份'}
-                </button>
-              )}
-            </div>
+            <h2 className='font-medium'>互动聊天</h2>
             <p className='mt-0.5 text-xs text-zinc-500'>
               发送消息，数字人会通过 AI 回复并开口说话；退出后身份重置为新的游客。
             </p>
@@ -262,8 +221,7 @@ export default function RoomPage() {
           </div>
         </section>
       </div>
-
-      {authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} />}
+      </div>
     </main>
   )
 }
