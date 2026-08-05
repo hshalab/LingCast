@@ -119,7 +119,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
         {loading ? (
           <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
             {Array.from({ length: 8 }, (_, i) => (
-              <Card key={i} className='overflow-hidden'>
+              <Card key={i} className='overflow-hidden py-0'>
                 <Skeleton className='aspect-[9/16] w-full rounded-none' />
                 <CardHeader className='gap-1.5'>
                   <Skeleton className='h-5 w-2/3' />
@@ -165,7 +165,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
               <Card
                 key={avatar.id}
                 id={`avatar-card-${avatar.id}`}
-                className={`group relative overflow-hidden ${
+                className={`group relative overflow-hidden py-0 ${
                   initialAvatarId === String(avatar.id)
                     ? 'ring-2 ring-primary/60'
                     : ''
