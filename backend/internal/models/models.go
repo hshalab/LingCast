@@ -28,6 +28,27 @@ const (
 // DefaultEdgeVoice is the fallback voice when no voiceId is supplied.
 const DefaultEdgeVoice = "zh-CN-XiaoxiaoNeural"
 
+// LiveSettings is the per-avatar live-streaming configuration persisted as a
+// JSON string on the avatar row (subtitles: on/off, font file, position,
+// border width and size). Unknown fields are ignored by both sides.
+type LiveSettings struct {
+	SubtitleEnabled  bool   `json:"subtitleEnabled"`
+	SubtitleFont     string `json:"subtitleFont"`     // font filename in worker/fonts/, "" = system default
+	SubtitlePosition string `json:"subtitlePosition"` // "bottom" | "top"
+	SubtitleBorder   int    `json:"subtitleBorder"`   // stroke width in px (0 = none)
+	SubtitleSize     int    `json:"subtitleSize"`     // px
+}
+
+// DefaultLiveSettings is applied when an avatar has no saved settings yet.
+func DefaultLiveSettings() LiveSettings {
+	return LiveSettings{
+		SubtitleEnabled:  true,
+		SubtitlePosition: "bottom",
+		SubtitleBorder:   2,
+		SubtitleSize:     46,
+	}
+}
+
 // Avatar is a digital avatar material record. Files live in object storage;
 // the database only stores their S3 keys.
 type Avatar struct {
@@ -38,9 +59,11 @@ type Avatar struct {
 	VoiceID string `gorm:"size:64;not null;default:zh-CN-XiaoxiaoNeural" json:"voiceId"`
 	// BaseVideoS3Key points to the pre-processed LivePortrait driving clip
 	// (silent, 24fps) consumed by both the offline and live pipelines.
-	BaseVideoS3Key *string   `gorm:"size:512" json:"baseVideoS3Key,omitempty"`
-	Status         string    `gorm:"size:32;not null;default:initializing;index" json:"status"`
-	CreatedAt      time.Time `json:"createdAt"`
+	BaseVideoS3Key *string `gorm:"size:512" json:"baseVideoS3Key,omitempty"`
+	Status         string  `gorm:"size:32;not null;default:initializing;index" json:"status"`
+	// LiveSettings holds the JSON-serialized models.LiveSettings.
+	LiveSettings string    `gorm:"type:text;not null;default:'{}'" json:"-"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 // BroadcastTask is an async synthesis task queued to the AI worker.

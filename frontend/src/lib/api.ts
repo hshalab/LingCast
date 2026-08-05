@@ -9,8 +9,17 @@ export type Avatar = {
   baseVideoS3Key?: string
   baseVideoS3Url?: string
   status: 'initializing' | 'ready' | 'failed' | 'skipped'
+  liveSettings?: LiveSettings
   initQueuePos?: number
   createdAt: string
+}
+
+export type LiveSettings = {
+  subtitleEnabled: boolean
+  subtitleFont: string
+  subtitlePosition: 'bottom' | 'top'
+  subtitleBorder: number
+  subtitleSize: number
 }
 
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed'

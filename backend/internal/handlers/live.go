@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -76,14 +77,15 @@ type liveStatusResponse struct {
 }
 
 type liveSessionItem struct {
-	AvatarID       uint   `json:"avatarId"`
-	AvatarName     string `json:"avatarName"`
-	ImageS3URL     string `json:"imageS3Url"`
-	ImageS3Key     string `json:"imageS3Key"`
-	BaseVideoS3Key string `json:"baseVideoS3Key"`
-	VoiceID        string `json:"voiceId"`
-	StreamID       string `json:"streamId"`
-	Status         string `json:"status"`
+	AvatarID       uint                `json:"avatarId"`
+	AvatarName     string              `json:"avatarName"`
+	ImageS3URL     string              `json:"imageS3Url"`
+	ImageS3Key     string              `json:"imageS3Key"`
+	BaseVideoS3Key string              `json:"baseVideoS3Key"`
+	VoiceID        string              `json:"voiceId"`
+	StreamID       string              `json:"streamId"`
+	Status         string              `json:"status"`
+	LiveSettings   models.LiveSettings `json:"liveSettings"`
 }
 
 func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey, openAIAPIKey, openAIBaseURL, openAIModel string) *LiveHandler {
@@ -160,6 +162,11 @@ func (h *LiveHandler) Start(c *gin.Context) {
 		BaseVideoS3Key: *avatar.BaseVideoS3Key,
 		VoiceID:        avatar.VoiceID,
 	}
+	liveSettings := strings.TrimSpace(avatar.LiveSettings)
+	if liveSettings == "" {
+		liveSettings = "{}"
+	}
+	payload.LiveSettings = json.RawMessage(liveSettings)
 	if err := h.q.PushTo(c.Request.Context(), h.liveControlQueueKey, payload); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "notify worker failed: " + err.Error()})
 		return
@@ -424,6 +431,7 @@ func (h *LiveHandler) ListSessions(c *gin.Context) {
 			if avatar.BaseVideoS3Key != nil {
 				item.BaseVideoS3Key = *avatar.BaseVideoS3Key
 			}
+			item.LiveSettings = parseLiveSettings(avatar.LiveSettings)
 		}
 		items = append(items, item)
 	}

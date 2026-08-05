@@ -1,25 +1,38 @@
 """Burn spoken text as a subtitle overlay on BGR frames using Pillow.
 
 The brew ffmpeg build has no drawtext filter (that needs ffmpeg-full), so we
-render subtitles in Python before frames enter the pipe. The CJK font path is
-configurable via STREAM_SUBTITLE_FONT (defaults to a macOS system font).
+render subtitles in Python before frames enter the pipe. Fonts are looked up
+in worker/fonts/ first, then STREAM_SUBTITLE_FONT, then a macOS system font.
+Style (position / border width / size) comes from the avatar's live settings.
 """
 
 import logging
 import os
+from pathlib import Path
 
 import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# User-downloaded free fonts live here (see worker/fonts/README.md).
+FONTS_DIR = Path(__file__).resolve().parents[1] / "fonts"
+
 
 class SubtitleRenderer:
-    def __init__(self, font_path: str | None = None, font_size: int = 46):
+    def __init__(
+        self,
+        font_path: str | None = None,
+        font_size: int = 46,
+        position: str = "bottom",
+        border_width: int = 2,
+    ):
         self.font_path = font_path or os.environ.get(
             "STREAM_SUBTITLE_FONT", "/System/Library/Fonts/STHeiti Medium.ttc"
         )
         self.font_size = font_size
+        self.position = "top" if position == "top" else "bottom"
+        self.border_width = max(0, int(border_width))
         self._font = None
 
     def _ensure_font(self):
@@ -36,7 +49,7 @@ class SubtitleRenderer:
         return self._font
 
     def draw(self, frame: np.ndarray, text: str) -> np.ndarray:
-        """Return a copy of the BGR frame with `text` drawn near the bottom."""
+        """Return a copy of the BGR frame with `text` drawn top or bottom."""
         if not text:
             return frame
         from PIL import Image, ImageDraw
@@ -55,7 +68,7 @@ class SubtitleRenderer:
         pad = 12
         line_h = self.font_size + 10
         total_h = len(lines) * line_h
-        y0 = h - total_h - 70
+        y0 = 40 if self.position == "top" else h - total_h - 70
 
         for li, line in enumerate(lines):
             bbox = draw.textbbox((0, 0), line, font=font)
@@ -63,13 +76,28 @@ class SubtitleRenderer:
             x = (w - tw) // 2
             y = y0 + li * line_h
             draw.rectangle([x - pad, y - pad, x + tw + pad, y + self.font_size + pad], fill=(0, 0, 0, 150))
-            draw.text(
-                (x, y),
-                line,
-                font=font,
-                fill=(255, 255, 255),
-                stroke_width=2,
-                stroke_fill=(0, 0, 0),
-            )
+            if self.border_width > 0:
+                draw.text(
+                    (x, y),
+                    line,
+                    font=font,
+                    fill=(255, 255, 255),
+                    stroke_width=self.border_width,
+                    stroke_fill=(0, 0, 0),
+                )
+            else:
+                draw.text((x, y), line, font=font, fill=(255, 255, 255))
 
         return cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
+
+    @staticmethod
+    def resolve_font_path(font_name: str) -> str | None:
+        """Map a stored font filename to worker/fonts/<name> if present."""
+        name = (font_name or "").strip()
+        if not name:
+            return None
+        candidate = FONTS_DIR / name
+        if candidate.is_file():
+            return str(candidate)
+        logger.warning("font %s not found in %s, falling back to default", name, FONTS_DIR)
+        return None

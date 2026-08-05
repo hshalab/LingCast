@@ -59,6 +59,7 @@ class LiveAvatarSession:
         work_dir: Path,
         fps: float,
         queue_key: str,
+        subtitle_settings: dict | None = None,
     ):
         self.avatar_id = avatar_id
         self.stream_id = stream_id
@@ -68,6 +69,7 @@ class LiveAvatarSession:
         self.work_dir = work_dir
         self.fps = float(fps)
         self.queue_key = queue_key
+        self.subtitle_settings = subtitle_settings or {}
         self.pipe = None
         self.base_frames: list | None = None
         self.cursor = 0
@@ -293,13 +295,28 @@ class LiveAvatarSession:
 
     def _write_frame(self, frame) -> None:
         """Apply the subtitle overlay then push the frame into the pipe."""
-        if self._subtitle_text:
+        if self._subtitle_text and self._subtitle_enabled():
             if self._subtitle is None:
                 from streaming.subtitle import SubtitleRenderer
 
-                self._subtitle = SubtitleRenderer()
+                self._subtitle = self._make_subtitle_renderer()
             frame = self._subtitle.draw(frame, self._subtitle_text)
         self.pipe.write_frame(frame)
+
+    def _subtitle_enabled(self) -> bool:
+        return bool(self.subtitle_settings.get("subtitleEnabled", True))
+
+    def _make_subtitle_renderer(self):
+        from streaming.subtitle import SubtitleRenderer
+
+        font_name = (self.subtitle_settings.get("subtitleFont") or "").strip()
+        font_path = SubtitleRenderer.resolve_font_path(font_name)
+        return SubtitleRenderer(
+            font_path=font_path,
+            font_size=int(self.subtitle_settings.get("subtitleSize") or 46),
+            position=self.subtitle_settings.get("subtitlePosition") or "bottom",
+            border_width=int(self.subtitle_settings.get("subtitleBorder") or 2),
+        )
 
     def _slice_base(self, n: int) -> list:
         if not self.base_frames:
@@ -399,6 +416,7 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> 
             work_dir=work_dir,
             fps=fps,
             queue_key=f"live_queue:{avatar_id}",
+            subtitle_settings=payload.get("liveSettings") or {},
         )
         session.setup()
         sessions[avatar_id] = session
@@ -428,6 +446,7 @@ def _restore_sessions(api_base_url, sessions, storage, work_root, fps, r) -> Non
                     "imageS3Key": item.get("imageS3Key", ""),
                     "baseVideoS3Key": item.get("baseVideoS3Key", ""),
                     "voiceId": item.get("voiceId", ""),
+                    "liveSettings": item.get("liveSettings") or {},
                 }
                 if not payload["imageS3Key"] or not payload["baseVideoS3Key"]:
                     logger.warning(

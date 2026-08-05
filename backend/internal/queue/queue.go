@@ -23,12 +23,13 @@ type TaskPayload struct {
 // LiveControlPayload tells the streaming worker to start/stop the continuous
 // FFmpeg pipe for an avatar's live session.
 type LiveControlPayload struct {
-	Action         string `json:"action"` // "start" | "stop"
-	AvatarID       uint   `json:"avatarId"`
-	StreamID       string `json:"streamId"`
-	ImageS3Key     string `json:"imageS3Key"`
-	BaseVideoS3Key string `json:"baseVideoS3Key,omitempty"`
-	VoiceID        string `json:"voiceId,omitempty"`
+	Action         string          `json:"action"` // "start" | "stop"
+	AvatarID       uint            `json:"avatarId"`
+	StreamID       string          `json:"streamId"`
+	ImageS3Key     string          `json:"imageS3Key"`
+	BaseVideoS3Key string          `json:"baseVideoS3Key,omitempty"`
+	VoiceID        string          `json:"voiceId,omitempty"`
+	LiveSettings   json.RawMessage `json:"liveSettings,omitempty"`
 }
 
 // AvatarInitPayload tells the worker to pre-process a newly created avatar

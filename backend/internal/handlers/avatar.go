@@ -31,16 +31,17 @@ type AvatarHandler struct {
 }
 
 type avatarResponse struct {
-	ID             uint      `json:"id"`
-	Name           string    `json:"name"`
-	ImageS3Key     string    `json:"imageS3Key"`
-	ImageS3URL     string    `json:"imageS3Url"`
-	VoiceID        string    `json:"voiceId"`
-	BaseVideoS3Key *string   `json:"baseVideoS3Key,omitempty"`
-	BaseVideoS3URL *string   `json:"baseVideoS3Url,omitempty"`
-	Status         string    `json:"status"`
-	InitQueuePos   *int      `json:"initQueuePos,omitempty"`
-	CreatedAt      time.Time `json:"createdAt"`
+	ID             uint                `json:"id"`
+	Name           string              `json:"name"`
+	ImageS3Key     string              `json:"imageS3Key"`
+	ImageS3URL     string              `json:"imageS3Url"`
+	VoiceID        string              `json:"voiceId"`
+	BaseVideoS3Key *string             `json:"baseVideoS3Key,omitempty"`
+	BaseVideoS3URL *string             `json:"baseVideoS3Url,omitempty"`
+	Status         string              `json:"status"`
+	InitQueuePos   *int                `json:"initQueuePos,omitempty"`
+	LiveSettings   models.LiveSettings `json:"liveSettings"`
+	CreatedAt      time.Time           `json:"createdAt"`
 }
 
 func NewAvatarHandler(db *gorm.DB, s3 *storage.Client, q *queue.Queue, avatarInitQueueKey string) *AvatarHandler {
@@ -335,6 +336,54 @@ func (h *AvatarHandler) Skip(c *gin.Context) {
 	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
 }
 
+// UpdateLiveSettings handles PUT /api/avatars/:id/live-settings — persists
+// the avatar's live-streaming configuration (subtitle on/off, font, position,
+// border, size) as a JSON string on the avatar row.
+func (h *AvatarHandler) UpdateLiveSettings(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		return
+	}
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	var settings models.LiveSettings
+	if err := c.ShouldBindJSON(&settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid live settings: " + err.Error()})
+		return
+	}
+	settings.SubtitleFont = strings.TrimSpace(settings.SubtitleFont)
+	if settings.SubtitlePosition != "top" {
+		settings.SubtitlePosition = "bottom"
+	}
+	if settings.SubtitleSize < 24 || settings.SubtitleSize > 96 {
+		settings.SubtitleSize = models.DefaultLiveSettings().SubtitleSize
+	}
+	if settings.SubtitleBorder < 0 || settings.SubtitleBorder > 10 {
+		settings.SubtitleBorder = 0
+	}
+
+	data, err := json.Marshal(settings)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	avatar.LiveSettings = string(data)
+	if err := h.db.Save(&avatar).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
+}
+
 func (h *AvatarHandler) uploadFormFile(c *gin.Context, header *multipart.FileHeader, prefix string) (string, error) {
 	file, err := header.Open()
 	if err != nil {
@@ -357,14 +406,16 @@ func (h *AvatarHandler) uploadFormFile(c *gin.Context, header *multipart.FileHea
 }
 
 func toAvatarResponse(a models.Avatar, s3 *storage.Client) avatarResponse {
+	liveSettings := parseLiveSettings(a.LiveSettings)
 	resp := avatarResponse{
-		ID:         a.ID,
-		Name:       a.Name,
-		ImageS3Key: a.ImageS3Key,
-		ImageS3URL: s3.PublicURL(a.ImageS3Key),
-		VoiceID:    a.VoiceID,
-		Status:     a.Status,
-		CreatedAt:  a.CreatedAt,
+		ID:           a.ID,
+		Name:         a.Name,
+		ImageS3Key:   a.ImageS3Key,
+		ImageS3URL:   s3.PublicURL(a.ImageS3Key),
+		VoiceID:      a.VoiceID,
+		Status:       a.Status,
+		LiveSettings: liveSettings,
+		CreatedAt:    a.CreatedAt,
 	}
 	if a.BaseVideoS3Key != nil {
 		key := *a.BaseVideoS3Key
@@ -374,6 +425,28 @@ func toAvatarResponse(a models.Avatar, s3 *storage.Client) avatarResponse {
 		}
 	}
 	return resp
+}
+
+// parseLiveSettings decodes the avatar's JSON live settings, falling back to
+// defaults for missing/invalid content and filling zero fields with defaults.
+func parseLiveSettings(raw string) models.LiveSettings {
+	settings := models.DefaultLiveSettings()
+	if strings.TrimSpace(raw) != "" {
+		if err := json.Unmarshal([]byte(raw), &settings); err != nil {
+			return settings
+		}
+	}
+	// Normalize: empty position -> bottom; zero size/border -> defaults.
+	if settings.SubtitlePosition != "top" {
+		settings.SubtitlePosition = "bottom"
+	}
+	if settings.SubtitleSize <= 0 {
+		settings.SubtitleSize = models.DefaultLiveSettings().SubtitleSize
+	}
+	if settings.SubtitleBorder < 0 {
+		settings.SubtitleBorder = 0
+	}
+	return settings
 }
 
 func newObjectKey(prefix, filename string) string {

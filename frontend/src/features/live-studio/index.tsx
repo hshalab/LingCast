@@ -19,12 +19,23 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
   api,
   type Avatar,
   type ChatMessage,
   type LiveSessionItem,
+  type LiveSettings,
   type LiveStatus,
 } from '@/lib/api'
 
@@ -46,6 +57,15 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
   const [busy, setBusy] = useState(false)
   const [monitorOn, setMonitorOn] = useState(false)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [liveSettings, setLiveSettings] = useState<LiveSettings>({
+    subtitleEnabled: true,
+    subtitleFont: '',
+    subtitlePosition: 'bottom',
+    subtitleBorder: 2,
+    subtitleSize: 46,
+  })
+  const [settingsLoading, setSettingsLoading] = useState(true)
+  const [savingSettings, setSavingSettings] = useState(false)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [avatars, setAvatars] = useState<Avatar[]>([])
@@ -63,6 +83,46 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       .then(() => setStarted(true))
       .catch(() => setStarted(false))
   }, [id])
+
+  // Load the avatar's persisted live settings (subtitles).
+  useEffect(() => {
+    if (!id) return
+    api
+      .get<Avatar>(`/avatars/${id}`)
+      .then(({ data }) => {
+        const s = data.liveSettings
+        if (s) {
+          setLiveSettings({
+            subtitleEnabled: s.subtitleEnabled,
+            subtitleFont: s.subtitleFont ?? '',
+            subtitlePosition: s.subtitlePosition === 'top' ? 'top' : 'bottom',
+            subtitleBorder: s.subtitleBorder ?? 2,
+            subtitleSize: s.subtitleSize || 46,
+          })
+        }
+      })
+      .finally(() => setSettingsLoading(false))
+  }, [id])
+
+  const saveSettings = async () => {
+    if (!id || savingSettings) return
+    setSavingSettings(true)
+    try {
+      await api.put(`/avatars/${id}/live-settings`, liveSettings)
+      toast.success('字幕设置已保存')
+      if (started) {
+        // Re-open the stream so the new subtitle settings take effect now.
+        await api.post(`/live/${id}/stop`).catch(() => {})
+        await api.post(`/live/${id}/start`)
+        setStarted(true)
+        toast.info('已重新开启直播，新设置生效')
+      }
+    } catch (error) {
+      showApiError(error)
+    } finally {
+      setSavingSettings(false)
+    }
+  }
 
   // Avatar switcher data: ready avatars + which ones are live, every 3s.
   useEffect(() => {
@@ -412,6 +472,121 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                     ))}
                   </ol>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className='gap-1'>
+                <CardTitle>字幕设置</CardTitle>
+                <CardDescription>
+                  直播时是否在画面中显示说话文字；保存后自动重启直播生效。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className='flex flex-col gap-3'>
+                <div className='flex items-center justify-between gap-2'>
+                  <Label htmlFor='subtitle-enabled'>显示字幕</Label>
+                  <Switch
+                    id='subtitle-enabled'
+                    checked={liveSettings.subtitleEnabled}
+                    onCheckedChange={(v) =>
+                      setLiveSettings((s) => ({ ...s, subtitleEnabled: v }))
+                    }
+                    disabled={settingsLoading}
+                  />
+                </div>
+
+                <div className='flex flex-col gap-1.5'>
+                  <Label htmlFor='subtitle-font'>字体（worker/fonts/ 下的文件名）</Label>
+                  <Input
+                    id='subtitle-font'
+                    list='subtitle-fonts'
+                    value={liveSettings.subtitleFont}
+                    onChange={(e) =>
+                      setLiveSettings((s) => ({ ...s, subtitleFont: e.target.value }))
+                    }
+                    placeholder='留空 = 系统默认'
+                    disabled={settingsLoading}
+                  />
+                  <datalist id='subtitle-fonts'>
+                    <option value='SourceHanSansSC-Regular.otf' />
+                    <option value='SourceHanSansSC-Bold.otf' />
+                    <option value='SourceHanSerifSC-Regular.otf' />
+                    <option value='AlibabaPuHuiTi-3-55-Regular.ttf' />
+                    <option value='HarmonyOS_Sans_SC_Regular.ttf' />
+                    <option value='STHeiti Medium.ttc' />
+                  </datalist>
+                </div>
+
+                <div className='flex flex-col gap-1.5'>
+                  <Label>位置</Label>
+                  <Select
+                    value={liveSettings.subtitlePosition}
+                    onValueChange={(v) =>
+                      setLiveSettings((s) => ({
+                        ...s,
+                        subtitlePosition: v as 'bottom' | 'top',
+                      }))
+                    }
+                    disabled={settingsLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='bottom'>底部</SelectItem>
+                      <SelectItem value='top'>顶部</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className='flex gap-3'>
+                  <div className='flex flex-1 flex-col gap-1.5'>
+                    <Label htmlFor='subtitle-border'>描边宽度 (0-10)</Label>
+                    <Input
+                      id='subtitle-border'
+                      type='number'
+                      min={0}
+                      max={10}
+                      value={liveSettings.subtitleBorder}
+                      onChange={(e) =>
+                        setLiveSettings((s) => ({
+                          ...s,
+                          subtitleBorder: Number(e.target.value) || 0,
+                        }))
+                      }
+                      disabled={settingsLoading}
+                    />
+                  </div>
+                  <div className='flex flex-1 flex-col gap-1.5'>
+                    <Label htmlFor='subtitle-size'>字号 (24-96)</Label>
+                    <Input
+                      id='subtitle-size'
+                      type='number'
+                      min={24}
+                      max={96}
+                      value={liveSettings.subtitleSize}
+                      onChange={(e) =>
+                        setLiveSettings((s) => ({
+                          ...s,
+                          subtitleSize: Number(e.target.value) || 46,
+                        }))
+                      }
+                      disabled={settingsLoading}
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  onClick={() => void saveSettings()}
+                  disabled={savingSettings || settingsLoading}
+                >
+                  {savingSettings ? <LoaderCircle className='size-4 animate-spin' /> : null}
+                  保存设置
+                </Button>
+                <p className='text-xs text-muted-foreground'>
+                  免费字体下载后放入 worker/fonts/ 目录（文件名需一致），参考
+                  worker/fonts/README.md。
+                </p>
               </CardContent>
             </Card>
 

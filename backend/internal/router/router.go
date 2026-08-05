@@ -48,6 +48,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		api.DELETE("/avatars/:id", avatarHandler.Delete)
 		api.POST("/avatars/:id/retry", avatarHandler.Retry)
 		api.POST("/avatars/:id/skip", avatarHandler.Skip)
+		api.PUT("/avatars/:id/live-settings", avatarHandler.UpdateLiveSettings)
 		// Internal webhook: worker persists the pre-processed base video key.
 		api.POST("/avatars/:id/base-video", avatarHandler.UpdateBaseVideo)
 		api.POST("/tasks", taskHandler.Create)
