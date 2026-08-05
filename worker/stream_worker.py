@@ -474,7 +474,8 @@ def _restore_sessions(api_base_url, sessions, storage, work_root, fps, r) -> Non
 def main() -> None:
     _load_local_env()
     _check_required_env()
-    _ensure_nltk_resources()
+    if os.environ.get("TTS_ENGINE", "edge") == "gpt-sovits":
+        _ensure_nltk_resources()
     cfg = load_config()
     work_root = cfg["work_root"]
     fps = float(os.environ.get("LIVEPORTRAIT_OUTPUT_FPS", "24"))

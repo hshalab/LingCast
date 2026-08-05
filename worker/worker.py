@@ -186,7 +186,8 @@ def process_avatar_init(
 def main() -> None:
     _load_local_env()
     _check_required_env()
-    _ensure_nltk_resources()
+    if os.environ.get("TTS_ENGINE", "edge") == "gpt-sovits":
+        _ensure_nltk_resources()
     cfg = load_config()
     storage = S3Storage()
     pipeline = create_pipeline(os.environ.get("AI_MODE", "mock"))

@@ -131,80 +131,57 @@ export default function RoomPage() {
       <NavHeader />
 
       <div className='mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6'>
-        <header className='mb-3 flex shrink-0 flex-wrap items-center gap-3'>
+        {/* 标题行：返回 + 直播间 #id/拉流地址 与 数字人详情 同行 */}
+        <div className='mb-3 flex shrink-0 flex-wrap items-center gap-3'>
           <Link
             href='/'
-            className='rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-600'
+            className='shrink-0 rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-600'
           >
             ← 返回列表
           </Link>
-          <div>
+          <div className='min-w-0 shrink-0'>
             <h1 className='text-lg font-bold'>直播间 #{id}</h1>
             <p className='text-xs text-zinc-500'>
               拉流地址：
               <code className='ml-1 break-all text-zinc-400'>{streamUrl}</code>
             </p>
           </div>
-        </header>
 
-        {/* 数字人详情（位于标题/拉流地址之后） */}
-        {avatar && (
-          <div className='mb-3 shrink-0 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4'>
-            <h3 className='text-sm font-medium'>数字人详情</h3>
-            <dl className='mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3'>
-              <div>
-                <dt className='text-zinc-500'>名称</dt>
-                <dd className='mt-0.5 truncate text-zinc-200'>
-                  {avatar.name} <span className='text-zinc-500'>#{avatar.id}</span>
-                </dd>
-              </div>
-              <div>
-                <dt className='text-zinc-500'>分类</dt>
-                <dd className='mt-0.5 text-zinc-200'>{avatar.category || '其他'}</dd>
-              </div>
+          {/* 数字人详情：与标题同一行，横排展示 */}
+          {avatar && (
+            <div className='flex min-w-[260px] flex-1 flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-2.5 text-xs'>
+              <span className='font-medium text-zinc-200'>
+                {avatar.name} <span className='text-zinc-500'>#{avatar.id}</span>
+              </span>
+              {avatar.category && (
+                <span className='text-zinc-400'>分类：{avatar.category}</span>
+              )}
               {avatar.age != null && (
-                <div>
-                  <dt className='text-zinc-500'>年龄</dt>
-                  <dd className='mt-0.5 text-zinc-200'>{avatar.age}岁</dd>
-                </div>
+                <span className='text-zinc-400'>年龄：{avatar.age}岁</span>
               )}
               {avatar.heightCm != null && (
-                <div>
-                  <dt className='text-zinc-500'>身高</dt>
-                  <dd className='mt-0.5 text-zinc-200'>{avatar.heightCm} cm</dd>
-                </div>
+                <span className='text-zinc-400'>身高：{avatar.heightCm}cm</span>
               )}
               {avatar.weightKg != null && (
-                <div>
-                  <dt className='text-zinc-500'>体重</dt>
-                  <dd className='mt-0.5 text-zinc-200'>{avatar.weightKg} kg</dd>
-                </div>
+                <span className='text-zinc-400'>体重：{avatar.weightKg}kg</span>
               )}
               {avatar.ethnicity && (
-                <div>
-                  <dt className='text-zinc-500'>族裔</dt>
-                  <dd className='mt-0.5 text-zinc-200'>{avatar.ethnicity}</dd>
-                </div>
+                <span className='text-zinc-400'>族裔：{avatar.ethnicity}</span>
               )}
               {avatar.relationshipStatus && (
-                <div>
-                  <dt className='text-zinc-500'>感情状态</dt>
-                  <dd className='mt-0.5 text-zinc-200'>{avatar.relationshipStatus}</dd>
-                </div>
+                <span className='text-zinc-400'>感情：{avatar.relationshipStatus}</span>
               )}
               {avatar.personality && (
-                <div>
-                  <dt className='text-zinc-500'>性格</dt>
-                  <dd className='mt-0.5 text-zinc-200'>{avatar.personality}</dd>
-                </div>
+                <span className='text-zinc-400'>性格：{avatar.personality}</span>
               )}
-            </dl>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
       {/* 左右结构：桌面端画面在左、聊天在右，整页 100% 视口高，内容超高时各区域内部滚动 */}
       <div className='flex min-h-0 flex-1 flex-col gap-3 lg:flex-row'>
-        <div className='flex min-h-0 flex-1 flex-col items-center justify-start gap-3 overflow-y-auto rounded-2xl border border-zinc-800 bg-black p-2 sm:p-3'>
+        {/* 视频列：宽度跟随播放器，避免大块黑边 */}
+        <div className='flex min-h-0 shrink-0 flex-col items-center justify-center overflow-y-auto rounded-2xl border border-zinc-800 bg-black p-2'>
           {started ? (
             <XgFlvPlayer
               url={streamUrl}
@@ -218,7 +195,7 @@ export default function RoomPage() {
           )}
         </div>
 
-        <section className='flex min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 lg:h-full lg:w-[380px]'>
+        <section className='flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50'>
           <div className='shrink-0 border-b border-zinc-800 px-4 py-3'>
             <h2 className='font-medium'>互动聊天</h2>
             <p className='mt-0.5 text-xs text-zinc-500'>
