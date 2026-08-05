@@ -1,12 +1,42 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
+  --bg: 250 250 250; /* zinc-50 */
+  --surface: 255 255 255;
+  --muted: 113 113 122; /* zinc-500 */
+  --subtle: 82 82 91; /* zinc-600 */
+  --faint: 161 161 170; /* zinc-400 */
+  --border: 212 212 216; /* zinc-300 */
+  --fg: 24 24 27; /* zinc-900 */
+  color-scheme: light;
+}
+
+.dark {
+  --bg: 9 9 11; /* zinc-950 */
+  --surface: 24 24 27; /* zinc-900 */
+  --muted: 161 161 170; /* zinc-400 */
+  --subtle: 212 212 216; /* zinc-300 */
+  --faint: 113 113 122; /* zinc-500 */
+  --border: 39 39 42; /* zinc-800 */
+  --fg: 244 244 245; /* zinc-100 */
   color-scheme: dark;
 }
 
+@theme inline {
+  --color-background: rgb(var(--bg));
+  --color-surface: rgb(var(--surface));
+  --color-muted: rgb(var(--muted));
+  --color-subtle: rgb(var(--subtle));
+  --color-faint: rgb(var(--faint));
+  --color-border: rgb(var(--border));
+  --color-foreground: rgb(var(--fg));
+}
+
 body {
-  background: #09090b;
-  color: #f4f4f5;
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
 }
 
 /* slim scrollbars for the chat panel */

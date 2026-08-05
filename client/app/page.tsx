@@ -65,12 +65,12 @@ export default function Home() {
       : sessions.filter((s) => (s.category || '其他') === category)
 
   return (
-    <div className='flex min-h-screen flex-col bg-zinc-950'>
+    <div className='flex min-h-screen flex-col bg-background'>
       <NavHeader />
 
       <main className='mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6'>
         {/* Hero 横幅 */}
-        <section className='relative mb-6 overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-blue-600/25 via-zinc-900 to-violet-600/20 p-6 sm:p-8'>
+        <section className='relative mb-6 overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-blue-600/25 via-surface to-violet-600/20 p-6 sm:p-8'>
           <div className='pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-blue-500/20 blur-3xl' />
           <div className='pointer-events-none absolute -bottom-20 -left-10 size-64 rounded-full bg-violet-500/20 blur-3xl' />
           <div className='relative z-10'>
@@ -78,15 +78,15 @@ export default function Home() {
               正在开播
               <Flame className='ml-2 inline size-6 text-orange-400' />
             </h1>
-            <p className='mt-2 max-w-md text-sm text-zinc-400'>
+            <p className='mt-2 max-w-md text-sm text-muted'>
               进入房间观看直播、发消息互动，数字人会通过 AI 实时回复你。
             </p>
             <div className='mt-4 flex flex-wrap gap-2 text-xs'>
-              <span className='rounded-full border border-white/10 bg-white/5 px-3 py-1 text-zinc-300 backdrop-blur'>
+              <span className='rounded-full border border-white/10 bg-white/5 px-3 py-1 text-subtle backdrop-blur'>
                 <Tv className='mr-1 inline size-3.5' />
                 开播中 {sessions.length} 个
               </span>
-              <span className='rounded-full border border-white/10 bg-white/5 px-3 py-1 text-zinc-300 backdrop-blur'>
+              <span className='rounded-full border border-white/10 bg-white/5 px-3 py-1 text-subtle backdrop-blur'>
                 <Palette className='mr-1 inline size-3.5' />
                 分类 {Math.max(availableCategories.length - 1, 0)} 种
               </span>
@@ -103,7 +103,7 @@ export default function Home() {
               className={`rounded-full px-4 py-1.5 text-sm transition ${
                 category === c.key
                   ? 'bg-gradient-to-r from-blue-600 to-violet-600 font-medium text-white shadow-lg shadow-blue-600/25'
-                  : 'border border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'
+                  : 'border border-border bg-surface/60 text-muted hover:border-foreground/40 hover:text-foreground'
               }`}
             >
               <c.icon className='mr-1.5 inline size-4' />
@@ -117,17 +117,17 @@ export default function Home() {
             {Array.from({ length: 5 }, (_, i) => (
               <div
                 key={i}
-                className='aspect-[9/16] animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/60'
+                className='aspect-[9/16] animate-pulse rounded-2xl border border-border bg-surface/60'
               />
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className='flex flex-col items-center justify-center gap-3 rounded-3xl border border-zinc-800 bg-zinc-900/40 py-20 text-center'>
-            <Radio className='size-12 text-zinc-600' />
-            <p className='font-medium text-zinc-200'>
+          <div className='flex flex-col items-center justify-center gap-3 rounded-3xl border border-border bg-surface/40 py-20 text-center'>
+            <Radio className='size-12 text-faint' />
+            <p className='font-medium text-foreground'>
               {category === '全部' ? '暂无开播的数字人' : `「${category}」分类暂无开播`}
             </p>
-            <p className='text-sm text-zinc-500'>管理员在后台开启直播后，会出现在这里。</p>
+            <p className='text-sm text-muted'>管理员在后台开启直播后，会出现在这里。</p>
           </div>
         ) : (
           <div className='grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
@@ -135,7 +135,7 @@ export default function Home() {
               <Link
                 key={session.avatarId}
                 href={`/rooms/${session.avatarId}`}
-                className='group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40 transition duration-300 hover:-translate-y-1 hover:border-zinc-600 hover:shadow-xl hover:shadow-black/50'
+                className='group relative overflow-hidden rounded-2xl border border-border bg-surface/40 transition duration-300 hover:-translate-y-1 hover:border-foreground/40 hover:shadow-xl hover:shadow-black/50'
               >
                 {session.imageS3Url ? (
                   // eslint-disable-next-line @next/next/no-img-element -- remote storage origin, plain img is simplest
@@ -145,8 +145,8 @@ export default function Home() {
                     className='aspect-[9/16] w-full object-cover transition duration-300 group-hover:scale-[1.05]'
                   />
                 ) : (
-                  <div className='flex aspect-[9/16] w-full items-center justify-center bg-zinc-900 text-zinc-600'>
-                    <Clapperboard className='size-8 text-zinc-600' />
+                  <div className='flex aspect-[9/16] w-full items-center justify-center bg-surface text-faint'>
+                    <Clapperboard className='size-8 text-faint' />
                   </div>
                 )}
                 <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/55 to-transparent px-3 pb-3 pt-12'>
@@ -177,7 +177,7 @@ export default function Home() {
         )}
       </main>
 
-      <footer className='border-t border-zinc-800/60 py-5 text-center text-xs text-zinc-600'>
+      <footer className='border-t border-border/60 py-5 text-center text-xs text-faint'>
         灵播 · AI 数字人直播平台
       </footer>
     </div>

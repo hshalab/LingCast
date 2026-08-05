@@ -175,7 +175,7 @@ export default function RoomPage() {
   }
 
   return (
-    <main className='flex h-dvh flex-col overflow-hidden bg-zinc-950'>
+    <main className='flex h-dvh flex-col overflow-hidden bg-background'>
       {/* 桌面端导航（手机端全屏隐藏） */}
       <div className='hidden lg:block'>
         <NavHeader />
@@ -187,12 +187,12 @@ export default function RoomPage() {
           <div className='flex shrink-0 items-center gap-3'>
             <Link
               href='/'
-              className='shrink-0 rounded-full border border-zinc-800 bg-zinc-900/60 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-600'
+              className='shrink-0 rounded-full border border-border bg-surface/60 px-4 py-1.5 text-sm text-subtle transition hover:border-foreground/40'
             >
               ← 返回列表
             </Link>
             <div className='min-w-0 shrink-0'>
-              <h1 className='flex items-center gap-2 text-lg font-bold text-zinc-100'>
+              <h1 className='flex items-center gap-2 text-lg font-bold text-foreground'>
                 直播间
                 <span className='rounded-md bg-gradient-to-r from-blue-600 to-violet-600 px-1.5 py-0.5 text-xs font-semibold text-white'>
                   #{id}
@@ -203,34 +203,34 @@ export default function RoomPage() {
 
           {/* 数字人详情：靠右的纵向资料卡 */}
           {avatar && (
-            <div className='ml-auto flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-2 text-xs backdrop-blur'>
+            <div className='ml-auto flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 rounded-2xl border border-border bg-surface/60 px-4 py-2 text-xs backdrop-blur'>
               <span className='whitespace-nowrap font-semibold text-white'>
-                {avatar.name} <span className='text-zinc-500'>#{avatar.id}</span>
+                {avatar.name} <span className='text-muted'>#{avatar.id}</span>
               </span>
               {avatar.category && (
-                <span className='whitespace-nowrap rounded-md bg-white/5 px-1.5 py-0.5 text-zinc-300'>
+                <span className='whitespace-nowrap rounded-md bg-white/5 px-1.5 py-0.5 text-subtle'>
                   {avatar.category}
                 </span>
               )}
               {avatar.age != null && (
-                <span className='whitespace-nowrap text-zinc-400'>年龄 {avatar.age}岁</span>
+                <span className='whitespace-nowrap text-muted'>年龄 {avatar.age}岁</span>
               )}
               {avatar.heightCm != null && (
-                <span className='whitespace-nowrap text-zinc-400'>身高 {avatar.heightCm}cm</span>
+                <span className='whitespace-nowrap text-muted'>身高 {avatar.heightCm}cm</span>
               )}
               {avatar.weightKg != null && (
-                <span className='whitespace-nowrap text-zinc-400'>体重 {avatar.weightKg}kg</span>
+                <span className='whitespace-nowrap text-muted'>体重 {avatar.weightKg}kg</span>
               )}
               {avatar.ethnicity && (
-                <span className='whitespace-nowrap text-zinc-400'>族裔 {avatar.ethnicity}</span>
+                <span className='whitespace-nowrap text-muted'>族裔 {avatar.ethnicity}</span>
               )}
               {avatar.relationshipStatus && (
-                <span className='whitespace-nowrap text-zinc-400'>
+                <span className='whitespace-nowrap text-muted'>
                   感情 {avatar.relationshipStatus}
                 </span>
               )}
               {avatar.personality && (
-                <span className='whitespace-nowrap text-zinc-400'>性格 {avatar.personality}</span>
+                <span className='whitespace-nowrap text-muted'>性格 {avatar.personality}</span>
               )}
             </div>
           )}
@@ -239,7 +239,7 @@ export default function RoomPage() {
         {/* 抖音直播式布局：左画面铺满 + 模糊背景，右聊天固定 400 */}
         <div className='flex min-h-0 flex-1 flex-col gap-3 lg:flex-row'>
           {/* 左：画面区铺满，9:16 视频居中、高度撑满，两侧模糊背景 */}
-          <div className='relative min-h-0 flex-1 overflow-hidden rounded-none border-0 bg-zinc-950 lg:rounded-3xl lg:border lg:border-zinc-800'>
+          <div className='relative min-h-0 flex-1 overflow-hidden rounded-none border-0 bg-background lg:rounded-3xl lg:border lg:border-border'>
             {/* 模糊背景层（根据画面） */}
             {avatar?.imageS3Url && (
               <img
@@ -260,8 +260,8 @@ export default function RoomPage() {
                     className='aspect-[9/16] h-full max-h-full w-auto max-w-full overflow-hidden'
                   />
                 ) : (
-                  <div className='flex aspect-[9/16] h-full flex-col items-center justify-center gap-2 text-sm text-zinc-400'>
-                    <Tv className='size-10 text-zinc-500' />
+                  <div className='flex aspect-[9/16] h-full flex-col items-center justify-center gap-2 text-sm text-muted'>
+                    <Tv className='size-10 text-muted' />
                     主播暂未开播，请稍候…
                   </div>
                 )}
@@ -292,10 +292,10 @@ export default function RoomPage() {
             {/* 点赞按钮 */}
             <button
               onClick={like}
-              className='absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-4 py-2 text-sm text-zinc-200 backdrop-blur transition hover:border-rose-500 hover:text-rose-400 lg:flex'
+              className='absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-4 py-2 text-sm text-foreground backdrop-blur transition hover:border-rose-500 hover:text-rose-400 lg:flex'
             >
               <Heart
-                className={`size-4 ${likes > 0 ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'}`}
+                className={`size-4 ${likes > 0 ? 'fill-rose-500 text-rose-500' : 'text-muted'}`}
               />
               {likes > 0 ? likes : '点赞'}
             </button>
@@ -353,7 +353,7 @@ export default function RoomPage() {
                   onKeyDown={(e) => e.key === 'Enter' && void send()}
                   placeholder={identity ? '发条消息…' : '获取身份后即可发言'}
                   disabled={!started || !identity || sending}
-                  className='min-w-0 flex-1 rounded-full border border-white/15 bg-black/60 px-4 py-2 text-sm text-white outline-none backdrop-blur transition placeholder:text-zinc-400 focus:border-blue-500 disabled:opacity-50'
+                  className='min-w-0 flex-1 rounded-full border border-white/15 bg-black/60 px-4 py-2 text-sm text-white outline-none backdrop-blur transition placeholder:text-muted focus:border-blue-500 disabled:opacity-50'
                 />
                 <button
                   onClick={() => void send()}
@@ -367,11 +367,11 @@ export default function RoomPage() {
           </div>
 
           {/* 右：聊天面板，固定 400 宽 */}
-          <section className='hidden min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/70 backdrop-blur lg:flex lg:w-[400px]'>
-            <div className='flex shrink-0 items-center justify-between border-b border-zinc-800 px-4 py-3'>
+          <section className='hidden min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-3xl border border-border bg-surface/70 backdrop-blur lg:flex lg:w-[400px]'>
+            <div className='flex shrink-0 items-center justify-between border-b border-border px-4 py-3'>
               <div>
-                <h2 className='font-semibold text-zinc-100'>互动聊天</h2>
-                <p className='mt-0.5 text-xs text-zinc-500'>
+                <h2 className='font-semibold text-foreground'>互动聊天</h2>
+                <p className='mt-0.5 text-xs text-muted'>
                   数字人通过 AI 回复并开口说话
                 </p>
               </div>
@@ -385,13 +385,13 @@ export default function RoomPage() {
               {hasNew && (
                 <button
                   onClick={scrollToLatest}
-                  className='absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-200 shadow-lg transition hover:border-blue-500 hover:text-blue-300'
+                  className='absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface px-3 py-1 text-xs text-foreground shadow-lg transition hover:border-blue-500 hover:text-blue-300'
                 >
                   有新消息
                 </button>
               )}
               {messages.length === 0 ? (
-                <p className='py-10 text-center text-sm text-zinc-500'>
+                <p className='py-10 text-center text-sm text-muted'>
                   还没有消息，说点什么吧
                 </p>
               ) : (
@@ -403,7 +403,7 @@ export default function RoomPage() {
                           <img
                             src={avatar.imageS3Url}
                             alt={avatar.name}
-                            className='size-7 shrink-0 rounded-full border border-zinc-700 object-cover'
+                            className='size-7 shrink-0 rounded-full border border-border object-cover'
                           />
                         ) : (
                           <span
@@ -420,7 +420,7 @@ export default function RoomPage() {
                         </span>
                       )}
                       <div className='min-w-0 max-w-[88%]'>
-                        <p className='text-[11px] text-zinc-500'>
+                        <p className='text-[11px] text-muted'>
                           <span
                             className={
                               m.role === 'bot'
@@ -430,15 +430,15 @@ export default function RoomPage() {
                           >
                             {m.username}
                           </span>
-                          <span className='ml-1 text-zinc-600'>
+                          <span className='ml-1 text-faint'>
                             #{m.userId} · {formatTime(m.createdAt)}
                           </span>
                         </p>
                         <div
                           className={`mt-0.5 rounded-2xl rounded-tl-sm px-3.5 py-2 text-sm leading-relaxed ${
                             m.role === 'bot'
-                              ? 'bg-gradient-to-br from-violet-600/25 to-blue-600/15 text-zinc-100'
-                              : 'bg-zinc-800/80 text-zinc-100'
+                              ? 'bg-gradient-to-br from-violet-600/25 to-blue-600/15 text-foreground'
+                              : 'bg-muted/80 text-foreground'
                           }`}
                         >
                           {m.content}
@@ -451,13 +451,13 @@ export default function RoomPage() {
             </div>
 
             {/* 快捷表情 + 输入栏 */}
-            <div className='shrink-0 border-t border-zinc-800 p-3'>
+            <div className='shrink-0 border-t border-border p-3'>
               <div className='mb-2 flex items-center gap-1'>
                 {QUICK_PHRASES.map((p) => (
                   <button
                     key={p}
                     onClick={() => setInput((v) => v + p)}
-                    className='rounded-lg px-2 py-1 text-xs text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200'
+                    className='rounded-lg px-2 py-1 text-xs text-muted transition hover:bg-muted hover:text-foreground'
                   >
                     {p}
                   </button>
@@ -470,7 +470,7 @@ export default function RoomPage() {
                   onKeyDown={(e) => e.key === 'Enter' && void send()}
                   placeholder={identity ? '发条消息…' : '获取身份后即可发言'}
                   disabled={!started || !identity || sending}
-                  className='min-w-0 flex-1 rounded-full border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm outline-none transition placeholder:text-zinc-600 focus:border-blue-500 disabled:opacity-50'
+                  className='min-w-0 flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm outline-none transition placeholder:text-faint focus:border-blue-500 disabled:opacity-50'
                 />
                 <button
                   onClick={() => void send()}

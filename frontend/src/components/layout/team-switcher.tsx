@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { ChevronsUpDown, Plus } from 'lucide-react'
+import { useTheme } from '@/context/theme-provider'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +27,7 @@ type TeamSwitcherProps = {
 
 export function TeamSwitcher({ teams }: TeamSwitcherProps) {
   const { isMobile } = useSidebar()
+  const { resolvedTheme } = useTheme()
   const [activeTeam, setActiveTeam] = React.useState(teams[0])
 
   return (
@@ -40,7 +42,13 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
               <div className='flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground'>
                 {typeof activeTeam.logo === 'string' ? (
                   <img
-                    src={activeTeam.logo}
+                    src={
+                      typeof activeTeam.logo === 'string' && activeTeam.logo.includes('logo.svg')
+                        ? resolvedTheme === 'dark'
+                          ? '/images/logo-white.svg'
+                          : '/images/logo.svg'
+                        : activeTeam.logo
+                    }
                     alt={activeTeam.name}
                     className='size-7 rounded-md object-cover'
                   />

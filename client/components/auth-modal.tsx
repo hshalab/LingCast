@@ -46,7 +46,7 @@ export default function AuthModal({
           e.preventDefault()
           void submit()
         }}
-        className='w-full max-w-sm space-y-3 rounded-2xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl'
+        className='w-full max-w-sm space-y-3 rounded-2xl border border-border bg-surface p-5 shadow-2xl'
       >
         <div className='flex items-center justify-between'>
           <h2 className='text-base font-semibold'>
@@ -55,12 +55,12 @@ export default function AuthModal({
           <button
             type='button'
             onClick={onClose}
-            className='text-zinc-500 hover:text-zinc-300'
+            className='text-muted hover:text-subtle'
           >
             <X className='size-4' />
           </button>
         </div>
-        <p className='text-xs leading-relaxed text-zinc-500'>
+        <p className='text-xs leading-relaxed text-muted'>
           {mode === 'register'
             ? '注册后当前身份的聊天记录将保留并绑定到该账号。'
             : '登录后当前身份的聊天记录会合并进该账号，不会丢失。'}
@@ -70,14 +70,14 @@ export default function AuthModal({
           onChange={(e) => setUsername(e.target.value)}
           placeholder='用户名'
           autoFocus
-          className='w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2 text-sm outline-none focus:border-zinc-500'
+          className='w-full rounded-xl border border-border bg-background px-3.5 py-2 text-sm outline-none focus:border-foreground/50'
         />
         <input
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder='密码（至少 4 位）'
           type='password'
-          className='w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2 text-sm outline-none focus:border-zinc-500'
+          className='w-full rounded-xl border border-border bg-background px-3.5 py-2 text-sm outline-none focus:border-foreground/50'
         />
         {error && <p className='text-xs text-red-400'>{error}</p>}
         <button
