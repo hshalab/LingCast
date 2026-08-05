@@ -1,15 +1,19 @@
-# Talking Avatar Platform（口播数字人系统）
+# 灵播 LingCast · AI 数字人直播平台
 
-端到端 AI 口播数字人合成平台：管理后台上传**形象图片**并选择**播报音色**创建数字人，
-系统先预处理生成**基础驱动视频**，之后离线播报与实时直播都只跑轻量推理：
-**Edge-TTS 语音合成 → Wav2Lip 口型**，输出带声音的视频/推流。
+端到端 AI 口播数字人合成平台（**管理后台 :8080** + **观众端 :3000**）：管理后台上传
+**形象图片**、选择**播报音色**并填写**人物设定**创建数字人，系统先预处理生成**基础驱动
+视频**，之后离线播报与实时直播都只跑轻量推理：**Edge-TTS 语音合成 → Wav2Lip 口型**，
+输出带声音的视频/推流；观众端可观看直播、发消息，数字人通过 **DeepSeek LLM** 实时回复
+并开口说话。
 
 ## 架构
 
 ```text
-浏览器 ──> Nginx (frontend, 唯一对外端口 8080)
-             ├── /api    ──> Go API (Gin) ──> MariaDB 11 / Redis 8.2 / MinIO
-             └── /media  ──> MinIO (S3 兼容, 模拟 RustFS)
+管理后台 :8080 ──> Nginx (frontend)
+  ├── /api    ──> Go API (Gin) ──> MariaDB 11 / Redis 8.2 / MinIO
+  └── /media  ──> MinIO (S3 兼容, 模拟 RustFS)
+
+观众端 :3000 ──> Next.js（服务端代理 /api、/live）──> Go API / SRS
 
 Python AI Worker ──> Redis 队列 / boto3 下载素材
                   ──> 创建: LivePortrait 生成 base 视频（一次性预处理）
@@ -17,8 +21,10 @@ Python AI Worker ──> Redis 队列 / boto3 下载素材
                   ──> 上传成品到 S3, 通过 Webhook 回写任务状态
 ```
 
-- 前端：React + TypeScript + Vite + Tailwind + shadcn/ui（基于
-  [satnaing/shadcn-admin](https://github.com/satnaing/shadcn-admin)）。
+- 管理端前端：React + TypeScript + Vite + Tailwind + shadcn/ui（品牌「灵播
+  LingCast」，默认暗色主题，可切换亮色；需管理员登录）。
+- 观众端前端：独立 Next.js 16 + TailwindCSS 4（`client/`，亮/暗双主题可切换，
+  无需登录）。
 - 后端：Go + Gin + GORM，标准 AWS S3 SDK v2。
 - AI Worker：Python 3.11，uv 管理依赖，boto3 + Redis。
 - 存储：S3 兼容对象存储，开发环境用 MinIO 模拟 RustFS。
@@ -43,6 +49,10 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
 - **Avatar Studio（创建）**：形象名称 + 头像展示 + 图片上传 + Edge-TTS 音色选择
   （列表缓存于 localStorage，默认中文女声晓晓），可填**人物设定**（年龄/身高/体重/
   族裔/感情状态/性格），提交后显示「基础视频生成中…」并轮询状态。
+- **数字人编辑**：数字人列表卡片「编辑」跳转到 Avatar Studio（`?edit=<id>`）预填
+  信息，保存即 PUT 更新（形象图片不更换）；删除用系统 AlertDialog 确认。
+- **管理员账号**：登录后可在「账号设置」修改显示名字与密码（持久化到 `admin_users`
+  表，重启不丢）。
 - **Broadcast（离线播报）**：选择已就绪数字人 + 输入脚本 → 提交任务 → 轮询 →
   状态卡片内嵌 **xgplayer** 播放成品（9:16 竖版，最大 720×1080，模态窗播放）。
 - **客户端直播间（观众端）**：独立 Next.js + TailwindCSS 项目（`client/`，端口
@@ -51,6 +61,9 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
   后 xgplayer 拉 HTTP-FLV 观看，聊天面板按用户展示 `用户名 #ID`，可直接向数字人
   发消息（`POST /api/live/:id/message`）。`/api` 与 `/live` 由 Next 路由处理器在
   服务端代理，浏览器无 CORS 负担。
+- **抖音式直播间**：桌面端左侧画面铺满 + 模糊背景、9:16 视频居中、右侧聊天固定
+  400px；手机端全屏（隐藏导航）、返回与主播头像覆盖在画面上、胶囊消息 + 覆盖式
+  输入框、点赞爱心动画；聊天支持智能滚动（上翻历史不抢滚动，出现「有新消息」按钮）。
 - **聊天身份与记录持久化**：游客自动分配临时 ID+用户名（`POST /api/chat/guest`）；
   注册把当前游客身份原地升级为账号（聊天记录不丢），登录把游客消息合并进账号，
   退出后重新获取新游客身份。用户消息与机器人回复全部入库（`chat_users` /
@@ -60,6 +73,7 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
   Avatar 的 JSON 字段 `live_settings`；保存后自动重启直播生效。
 - **管理端用户列表**：侧边栏「用户相关 → 用户列表」展示全部聊天用户
   （游客/账号 + 消息数），数据来自 `GET /api/users`。
+- **亮/暗主题**：管理端默认暗色（含白色版 logo），观众端导航头可切换亮/暗并记忆。
 - **悬浮画面监看**：Live Studio 右下角圆形 FAB，点击弹出可拖动的 9:16 视频浮窗，
   默认不渲染播放器，按需开启。
 - **LLM 消息回复**：客户端消息 → OpenAI Go SDK 调 DeepSeek Responses API
@@ -253,7 +267,7 @@ curl -X POST http://localhost:8080/api/live/9/message \
 curl http://localhost:8080/api/live/9/status
 ```
 
-播放地址：`http://localhost:8080/live/avatar_9.flv`（Live Studio 用 mpegts.js 拉流）。
+播放地址：`http://localhost:8080/live/avatar_9.flv`（前端用 xgplayer + flv 插件拉流）。
 
 ### 设计说明与当前限制
 
@@ -327,11 +341,15 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 | `POST` | `/api/avatars` | 另可传 `category`（闲聊/知识/娱乐/游戏/带货/其他） |
 | `GET` | `/api/avatars` | 素材列表 |
 | `GET` | `/api/avatars/:id` | 单个素材（含 `liveSettings`） |
+| `PUT` | `/api/avatars/:id` | 编辑名称/分类/音色/人物设定 |
+| `DELETE` | `/api/avatars/:id` | 删除数字人（级联任务/会话/文件） |
+| `POST` | `/api/avatars/:id/retry` | 重新生成基础视频 |
 | `PUT` | `/api/avatars/:id/live-settings` | 保存直播字幕等配置（JSON） |
 | `POST` | `/api/tasks` | `{avatarId, scriptText}`，入队并返回任务 |
 | `GET` | `/api/tasks/:id` | 轮询任务状态与输出 URL |
 | `POST` | `/api/tasks/:id/status` | Worker 内部 Webhook（processing/completed/failed） |
 | `POST` | `/api/live/:id/start` | 开启直播（登记会话 + 通知 Worker 开管道） |
+| `POST` | `/api/live/:id/stop` | 关闭直播 |
 | `POST` | `/api/live/:id/message` | 聊天消息 → LLM 回复切句入队（观众端用） |
 | `POST` | `/api/live/:id/push` | 直接按句入队（直播台测试用） |
 | `GET` | `/api/live/:id/status` | 会话状态与队列 |
@@ -341,14 +359,24 @@ LIVEPORTRAIT_DRIVING_MULTIPLIER=0.7                       # 0.7 = 动作幅度�
 | `POST` | `/api/chat/login` | 登录（合并游客消息进账号） |
 | `GET` | `/api/chat/history` | 房间持久化聊天记录（`?avatarId=`） |
 | `GET` | `/api/users` | 用户列表（游客/账号 + 消息数） |
+| `POST` | `/api/admin/login` | 管理员登录（HttpOnly cookie 会话） |
+| `GET` | `/api/admin/me` | 当前管理员（username + name） |
+| `POST` | `/api/admin/logout` | 退出登录 |
+| `POST` | `/api/admin/change-name` | 修改管理员显示名字 |
+| `POST` | `/api/admin/change-password` | 修改管理员密码（需原密码） |
+
+> 管理端写操作与 `/api/users`、`/api/admin/*`（除 login/me/logout）需要登录态；
+> 观众端接口（直播/聊天/拉流）与 Worker Webhook 保持公开。
 
 ## 目录结构
 
 ```text
 backend/   Go Gin API（模型、S3、Redis、handlers、Dockerfile）
-frontend/  shadcn-admin 前端（Avatar Studio 页面、Dockerfile、nginx.conf）
+frontend/  灵播管理后台（React + shadcn/ui，Dockerfile + nginx.conf，:8080）
 client/    Next.js + TailwindCSS 观众端（独立项目，:3000）
   lib/identity.tsx + components/auth-modal.tsx   聊天身份与登录/注册
+  lib/theme.tsx + components/nav-header.tsx      亮/暗主题与导航头
+  public/logo.svg + logo-white.svg               品牌 logo（暗/亮）
 worker/    Python 3.11 AI Worker（uv、Redis、boto3、真实/模拟管线）
   ai/        base/mock/real 管线、TTS、渲染、ONNX 口型
   fonts/     字幕字体目录（gitignore，见 fonts/README.md）
