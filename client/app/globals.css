@@ -20,3 +20,18 @@ body {
 *::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* 直播间点赞爱心飘升动画 */
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-120px) scale(1.2);
+  }
+}
