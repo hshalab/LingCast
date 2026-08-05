@@ -145,16 +145,62 @@ export default function RoomPage() {
               <code className='ml-1 break-all text-zinc-400'>{streamUrl}</code>
             </p>
           </div>
-          <span
-            className={`ml-auto shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-              started
-                ? 'bg-red-600 text-white'
-                : 'border border-zinc-700 text-zinc-400'
-            }`}
-          >
-            {started ? '● 直播中' : '未开播'}
-          </span>
         </header>
+
+        {/* 数字人详情（位于标题/拉流地址之后） */}
+        {avatar && (
+          <div className='mb-3 shrink-0 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4'>
+            <h3 className='text-sm font-medium'>数字人详情</h3>
+            <dl className='mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3'>
+              <div>
+                <dt className='text-zinc-500'>名称</dt>
+                <dd className='mt-0.5 truncate text-zinc-200'>
+                  {avatar.name} <span className='text-zinc-500'>#{avatar.id}</span>
+                </dd>
+              </div>
+              <div>
+                <dt className='text-zinc-500'>分类</dt>
+                <dd className='mt-0.5 text-zinc-200'>{avatar.category || '其他'}</dd>
+              </div>
+              {avatar.age != null && (
+                <div>
+                  <dt className='text-zinc-500'>年龄</dt>
+                  <dd className='mt-0.5 text-zinc-200'>{avatar.age}岁</dd>
+                </div>
+              )}
+              {avatar.heightCm != null && (
+                <div>
+                  <dt className='text-zinc-500'>身高</dt>
+                  <dd className='mt-0.5 text-zinc-200'>{avatar.heightCm} cm</dd>
+                </div>
+              )}
+              {avatar.weightKg != null && (
+                <div>
+                  <dt className='text-zinc-500'>体重</dt>
+                  <dd className='mt-0.5 text-zinc-200'>{avatar.weightKg} kg</dd>
+                </div>
+              )}
+              {avatar.ethnicity && (
+                <div>
+                  <dt className='text-zinc-500'>族裔</dt>
+                  <dd className='mt-0.5 text-zinc-200'>{avatar.ethnicity}</dd>
+                </div>
+              )}
+              {avatar.relationshipStatus && (
+                <div>
+                  <dt className='text-zinc-500'>感情状态</dt>
+                  <dd className='mt-0.5 text-zinc-200'>{avatar.relationshipStatus}</dd>
+                </div>
+              )}
+              {avatar.personality && (
+                <div>
+                  <dt className='text-zinc-500'>性格</dt>
+                  <dd className='mt-0.5 text-zinc-200'>{avatar.personality}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
 
       {/* 左右结构：桌面端画面在左、聊天在右，整页 100% 视口高，内容超高时各区域内部滚动 */}
       <div className='flex min-h-0 flex-1 flex-col gap-3 lg:flex-row'>
@@ -162,67 +208,12 @@ export default function RoomPage() {
           {started ? (
             <XgFlvPlayer
               url={streamUrl}
-              className='aspect-[9/16] w-full max-w-[420px] shrink-0 overflow-hidden rounded-xl lg:h-full lg:w-auto lg:max-w-full'
+              className='aspect-[9/16] w-full max-w-[320px] shrink-0 overflow-hidden rounded-xl'
             />
           ) : (
-            <div className='flex aspect-[9/16] w-full max-w-[420px] shrink-0 flex-col items-center justify-center gap-2 text-sm text-zinc-500 lg:h-full lg:w-auto lg:max-w-full'>
+            <div className='flex aspect-[9/16] w-full max-w-[320px] shrink-0 flex-col items-center justify-center gap-2 text-sm text-zinc-500'>
               <span className='text-4xl'>📺</span>
               主播暂未开播，请稍候…
-            </div>
-          )}
-
-          {/* 数字人详情 */}
-          {avatar && (
-            <div className='w-full max-w-[420px] shrink-0 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4'>
-              <h3 className='text-sm font-medium'>数字人详情</h3>
-              <dl className='mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-xs'>
-                <div>
-                  <dt className='text-zinc-500'>名称</dt>
-                  <dd className='mt-0.5 truncate text-zinc-200'>
-                    {avatar.name} <span className='text-zinc-500'>#{avatar.id}</span>
-                  </dd>
-                </div>
-                <div>
-                  <dt className='text-zinc-500'>分类</dt>
-                  <dd className='mt-0.5 text-zinc-200'>{avatar.category || '其他'}</dd>
-                </div>
-                {avatar.age != null && (
-                  <div>
-                    <dt className='text-zinc-500'>年龄</dt>
-                    <dd className='mt-0.5 text-zinc-200'>{avatar.age}岁</dd>
-                  </div>
-                )}
-                {avatar.heightCm != null && (
-                  <div>
-                    <dt className='text-zinc-500'>身高</dt>
-                    <dd className='mt-0.5 text-zinc-200'>{avatar.heightCm} cm</dd>
-                  </div>
-                )}
-                {avatar.weightKg != null && (
-                  <div>
-                    <dt className='text-zinc-500'>体重</dt>
-                    <dd className='mt-0.5 text-zinc-200'>{avatar.weightKg} kg</dd>
-                  </div>
-                )}
-                {avatar.ethnicity && (
-                  <div>
-                    <dt className='text-zinc-500'>族裔</dt>
-                    <dd className='mt-0.5 text-zinc-200'>{avatar.ethnicity}</dd>
-                  </div>
-                )}
-                {avatar.relationshipStatus && (
-                  <div>
-                    <dt className='text-zinc-500'>感情状态</dt>
-                    <dd className='mt-0.5 text-zinc-200'>{avatar.relationshipStatus}</dd>
-                  </div>
-                )}
-                {avatar.personality && (
-                  <div className='col-span-2'>
-                    <dt className='text-zinc-500'>性格</dt>
-                    <dd className='mt-0.5 text-zinc-200'>{avatar.personality}</dd>
-                  </div>
-                )}
-              </dl>
             </div>
           )}
         </div>
