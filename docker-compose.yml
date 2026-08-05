@@ -135,7 +135,6 @@ services:
   srs:
     image: ossrs/srs:5
     restart: unless-stopped
-    command: ["/usr/local/srs/srs", "-c", "/usr/local/srs/conf/srs.conf"]
     ports:
       - "1935:1935"   # RTMP ingest (host worker -> rtmp://localhost:1935/live/<id>)
       - "1985:1985"   # SRS HTTP API
