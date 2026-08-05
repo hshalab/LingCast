@@ -77,16 +77,22 @@ type liveStatusResponse struct {
 }
 
 type liveSessionItem struct {
-	AvatarID       uint                `json:"avatarId"`
-	AvatarName     string              `json:"avatarName"`
-	Category       string              `json:"category"`
-	ImageS3URL     string              `json:"imageS3Url"`
-	ImageS3Key     string              `json:"imageS3Key"`
-	BaseVideoS3Key string              `json:"baseVideoS3Key"`
-	VoiceID        string              `json:"voiceId"`
-	StreamID       string              `json:"streamId"`
-	Status         string              `json:"status"`
-	LiveSettings   models.LiveSettings `json:"liveSettings"`
+	AvatarID           uint                `json:"avatarId"`
+	AvatarName         string              `json:"avatarName"`
+	Category           string              `json:"category"`
+	Age                *int                `json:"age,omitempty"`
+	HeightCm           *int                `json:"heightCm,omitempty"`
+	WeightKg           *int                `json:"weightKg,omitempty"`
+	Ethnicity          string              `json:"ethnicity,omitempty"`
+	RelationshipStatus string              `json:"relationshipStatus,omitempty"`
+	Personality        string              `json:"personality,omitempty"`
+	ImageS3URL         string              `json:"imageS3Url"`
+	ImageS3Key         string              `json:"imageS3Key"`
+	BaseVideoS3Key     string              `json:"baseVideoS3Key"`
+	VoiceID            string              `json:"voiceId"`
+	StreamID           string              `json:"streamId"`
+	Status             string              `json:"status"`
+	LiveSettings       models.LiveSettings `json:"liveSettings"`
 }
 
 func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey, openAIAPIKey, openAIBaseURL, openAIModel string) *LiveHandler {
@@ -459,6 +465,12 @@ func (h *LiveHandler) ListSessions(c *gin.Context) {
 		if err := h.db.First(&avatar, s.AvatarID).Error; err == nil {
 			item.AvatarName = avatar.Name
 			item.Category = normalizeCategory(avatar.Category)
+			item.Age = avatar.Age
+			item.HeightCm = avatar.HeightCm
+			item.WeightKg = avatar.WeightKg
+			item.Ethnicity = avatar.Ethnicity
+			item.RelationshipStatus = avatar.RelationshipStatus
+			item.Personality = avatar.Personality
 			item.ImageS3URL = h.s3.PublicURL(avatar.ImageS3Key)
 			item.ImageS3Key = avatar.ImageS3Key
 			item.VoiceID = avatar.VoiceID

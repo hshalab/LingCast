@@ -2,6 +2,12 @@ export type LiveSessionItem = {
   avatarId: number
   avatarName: string
   category: string
+  age?: number
+  heightCm?: number
+  weightKg?: number
+  ethnicity?: string
+  relationshipStatus?: string
+  personality?: string
   imageS3Url: string
   streamId: string
   status: string
@@ -25,6 +31,21 @@ export type ChatIdentity = {
   userId: number
   username: string
   isGuest: boolean
+}
+
+export type Avatar = {
+  id: number
+  name: string
+  imageS3Url: string
+  category: string
+  voiceId: string
+  age?: number
+  heightCm?: number
+  weightKg?: number
+  ethnicity?: string
+  relationshipStatus?: string
+  personality?: string
+  status: string
 }
 
 export type ChatMessage = {
@@ -109,4 +130,8 @@ export function fetchChatHistory(
   avatarId: number,
 ): Promise<{ data: ChatMessage[] }> {
   return request(`/api/chat/history?avatarId=${avatarId}`)
+}
+
+export function fetchAvatar(avatarId: number): Promise<Avatar> {
+  return request(`/api/avatars/${avatarId}`)
 }

@@ -116,6 +116,11 @@ export default function Home() {
                 <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 pb-2.5 pt-10'>
                   <p className='truncate text-sm font-semibold text-white'>
                     {session.avatarName}
+                    {session.age != null && (
+                      <span className='ml-1 font-normal text-white/70'>
+                        {session.age}岁
+                      </span>
+                    )}
                   </p>
                   <p className='mt-0.5 text-xs text-white/60'>{session.category || '其他'}</p>
                 </div>

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { LoaderCircle, Play, Send } from 'lucide-react'
+import { Download, LoaderCircle, Play, Send } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -308,14 +308,27 @@ export function Broadcast({
                         </TableCell>
                         <TableCell className='text-right'>
                           {item.status === 'completed' && item.outputVideoS3Url ? (
-                            <Button
-                              variant='outline'
-                              size='sm'
-                              onClick={() => setPlayUrl(item.outputVideoS3Url!)}
-                            >
-                              <Play className='size-3.5' />
-                              播放
-                            </Button>
+                            <div className='flex items-center justify-end gap-1'>
+                              <Button
+                                variant='outline'
+                                size='sm'
+                                onClick={() => setPlayUrl(item.outputVideoS3Url!)}
+                              >
+                                <Play className='size-3.5' />
+                                播放
+                              </Button>
+                              <Button asChild variant='outline' size='sm'>
+                                <a
+                                  href={item.outputVideoS3Url}
+                                  download
+                                  target='_blank'
+                                  rel='noreferrer'
+                                >
+                                  <Download className='size-3.5' />
+                                  下载
+                                </a>
+                              </Button>
+                            </div>
                           ) : (
                             <span className='text-xs text-muted-foreground'>-</span>
                           )}
