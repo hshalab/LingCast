@@ -125,7 +125,7 @@ LivePortrait 只在**创建阶段**跑一次，离线与直播链路不再调用
 ### 1. 克隆并启动 Docker 服务
 
 ```bash
-git clone <repo-url> && cd TalkingAvatarPlatform
+git clone https://github.com/taochangle/LingCast.git && cd LingCast
 cp .env.example .env
 docker compose up --build
 ```
@@ -198,7 +198,7 @@ pnpm dev
 ```bash
 docker run -it --rm --network=host --ipc=host \
   --device=/dev/kfd --device=/dev/dri --group-add video \
-  -v /path/to/TalkingAvatarPlatform:/workspace -w /workspace/worker \
+  -v /path/to/LingCast:/workspace -w /workspace/worker \
   rocm/pytorch:rocm7.14_ubuntu24.04_py3.13_pytorch_release_2.12.0 bash
 ```
 

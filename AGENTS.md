@@ -145,7 +145,7 @@ worker/
 ## 6. 新设备快速启动（摘要）
 
 ```bash
-git clone <repo> && cd TalkingAvatarPlatform
+git clone https://github.com/taochangle/LingCast.git && cd LingCast
 cp .env.example .env
 docker compose up --build          # 基础设施 + API + 前端
 
