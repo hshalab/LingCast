@@ -1,5 +1,6 @@
 import { LoaderCircle, Save } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,6 +24,7 @@ function showError(e: unknown, fallback: string) {
 }
 
 export function SettingsAccount() {
+  const { t } = useTranslation()
   const [name, setName] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [oldPassword, setOldPassword] = useState('')
@@ -36,10 +38,10 @@ export function SettingsAccount() {
     setSavingName(true)
     try {
       await adminChangeName(name.trim())
-      toast.success('名字已更新')
+      toast.success(t('settings.toastNameUpdated'))
       setName('')
     } catch (e) {
-      showError(e, '修改名字失败')
+      showError(e, t('settings.toastNameFailed'))
     } finally {
       setSavingName(false)
     }
@@ -49,22 +51,22 @@ export function SettingsAccount() {
     event.preventDefault()
     if (!oldPassword || !newPassword || savingPassword) return
     if (newPassword !== confirmPassword) {
-      toast.error('两次输入的新密码不一致')
+      toast.error(t('settings.toastPasswordMismatch'))
       return
     }
     if (newPassword.length < 4) {
-      toast.error('新密码至少 4 位')
+      toast.error(t('settings.toastPasswordShort'))
       return
     }
     setSavingPassword(true)
     try {
       await adminChangePassword(oldPassword, newPassword)
-      toast.success('密码已修改，下次登录请使用新密码')
+      toast.success(t('settings.toastPasswordUpdated'))
       setOldPassword('')
       setNewPassword('')
       setConfirmPassword('')
     } catch (e) {
-      showError(e, '修改密码失败')
+      showError(e, t('settings.toastPasswordFailed'))
     } finally {
       setSavingPassword(false)
     }
@@ -74,23 +76,23 @@ export function SettingsAccount() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>修改名字</CardTitle>
-          <CardDescription>显示在后台侧边栏与登录态上的名字。</CardDescription>
+          <CardTitle>{t('settings.changeName')}</CardTitle>
+          <CardDescription>{t('settings.changeNameDesc')}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={saveName} className='flex flex-col gap-3'>
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='admin-name'>新名字</Label>
+              <Label htmlFor='admin-name'>{t('settings.newName')}</Label>
               <Input
                 id='admin-name'
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder='例如：平台管理员'
+                placeholder={t('settings.namePlaceholder')}
               />
             </div>
             <Button type='submit' disabled={savingName || !name.trim()} className='self-start'>
               {savingName ? <LoaderCircle className='size-4 animate-spin' /> : <Save className='size-4' />}
-              保存名字
+              {t('settings.saveName')}
             </Button>
           </form>
         </CardContent>
@@ -98,13 +100,13 @@ export function SettingsAccount() {
 
       <Card>
         <CardHeader>
-          <CardTitle>修改密码</CardTitle>
-          <CardDescription>需要先输入原密码，新密码至少 4 位。</CardDescription>
+          <CardTitle>{t('settings.changePassword')}</CardTitle>
+          <CardDescription>{t('settings.changePasswordDesc')}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={savePassword} className='flex flex-col gap-3'>
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='old-password'>原密码</Label>
+              <Label htmlFor='old-password'>{t('settings.oldPassword')}</Label>
               <Input
                 id='old-password'
                 type='password'
@@ -114,7 +116,7 @@ export function SettingsAccount() {
               />
             </div>
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='new-password'>新密码</Label>
+              <Label htmlFor='new-password'>{t('settings.newPassword')}</Label>
               <Input
                 id='new-password'
                 type='password'
@@ -124,7 +126,7 @@ export function SettingsAccount() {
               />
             </div>
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='confirm-password'>确认新密码</Label>
+              <Label htmlFor='confirm-password'>{t('settings.confirmPassword')}</Label>
               <Input
                 id='confirm-password'
                 type='password'
@@ -143,7 +145,7 @@ export function SettingsAccount() {
               ) : (
                 <Save className='size-4' />
               )}
-              修改密码
+              {t('settings.changePasswordBtn')}
             </Button>
           </form>
         </CardContent>

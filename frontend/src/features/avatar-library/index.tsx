@@ -10,6 +10,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
@@ -29,24 +30,25 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { api, type Avatar } from '@/lib/api'
 import { VideoPlayerDialog } from '@/components/video-player-dialog'
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleDateString('zh-CN', {
+  return date.toLocaleDateString(locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   })
 }
 
-function showApiError(error: unknown): string {
+function showApiError(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
-    return (error.response?.data as { error?: string } | undefined)?.error ?? '加载失败，请稍后重试'
+    return (error.response?.data as { error?: string } | undefined)?.error ?? fallback
   }
-  return '加载失败，请稍后重试'
+  return fallback
 }
 
 export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string }) {
+  const { t, i18n } = useTranslation()
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -54,6 +56,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
   const [deleteTarget, setDeleteTarget] = useState<Avatar | null>(null)
   const [deleting, setDeleting] = useState(false)
   const navigate = useNavigate()
+  const locale = i18n.language === 'en' ? 'en-US' : 'zh-CN'
 
   const loadAvatars = useCallback(async () => {
     setLoading(true)
@@ -62,7 +65,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
       const { data } = await api.get<{ data: Avatar[] }>('/avatars')
       setAvatars(data.data)
     } catch (error) {
-      setError(showApiError(error))
+      setError(showApiError(error, t('library.loadError')))
     } finally {
       setLoading(false)
     }
@@ -75,11 +78,11 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
   const regenerate = async (avatar: Avatar) => {
     try {
       await api.post(`/avatars/${avatar.id}/retry`)
-      toast.success(`「${avatar.name}」开始重新生成基础视频`)
+      toast.success(t('library.regenerateStarted', { name: avatar.name }))
       setPreview(null)
       void loadAvatars()
     } catch (error) {
-      toast.error(showApiError(error))
+      toast.error(showApiError(error, t('library.loadError')))
     }
   }
 
@@ -88,11 +91,11 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
     setDeleting(true)
     try {
       await api.delete(`/avatars/${avatar.id}`)
-      toast.success(`已删除「${avatar.name}」`)
+      toast.success(t('library.deleted', { name: avatar.name }))
       setDeleteTarget(null)
       void loadAvatars()
     } catch (error) {
-      toast.error(showApiError(error))
+      toast.error(showApiError(error, t('library.loadError')))
     } finally {
       setDeleting(false)
     }
@@ -121,15 +124,13 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div className='flex flex-wrap items-start justify-between gap-3'>
           <div>
-            <h2 className='text-2xl font-bold tracking-tight'>数字人列表</h2>
-            <p className='text-muted-foreground'>
-              管理已创建的数字人形象，选择其一直接开始创作，或上传新形象。
-            </p>
+            <h2 className='text-2xl font-bold tracking-tight'>{t('library.title')}</h2>
+            <p className='text-muted-foreground'>{t('library.subtitle')}</p>
           </div>
           <Button asChild>
             <Link to='/avatar-studio' search={{ edit: undefined }}>
               <Plus className='size-4' />
-              新建数字人
+              {t('library.new')}
             </Link>
           </Button>
         </div>
@@ -149,13 +150,13 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
         ) : error ? (
           <Card>
             <CardHeader>
-              <CardTitle>加载失败</CardTitle>
+              <CardTitle>{t('library.loadFailed')}</CardTitle>
               <CardDescription>{error}</CardDescription>
             </CardHeader>
             <CardContent>
               <Button variant='outline' onClick={() => void loadAvatars()}>
                 <RefreshCw className='size-4' />
-                重试
+                {t('common.retry')}
               </Button>
             </CardContent>
           </Card>
@@ -163,16 +164,14 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
           <Card>
             <CardHeader className='items-center text-center'>
               <ImageIcon className='mb-2 size-10 text-muted-foreground' />
-              <CardTitle>还没有数字人</CardTitle>
-              <CardDescription>
-                上传一张形象图片（可附带克隆音色），即可创建第一个数字人。
-              </CardDescription>
+              <CardTitle>{t('library.emptyTitle')}</CardTitle>
+              <CardDescription>{t('library.emptyDesc')}</CardDescription>
             </CardHeader>
             <CardContent className='flex justify-center'>
               <Button asChild>
                 <Link to='/avatar-studio' search={{ edit: undefined }}>
                   <Plus className='size-4' />
-                  创建第一个数字人
+                  {t('library.createFirst')}
                 </Link>
               </Button>
             </CardContent>
@@ -204,11 +203,15 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
 
                 <div className='absolute start-2 top-2'>
                   {avatar.status === 'ready' ? (
-                    <Badge className='border-0 bg-black/60 text-white'>就绪</Badge>
+                    <Badge className='border-0 bg-black/60 text-white'>
+                      {t('common.ready')}
+                    </Badge>
                   ) : avatar.status === 'failed' ? (
-                    <Badge variant='destructive'>失败</Badge>
+                    <Badge variant='destructive'>{t('common.failed')}</Badge>
                   ) : (
-                    <Badge className='border-0 bg-black/60 text-white'>生成中</Badge>
+                    <Badge className='border-0 bg-black/60 text-white'>
+                      {t('common.generating')}
+                    </Badge>
                   )}
                 </div>
 
@@ -217,7 +220,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                     size='icon'
                     variant='ghost'
                     className='h-8 w-8 bg-black/40 text-white hover:bg-white/20 hover:text-white'
-                    title='编辑数字人'
+                    title={t('library.edit')}
                     onClick={() => openEdit(avatar)}
                   >
                     <Pencil className='size-3.5' />
@@ -226,7 +229,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                     size='icon'
                     variant='ghost'
                     className='h-8 w-8 bg-black/40 text-white hover:bg-red-600/80 hover:text-white'
-                    title='删除数字人'
+                    title={t('library.delete')}
                     onClick={() => setDeleteTarget(avatar)}
                   >
                     <Trash2 className='size-3.5' />
@@ -240,7 +243,9 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                       #{avatar.id}
                     </Badge>
                   </div>
-                  <p className='mt-0.5 text-xs text-white/70'>{formatDate(avatar.createdAt)}</p>
+                  <p className='mt-0.5 text-xs text-white/70'>
+                    {formatDate(avatar.createdAt, locale)}
+                  </p>
                   <div className='mt-2 flex items-center gap-1.5'>
                     {avatar.status === 'ready' ? (
                       <>
@@ -251,7 +256,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                         >
                           <Link to='/broadcast' search={{ avatarId: String(avatar.id) }}>
                             <Sparkles className='size-3.5' />
-                            播报制作
+                            {t('library.broadcast')}
                           </Link>
                         </Button>
                         <Button
@@ -262,7 +267,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                         >
                           <Link to='/live-studio' search={{ avatarId: String(avatar.id) }}>
                             <RadioTower className='size-3.5' />
-                            直播
+                            {t('library.live')}
                           </Link>
                         </Button>
                         <Button
@@ -270,14 +275,14 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                           variant='outline'
                           className='h-8 w-8 shrink-0 border-white/30 bg-white/20 text-white backdrop-blur hover:bg-white/30 hover:text-white'
                           onClick={() => setPreview(avatar)}
-                          title='预览默认视频'
+                          title={t('library.preview')}
                         >
                           <Play className='size-3.5' />
                         </Button>
                       </>
                     ) : (
                       <p className='flex h-8 items-center text-xs text-white/80'>
-                        基础视频生成中，请稍候
+                        {t('library.generating')}
                       </p>
                     )}
                   </div>
@@ -290,13 +295,13 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
         <VideoPlayerDialog
           open={preview !== null}
           url={preview?.baseVideoS3Url}
-          title={`${preview?.name ?? ''} · 默认驱动视频`}
+          title={`${preview?.name ?? ''} · ${t('library.defaultVideo')}`}
           onClose={() => setPreview(null)}
           actions={
             preview ? (
               <Button size='sm' variant='outline' onClick={() => void regenerate(preview)}>
                 <RefreshCw className='size-3.5' />
-                重新生成
+                {t('library.regenerate')}
               </Button>
             ) : undefined
           }
@@ -306,16 +311,16 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
         <ConfirmDialog
           open={Boolean(deleteTarget)}
           onOpenChange={(open) => !open && setDeleteTarget(null)}
-          title='删除数字人'
+          title={t('library.deleteTitle')}
           desc={
             deleteTarget
-              ? `确定删除数字人「${deleteTarget.name}」？将同时删除其任务、直播会话与视频文件，此操作不可恢复。`
+              ? t('library.deleteDesc', { name: deleteTarget.name })
               : ''
           }
           destructive
           isLoading={deleting}
-          confirmText={deleting ? '删除中…' : '删除'}
-          cancelBtnText='取消'
+          confirmText={deleting ? t('library.deleting') : t('library.deleteConfirm')}
+          cancelBtnText={t('common.cancel')}
           handleConfirm={() => void removeAvatar(deleteTarget!)}
         />
 

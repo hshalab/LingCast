@@ -1,5 +1,6 @@
 import { LoaderCircle, ShieldCheck } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { adminLogin } from '@/lib/api'
 
 export function AdminLogin() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -32,8 +34,8 @@ export function AdminLogin() {
       const message =
         typeof e === 'object' && e !== null && 'response' in e
           ? ((e as { response?: { data?: { error?: string } } }).response?.data?.error ??
-            '登录失败，请稍后重试')
-          : '登录失败，请稍后重试'
+            t('login.failed'))
+          : t('login.failed')
       setError(message)
     } finally {
       setBusy(false)
@@ -47,13 +49,13 @@ export function AdminLogin() {
           <div className='mb-2 grid size-12 place-items-center rounded-xl bg-primary text-primary-foreground'>
             <ShieldCheck className='size-6' />
           </div>
-          <CardTitle className='text-xl'>管理员登录</CardTitle>
-          <CardDescription>登录后才能访问数字人管理后台</CardDescription>
+          <CardTitle className='text-xl'>{t('login.title')}</CardTitle>
+          <CardDescription>{t('login.subtitle')}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className='flex flex-col gap-4'>
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='login-username'>用户名</Label>
+              <Label htmlFor='login-username'>{t('login.username')}</Label>
               <Input
                 id='login-username'
                 value={username}
@@ -64,7 +66,7 @@ export function AdminLogin() {
               />
             </div>
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='login-password'>密码</Label>
+              <Label htmlFor='login-password'>{t('login.password')}</Label>
               <Input
                 id='login-password'
                 type='password'
@@ -77,7 +79,7 @@ export function AdminLogin() {
             {error && <p className='text-sm text-destructive'>{error}</p>}
             <Button type='submit' disabled={busy || !username.trim() || !password}>
               {busy ? <LoaderCircle className='size-4 animate-spin' /> : null}
-              登录
+              {t('login.submit')}
             </Button>
           </form>
         </CardContent>

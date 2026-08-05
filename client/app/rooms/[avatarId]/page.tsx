@@ -14,11 +14,12 @@ import {
   type Avatar,
   type ChatMessage,
 } from '@/lib/api'
+import { useI18n } from '@/lib/i18n'
 import { useIdentity } from '@/lib/identity'
 
-function formatTime(iso: string) {
+function formatTime(iso: string, locale: string) {
   try {
-    return new Date(iso).toLocaleTimeString('zh-CN', {
+    return new Date(iso).toLocaleTimeString(locale, {
       hour: '2-digit',
       minute: '2-digit',
     })
@@ -39,6 +40,7 @@ const AVATAR_COLORS = [
 const QUICK_PHRASES = ['欢迎', '在吗', '哈哈', '666', '谢谢', '晚安']
 
 export default function RoomPage() {
+  const { t, locale } = useI18n()
   const { avatarId } = useParams<{ avatarId: string }>()
   const id = Number(avatarId)
   const [started, setStarted] = useState(false)
@@ -146,7 +148,7 @@ export default function RoomPage() {
       setInput('')
       await refreshHistory()
     } catch (error) {
-      const msg = error instanceof Error ? error.message : '发送失败'
+      const msg = error instanceof Error ? error.message : t('room.sendFailed')
       setInput('')
       setMessages((prev) => [
         ...prev,
@@ -163,9 +165,9 @@ export default function RoomPage() {
           id: -Date.now() - 1,
           avatarId: id,
           userId: 0,
-          username: '系统',
+          username: t('room.system'),
           role: 'bot',
-          content: `[发送失败] ${msg}`,
+          content: `[${t('room.sendFailed')}] ${msg}`,
           createdAt: new Date().toISOString(),
         },
       ])
@@ -189,11 +191,11 @@ export default function RoomPage() {
               href='/'
               className='shrink-0 rounded-full border border-border bg-surface/60 px-4 py-1.5 text-sm text-subtle transition hover:border-foreground/40'
             >
-              ← 返回列表
+              ← {t('room.back')}
             </Link>
             <div className='min-w-0 shrink-0'>
               <h1 className='flex items-center gap-2 text-lg font-bold text-foreground'>
-                直播间
+                {t('room.title')}
                 <span className='rounded-md bg-gradient-to-r from-blue-600 to-violet-600 px-1.5 py-0.5 text-xs font-semibold text-white'>
                   #{id}
                 </span>
@@ -213,24 +215,34 @@ export default function RoomPage() {
                 </span>
               )}
               {avatar.age != null && (
-                <span className='whitespace-nowrap text-muted'>年龄 {avatar.age}岁</span>
+                <span className='whitespace-nowrap text-muted'>
+                  {t('room.age', { age: avatar.age })}
+                </span>
               )}
               {avatar.heightCm != null && (
-                <span className='whitespace-nowrap text-muted'>身高 {avatar.heightCm}cm</span>
+                <span className='whitespace-nowrap text-muted'>
+                  {t('room.height', { height: avatar.heightCm })}
+                </span>
               )}
               {avatar.weightKg != null && (
-                <span className='whitespace-nowrap text-muted'>体重 {avatar.weightKg}kg</span>
+                <span className='whitespace-nowrap text-muted'>
+                  {t('room.weight', { weight: avatar.weightKg })}
+                </span>
               )}
               {avatar.ethnicity && (
-                <span className='whitespace-nowrap text-muted'>族裔 {avatar.ethnicity}</span>
+                <span className='whitespace-nowrap text-muted'>
+                  {t('room.ethnicity', { value: avatar.ethnicity })}
+                </span>
               )}
               {avatar.relationshipStatus && (
                 <span className='whitespace-nowrap text-muted'>
-                  感情 {avatar.relationshipStatus}
+                  {t('room.relationship', { value: avatar.relationshipStatus })}
                 </span>
               )}
               {avatar.personality && (
-                <span className='whitespace-nowrap text-muted'>性格 {avatar.personality}</span>
+                <span className='whitespace-nowrap text-muted'>
+                  {t('room.personality', { value: avatar.personality })}
+                </span>
               )}
             </div>
           )}
@@ -262,7 +274,7 @@ export default function RoomPage() {
                 ) : (
                   <div className='flex aspect-[9/16] h-full flex-col items-center justify-center gap-2 text-sm text-muted'>
                     <Tv className='size-10 text-muted' />
-                    主播暂未开播，请稍候…
+                    {t('room.notStarted')}
                   </div>
                 )}
 
@@ -270,7 +282,7 @@ export default function RoomPage() {
                 {started && (
                   <span className='absolute right-2 top-2 hidden items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-red-500 px-2 py-0.5 text-xs font-medium text-white shadow-lg shadow-red-600/30 lg:left-2 lg:right-auto lg:top-2 lg:flex'>
                     <span className='size-1.5 animate-pulse rounded-full bg-white' />
-                    直播中
+                    {t('room.live')}
                   </span>
                 )}
 
@@ -297,7 +309,7 @@ export default function RoomPage() {
               <Heart
                 className={`size-4 ${likes > 0 ? 'fill-rose-500 text-rose-500' : 'text-muted'}`}
               />
-              {likes > 0 ? likes : '点赞'}
+              {likes > 0 ? likes : t('room.like')}
             </button>
 
             {/* 手机端顶部覆盖：返回 + 主播头像/名字 */}
@@ -321,7 +333,9 @@ export default function RoomPage() {
                     <p className='truncate text-sm font-semibold text-white'>
                       {avatar.name}
                     </p>
-                    <p className='text-[11px] text-white/70'>直播间 #{id}</p>
+                    <p className='text-[11px] text-white/70'>
+                      {t('room.mobileTitle', { id })}
+                    </p>
                   </div>
                 </div>
               )}
@@ -351,7 +365,11 @@ export default function RoomPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && void send()}
-                  placeholder={identity ? '发条消息…' : '获取身份后即可发言'}
+                  placeholder={
+                    identity
+                      ? t('room.placeholderIdentity')
+                      : t('room.placeholderGuest')
+                  }
                   disabled={!started || !identity || sending}
                   className='min-w-0 flex-1 rounded-full border border-white/15 bg-black/60 px-4 py-2 text-sm text-white outline-none backdrop-blur transition placeholder:text-muted focus:border-blue-500 disabled:opacity-50'
                 />
@@ -360,7 +378,7 @@ export default function RoomPage() {
                   disabled={sending || !input.trim() || !started || !identity}
                   className='shrink-0 rounded-full bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-blue-600/25 transition hover:brightness-110 disabled:opacity-40'
                 >
-                  {sending ? '发送中…' : '发送'}
+                  {sending ? t('room.sending') : t('room.send')}
                 </button>
               </div>
             </div>
@@ -370,10 +388,10 @@ export default function RoomPage() {
           <section className='hidden min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-3xl border border-border bg-surface/70 backdrop-blur lg:flex lg:w-[400px]'>
             <div className='flex shrink-0 items-center justify-between border-b border-border px-4 py-3'>
               <div>
-                <h2 className='font-semibold text-foreground'>互动聊天</h2>
-                <p className='mt-0.5 text-xs text-muted'>
-                  数字人通过 AI 回复并开口说话
-                </p>
+                <h2 className='font-semibold text-foreground'>
+                  {t('room.chatTitle')}
+                </h2>
+                <p className='mt-0.5 text-xs text-muted'>{t('room.chatDesc')}</p>
               </div>
             </div>
 
@@ -387,12 +405,12 @@ export default function RoomPage() {
                   onClick={scrollToLatest}
                   className='absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface px-3 py-1 text-xs text-foreground shadow-lg transition hover:border-blue-500 hover:text-blue-300'
                 >
-                  有新消息
+                  {t('room.newMessages')}
                 </button>
               )}
               {messages.length === 0 ? (
                 <p className='py-10 text-center text-sm text-muted'>
-                  还没有消息，说点什么吧
+                  {t('room.chatEmpty')}
                 </p>
               ) : (
                 <div className='flex flex-col gap-3'>
@@ -431,7 +449,7 @@ export default function RoomPage() {
                             {m.username}
                           </span>
                           <span className='ml-1 text-faint'>
-                            #{m.userId} · {formatTime(m.createdAt)}
+                            #{m.userId} · {formatTime(m.createdAt, locale)}
                           </span>
                         </p>
                         <div
@@ -468,7 +486,11 @@ export default function RoomPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && void send()}
-                  placeholder={identity ? '发条消息…' : '获取身份后即可发言'}
+                  placeholder={
+                    identity
+                      ? t('room.placeholderIdentity')
+                      : t('room.placeholderGuest')
+                  }
                   disabled={!started || !identity || sending}
                   className='min-w-0 flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm outline-none transition placeholder:text-faint focus:border-blue-500 disabled:opacity-50'
                 />
@@ -477,7 +499,7 @@ export default function RoomPage() {
                   disabled={sending || !input.trim() || !started || !identity}
                   className='shrink-0 rounded-full bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-2 text-sm font-medium text-white shadow-lg shadow-blue-600/25 transition hover:brightness-110 disabled:opacity-40'
                 >
-                  {sending ? '发送中…' : '发送'}
+                  {sending ? t('room.sending') : t('room.send')}
                 </button>
               </div>
             </div>

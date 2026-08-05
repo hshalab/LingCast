@@ -1,7 +1,9 @@
 import { Link } from '@tanstack/react-router'
-import { BadgeCheck, ChevronsUpDown, LogOut } from 'lucide-react'
+import { BadgeCheck, ChevronsUpDown, Languages, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import useDialogState from '@/hooks/use-dialog-state'
+import { setLang } from '@/i18n'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -30,6 +32,7 @@ type NavUserProps = {
 }
 
 export function NavUser({ user }: NavUserProps) {
+  const { t, i18n } = useTranslation()
   const { isMobile } = useSidebar()
   const [open, setOpen] = useDialogState()
   const [admin, setAdmin] = useState<{ username: string; name: string } | null>(null)
@@ -91,8 +94,27 @@ export function NavUser({ user }: NavUserProps) {
                 <DropdownMenuItem asChild>
                   <Link to='/settings/account'>
                     <BadgeCheck />
-                    账号设置
+                    {t('nav.accountSettings')}
                   </Link>
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className='text-xs text-muted-foreground'>
+                <Languages className='me-1 inline size-3.5' />
+                {i18n.language === 'zh' ? '语言 / Language' : 'Language'}
+              </DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  onClick={() => setLang('zh')}
+                  disabled={i18n.language === 'zh'}
+                >
+                  简体中文
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setLang('en')}
+                  disabled={i18n.language === 'en'}
+                >
+                  English
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
@@ -101,7 +123,7 @@ export function NavUser({ user }: NavUserProps) {
                 onClick={() => setOpen(true)}
               >
                 <LogOut />
-                退出登录
+                {t('nav.signOut')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

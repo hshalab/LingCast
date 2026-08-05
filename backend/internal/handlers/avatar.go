@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"talkingavatar/backend/internal/i18n"
 	"talkingavatar/backend/internal/models"
 	"talkingavatar/backend/internal/queue"
 	"talkingavatar/backend/internal/storage"
@@ -62,7 +63,7 @@ func NewAvatarHandler(db *gorm.DB, s3 *storage.Client, q *queue.Queue, avatarIni
 func (h *AvatarHandler) Create(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("name"))
 	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'name' is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.name_required")})
 		return
 	}
 	voiceID := strings.TrimSpace(c.PostForm("voice_id"))
@@ -79,13 +80,13 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 
 	imageHeader, err := c.FormFile("image")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'image' (file) is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.image_required")})
 		return
 	}
 
 	imageKey, err := h.uploadFormFile(c, imageHeader, "avatars")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "upload image failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.avatar.upload_failed", err.Error())})
 		return
 	}
 
@@ -103,7 +104,7 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 		Status:             models.AvatarStatusInitializing,
 	}
 	if err := h.db.Create(&avatar).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "save avatar failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.avatar.save_failed", err.Error())})
 		return
 	}
 
@@ -114,7 +115,7 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 		ImageS3Key: imageKey,
 	}
 	if err := h.q.PushTo(c.Request.Context(), h.avatarInitQueueKey, init); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "enqueue avatar init failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.avatar.init_enqueue_failed", err.Error())})
 		return
 	}
 
@@ -126,13 +127,13 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 func (h *AvatarHandler) Get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
 		return
 	}
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.avatar.not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -159,13 +160,13 @@ type updateAvatarRequest struct {
 func (h *AvatarHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
 		return
 	}
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.avatar.not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -174,12 +175,12 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 
 	var req updateAvatarRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_detail", err.Error())})
 		return
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'name' is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.name_required")})
 		return
 	}
 	voiceID := strings.TrimSpace(req.VoiceID)
@@ -208,7 +209,7 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 func (h *AvatarHandler) UpdateBaseVideo(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
 		return
 	}
 	var req struct {
@@ -216,7 +217,7 @@ func (h *AvatarHandler) UpdateBaseVideo(c *gin.Context) {
 		Status         string `json:"status"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.BaseVideoS3Key) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'baseVideoS3Key' is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.base_video_key_required")})
 		return
 	}
 	status := strings.TrimSpace(req.Status)
@@ -224,14 +225,14 @@ func (h *AvatarHandler) UpdateBaseVideo(c *gin.Context) {
 		status = models.AvatarStatusReady
 	}
 	if status != models.AvatarStatusReady && status != models.AvatarStatusFailed {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.invalid_status")})
 		return
 	}
 
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.avatar.not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -292,13 +293,13 @@ func (h *AvatarHandler) initQueuePositions(c *gin.Context) map[uint]int {
 func (h *AvatarHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
 		return
 	}
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.avatar.not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -332,11 +333,11 @@ func (h *AvatarHandler) Delete(c *gin.Context) {
 		}
 	}
 	if err := h.db.Where("avatar_id = ?", avatar.ID).Delete(&models.BroadcastTask{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete tasks failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.avatar.delete_tasks_failed", err.Error())})
 		return
 	}
 	if err := h.db.Where("avatar_id = ?", avatar.ID).Delete(&models.LiveSession{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete live session failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.avatar.delete_session_failed", err.Error())})
 		return
 	}
 
@@ -352,20 +353,20 @@ func (h *AvatarHandler) Delete(c *gin.Context) {
 func (h *AvatarHandler) Retry(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
 		return
 	}
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.avatar.not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		return
 	}
 	if avatar.Status == models.AvatarStatusInitializing {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar is already initializing"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.already_initializing")})
 		return
 	}
 	avatar.Status = models.AvatarStatusInitializing
@@ -377,7 +378,7 @@ func (h *AvatarHandler) Retry(c *gin.Context) {
 		AvatarID:   avatar.ID,
 		ImageS3Key: avatar.ImageS3Key,
 	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "enqueue retry failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.task.enqueue_retry_failed", err.Error())})
 		return
 	}
 	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
@@ -388,20 +389,20 @@ func (h *AvatarHandler) Retry(c *gin.Context) {
 func (h *AvatarHandler) Skip(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
 		return
 	}
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.avatar.not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		return
 	}
 	if avatar.Status != models.AvatarStatusInitializing {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "only initializing avatars can be skipped"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.only_initializing_skip")})
 		return
 	}
 	avatar.Status = models.AvatarStatusSkipped
@@ -425,13 +426,13 @@ func (h *AvatarHandler) Skip(c *gin.Context) {
 func (h *AvatarHandler) UpdateLiveSettings(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
 		return
 	}
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.avatar.not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -440,7 +441,7 @@ func (h *AvatarHandler) UpdateLiveSettings(c *gin.Context) {
 
 	var settings models.LiveSettings
 	if err := c.ShouldBindJSON(&settings); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid live settings: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.avatar.invalid_live_settings", err.Error())})
 		return
 	}
 	settings.SubtitleFont = strings.TrimSpace(settings.SubtitleFont)

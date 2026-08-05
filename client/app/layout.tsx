@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { I18nProvider } from '@/lib/i18n'
 import { IdentityProvider } from '@/lib/identity'
 import { ThemeProvider } from '@/lib/theme'
 import './globals.css'
@@ -18,7 +19,9 @@ export default function RootLayout({
     <html lang='zh-CN'>
       <body className='min-h-screen antialiased'>
         <ThemeProvider>
-          <IdentityProvider>{children}</IdentityProvider>
+          <I18nProvider>
+            <IdentityProvider>{children}</IdentityProvider>
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>

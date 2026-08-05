@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"talkingavatar/backend/internal/i18n"
 	"talkingavatar/backend/internal/models"
 )
 
@@ -73,24 +74,24 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		Password string `json:"password"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.invalid_request")})
 		return
 	}
 	user, err := h.findUser(req.Username)
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": i18n.Tc(c, "err.admin.bad_credentials")})
 		return
 	}
 
 	token, err := randomToken()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "session issue"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tc(c, "err.admin.session_issue")})
 		return
 	}
 	ctx := c.Request.Context()
 	if err := h.redis.Set(ctx, adminSessionKey(token), user.Username, adminSessionTTL).Err(); err != nil {
 		log.Printf("[admin] session store failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "session store failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tc(c, "err.admin.session_store_failed")})
 		return
 	}
 	http.SetCookie(c.Writer, &http.Cookie{
@@ -116,12 +117,12 @@ func randomToken() (string, error) {
 func (h *AdminHandler) Me(c *gin.Context) {
 	username, ok := h.sessionUser(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": i18n.Tc(c, "err.admin.not_logged_in")})
 		return
 	}
 	user, err := h.findUser(username)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "账号不存在"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": i18n.Tc(c, "err.admin.account_missing")})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"username": user.Username, "name": user.DisplayName})
@@ -143,19 +144,19 @@ func (h *AdminHandler) Logout(c *gin.Context) {
 func (h *AdminHandler) ChangeName(c *gin.Context) {
 	username, ok := h.sessionUser(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": i18n.Tc(c, "err.admin.not_logged_in")})
 		return
 	}
 	var req struct {
 		Name string `json:"name"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.invalid_request")})
 		return
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" || len(name) > 32 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "名字需为 1-32 个字符"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.admin.name_length")})
 		return
 	}
 	if err := h.db.Model(&models.AdminUser{}).
@@ -171,7 +172,7 @@ func (h *AdminHandler) ChangeName(c *gin.Context) {
 func (h *AdminHandler) ChangePassword(c *gin.Context) {
 	username, ok := h.sessionUser(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": i18n.Tc(c, "err.admin.not_logged_in")})
 		return
 	}
 	var req struct {
@@ -179,25 +180,25 @@ func (h *AdminHandler) ChangePassword(c *gin.Context) {
 		NewPassword string `json:"newPassword"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.invalid_request")})
 		return
 	}
 	if len(req.NewPassword) < 4 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "新密码至少 4 位"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.admin.password_short")})
 		return
 	}
 	user, err := h.findUser(username)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "账号不存在"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": i18n.Tc(c, "err.admin.account_missing")})
 		return
 	}
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.OldPassword)) != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "原密码错误"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.admin.old_password_wrong")})
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "password hash failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tc(c, "err.admin.password_hash_failed")})
 		return
 	}
 	if err := h.db.Model(user).Update("password_hash", string(hash)).Error; err != nil {
@@ -224,7 +225,7 @@ func (h *AdminHandler) sessionUser(c *gin.Context) (string, bool) {
 func (h *AdminHandler) RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if _, ok := h.sessionUser(c); !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "请先登录管理员账号"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": i18n.Tc(c, "err.admin.require_login")})
 			return
 		}
 		c.Next()

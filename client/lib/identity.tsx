@@ -14,6 +14,7 @@ import {
   registerIdentity,
   type ChatIdentity,
 } from '@/lib/api'
+import { useI18n } from '@/lib/i18n'
 
 const IDENTITY_KEY = 'tav_chat_identity'
 
@@ -42,6 +43,7 @@ type IdentityContextValue = {
 const IdentityContext = createContext<IdentityContextValue | null>(null)
 
 export function IdentityProvider({ children }: { children: ReactNode }) {
+  const { t } = useI18n()
   const [identity, setIdentity] = useState<ChatIdentity | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -68,23 +70,23 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (username: string, password: string) => {
       const current = identity ?? loadIdentity()
-      if (!current) throw new Error('身份未就绪，请稍后重试')
+      if (!current) throw new Error(t('identity.notReady'))
       const next = await loginIdentity(current.userId, username, password)
       saveIdentity(next)
       setIdentity(next)
     },
-    [identity],
+    [identity, t],
   )
 
   const register = useCallback(
     async (username: string, password: string) => {
       const current = identity ?? loadIdentity()
-      if (!current) throw new Error('身份未就绪，请稍后重试')
+      if (!current) throw new Error(t('identity.notReady'))
       const next = await registerIdentity(current.userId, username, password)
       saveIdentity(next)
       setIdentity(next)
     },
-    [identity],
+    [identity, t],
   )
 
   const logout = useCallback(async () => {

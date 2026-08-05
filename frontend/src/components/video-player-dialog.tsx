@@ -1,6 +1,7 @@
 import Player from 'xgplayer'
 import 'xgplayer/dist/index.min.css'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -24,6 +25,7 @@ export function VideoPlayerDialog({
   actions?: ReactNode
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const hostRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<Player | null>(null)
   const playerId = useId()
@@ -60,12 +62,12 @@ export function VideoPlayerDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className='sm:max-w-3xl'>
         <DialogHeader className='flex-row items-center justify-between space-y-0'>
-          <DialogTitle>{title ?? '视频预览'}</DialogTitle>
+          <DialogTitle>{title ?? t('video.title')}</DialogTitle>
           {actions}
         </DialogHeader>
         {failed ? (
           <p className='py-10 text-center text-sm text-muted-foreground'>
-            无法播放该视频：可能为旧版（MPEG-4）编码任务。请在任务中心删除旧任务并重新生成后重试。
+            {t('video.playError')}
           </p>
         ) : (
           <div ref={hostRef} id={playerId} className='aspect-[9/16] w-full' />

@@ -4,6 +4,7 @@ import 'xgplayer/dist/index.min.css'
 import FlvPlugin from 'xgplayer-flv'
 import { Copy, Eye, EyeOff, LoaderCircle, Power, PowerOff, Send, Video, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
@@ -38,16 +39,17 @@ import {
   type LiveStatus,
 } from '@/lib/api'
 
-function showApiError(error: unknown) {
+function showApiError(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
     const message = (error.response?.data as { error?: string } | undefined)?.error
-    toast.error(message ?? '请求失败，请稍后重试')
+    toast.error(message ?? fallback)
     return
   }
-  toast.error('请求失败，请稍后重试')
+  toast.error(fallback)
 }
 
 export function LiveStudio({ avatarId }: { avatarId: string }) {
+  const { t, i18n } = useTranslation()
   const id = Number(avatarId)
   const navigate = useNavigate()
   const playerHostRef = useRef<HTMLDivElement>(null)
@@ -77,6 +79,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
   // the current origin (e.g. http://localhost:8080).
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const streamUrl = `${import.meta.env.VITE_API_BASE_URL || origin}/live/avatar_${id}.flv`
+  const locale = i18n.language === 'en' ? 'en-US' : 'zh-CN'
 
   // Check whether the live session already exists on load.
   useEffect(() => {
@@ -112,16 +115,16 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
     setSavingSettings(true)
     try {
       await api.put(`/avatars/${id}/live-settings`, liveSettings)
-      toast.success('字幕设置已保存')
+      toast.success(t('live.toastSettingsSaved'))
       if (started) {
         // Re-open the stream so the new subtitle settings take effect now.
         await api.post(`/live/${id}/stop`).catch(() => {})
         await api.post(`/live/${id}/start`)
         setStarted(true)
-        toast.info('已重新开启直播，新设置生效')
+        toast.info(t('live.toastRestarted'))
       }
     } catch (error) {
-      showApiError(error)
+      showApiError(error, t('common.requestFailed'))
     } finally {
       setSavingSettings(false)
     }
@@ -279,9 +282,9 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
     try {
       await api.post(`/live/${id}/start`)
       setStarted(true)
-      toast.success('直播已开启，画面即将就绪')
+      toast.success(t('live.toastStarted'))
     } catch (error) {
-      showApiError(error)
+      showApiError(error, t('common.requestFailed'))
     } finally {
       setBusy(false)
     }
@@ -294,9 +297,9 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       await api.post(`/live/${id}/stop`)
       setStarted(false)
       setStatus(null)
-      toast.success('直播已关闭')
+      toast.success(t('live.toastStopped'))
     } catch (error) {
-      showApiError(error)
+      showApiError(error, t('common.requestFailed'))
     } finally {
       setBusy(false)
     }
@@ -305,9 +308,9 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
   const copyStreamUrl = async () => {
     try {
       await navigator.clipboard.writeText(streamUrl)
-      toast.success('拉流地址已复制')
+      toast.success(t('live.toastUrlCopied'))
     } catch {
-      toast.error('复制失败，请手动选择复制')
+      toast.error(t('live.toastCopyFailed'))
     }
   }
 
@@ -319,7 +322,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       await api.post(`/live/${id}/push`, { text: trimmed })
       setText('')
     } catch (error) {
-      showApiError(error)
+      showApiError(error, t('common.requestFailed'))
     } finally {
       setSending(false)
     }
@@ -342,30 +345,30 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div className='flex flex-wrap items-center justify-between gap-3'>
           <div>
-            <h2 className='text-2xl font-bold tracking-tight'>Live Studio</h2>
+            <h2 className='text-2xl font-bold tracking-tight'>{t('live.title')}</h2>
             <p className='text-muted-foreground'>
-              Avatar #{id} 实时直播：输入文字后数字人将开口播报。
+              {t('live.subtitle', { id })}
             </p>
           </div>
           <div className='flex items-center gap-2'>
             {status && (
               <Badge variant={statusVariant}>
                 {status.status === 'active'
-                  ? '说话中'
+                  ? t('live.speaking')
                   : status.status === 'pending'
-                    ? '启动中'
-                    : '闲置'}
+                    ? t('live.starting')
+                    : t('live.idle')}
               </Badge>
             )}
             {started ? (
               <Button variant='destructive' size='sm' onClick={() => void handleStop()} disabled={busy}>
                 {busy ? <LoaderCircle className='size-4 animate-spin' /> : <PowerOff className='size-4' />}
-                关闭直播
+                {t('live.stop')}
               </Button>
             ) : (
               <Button size='sm' onClick={() => void handleStart()} disabled={busy}>
                 {busy ? <LoaderCircle className='size-4 animate-spin' /> : <Power className='size-4' />}
-                打开直播
+                {t('live.start')}
               </Button>
             )}
           </div>
@@ -373,14 +376,14 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
 
         <Card>
           <CardContent className='flex flex-wrap items-center gap-2 py-3 text-sm'>
-            <span className='text-muted-foreground'>拉流地址：</span>
+            <span className='text-muted-foreground'>{t('live.streamUrl')}</span>
             <code className='break-all rounded bg-muted px-2 py-1'>{streamUrl}</code>
             <Button variant='ghost' size='sm' onClick={() => void copyStreamUrl()}>
               <Copy className='size-3.5' />
-              复制
+              {t('common.copy')}
             </Button>
             <span className='text-xs text-muted-foreground'>
-              多个页面同时打开看到同一路直播；任一页面关闭直播即停止全部；所有页面共用同一文字队列。
+              {t('live.multiHint')}
             </span>
           </CardContent>
         </Card>
@@ -389,8 +392,8 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
           {/* Left: avatar switcher */}
           <Card className='lg:col-span-1'>
             <CardHeader className='gap-1'>
-              <CardTitle>数字人直播</CardTitle>
-              <CardDescription>多个数字人可同时直播，分别发送文字。</CardDescription>
+              <CardTitle>{t('live.avatarLiveTitle')}</CardTitle>
+              <CardDescription>{t('live.avatarLiveDesc')}</CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-2'>
               {avatars
@@ -419,7 +422,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                         <p className='text-xs text-muted-foreground'>#{avatar.id}</p>
                       </div>
                       <Badge variant={live ? 'default' : 'outline'}>
-                        {live ? '直播中' : '未开启'}
+                        {live ? t('live.live') : t('live.offline')}
                       </Badge>
                     </Link>
                   )
@@ -431,15 +434,17 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
           <div className='grid gap-4 lg:col-span-3 lg:grid-cols-2'>
             <Card>
               <CardHeader className='gap-1'>
-                <CardTitle>待渲染队列</CardTitle>
+                <CardTitle>{t('live.queueTitle')}</CardTitle>
                 <CardDescription>
-                  {status ? `当前队列 ${status.queueLength} 条` : '读取中…'}
+                  {status
+                    ? t('live.queueCount', { count: status.queueLength })
+                    : t('common.loading')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {status && status.pending.length === 0 ? (
                   <p className='py-4 text-center text-sm text-muted-foreground'>
-                    队列为空，数字人处于闲置状态
+                    {t('live.queueEmpty')}
                   </p>
                 ) : (
                   <ol className='max-h-56 list-decimal space-y-1 overflow-y-auto ps-5 text-sm'>
@@ -455,13 +460,13 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
 
             <Card>
               <CardHeader className='gap-1'>
-                <CardTitle>聊天记录</CardTitle>
-                <CardDescription>观众 ID/用户名与机器人回复实时刷新。</CardDescription>
+                <CardTitle>{t('live.chatTitle')}</CardTitle>
+                <CardDescription>{t('live.chatDesc')}</CardDescription>
               </CardHeader>
               <CardContent>
                 {chatMessages.length === 0 ? (
                   <p className='py-4 text-center text-sm text-muted-foreground'>
-                    暂无聊天消息
+                    {t('live.chatEmpty')}
                   </p>
                 ) : (
                   <ol className='max-h-72 space-y-2 overflow-y-auto'>
@@ -477,7 +482,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                             ? `🤖 ${m.username}`
                             : `${m.username} #${m.userId}`}
                           {' · '}
-                          {new Date(m.createdAt).toLocaleTimeString('zh-CN', {
+                          {new Date(m.createdAt).toLocaleTimeString(locale, {
                             hour: '2-digit',
                             minute: '2-digit',
                           })}
@@ -492,14 +497,12 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
 
             <Card>
               <CardHeader className='gap-1'>
-                <CardTitle>字幕设置</CardTitle>
-                <CardDescription>
-                  直播时是否在画面中显示说话文字；保存后自动重启直播生效。
-                </CardDescription>
+                <CardTitle>{t('live.subtitleTitle')}</CardTitle>
+                <CardDescription>{t('live.subtitleDesc')}</CardDescription>
               </CardHeader>
               <CardContent className='flex flex-col gap-3'>
                 <div className='flex items-center justify-between gap-2'>
-                  <Label htmlFor='subtitle-enabled'>显示字幕</Label>
+                  <Label htmlFor='subtitle-enabled'>{t('live.showSubtitle')}</Label>
                   <Switch
                     id='subtitle-enabled'
                     checked={liveSettings.subtitleEnabled}
@@ -511,7 +514,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                 </div>
 
                 <div className='flex flex-col gap-1.5'>
-                  <Label htmlFor='subtitle-font'>字体（worker/fonts/ 下的文件名）</Label>
+                  <Label htmlFor='subtitle-font'>{t('live.font')}</Label>
                   <Input
                     id='subtitle-font'
                     list='subtitle-fonts'
@@ -519,7 +522,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                     onChange={(e) =>
                       setLiveSettings((s) => ({ ...s, subtitleFont: e.target.value }))
                     }
-                    placeholder='留空 = 系统默认'
+                    placeholder={t('live.fontPlaceholder')}
                     disabled={settingsLoading}
                   />
                   <datalist id='subtitle-fonts'>
@@ -533,7 +536,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                 </div>
 
                 <div className='flex flex-col gap-1.5'>
-                  <Label>位置</Label>
+                  <Label>{t('live.position')}</Label>
                   <Select
                     value={liveSettings.subtitlePosition}
                     onValueChange={(v) =>
@@ -548,15 +551,15 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value='bottom'>底部</SelectItem>
-                      <SelectItem value='top'>顶部</SelectItem>
+                      <SelectItem value='bottom'>{t('live.bottom')}</SelectItem>
+                      <SelectItem value='top'>{t('live.top')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className='flex gap-3'>
                   <div className='flex flex-1 flex-col gap-1.5'>
-                    <Label htmlFor='subtitle-border'>描边宽度 (0-10)</Label>
+                    <Label htmlFor='subtitle-border'>{t('live.border')}</Label>
                     <Input
                       id='subtitle-border'
                       type='number'
@@ -573,7 +576,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                     />
                   </div>
                   <div className='flex flex-1 flex-col gap-1.5'>
-                    <Label htmlFor='subtitle-size'>字号 (24-96)</Label>
+                    <Label htmlFor='subtitle-size'>{t('live.size')}</Label>
                     <Input
                       id='subtitle-size'
                       type='number'
@@ -596,24 +599,21 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                   disabled={savingSettings || settingsLoading}
                 >
                   {savingSettings ? <LoaderCircle className='size-4 animate-spin' /> : null}
-                  保存设置
+                  {t('live.save')}
                 </Button>
-                <p className='text-xs text-muted-foreground'>
-                  免费字体下载后放入 worker/fonts/ 目录（文件名需一致），参考
-                  worker/fonts/README.md。
-                </p>
+                <p className='text-xs text-muted-foreground'>{t('live.fontHint')}</p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className='gap-1'>
-                <CardTitle>发送文字</CardTitle>
-                <CardDescription>按句子切块后进入队列，数字人将依次播报。</CardDescription>
+                <CardTitle>{t('live.sendTitle')}</CardTitle>
+                <CardDescription>{t('live.sendDesc')}</CardDescription>
               </CardHeader>
               <CardContent className='flex flex-col gap-3'>
                 {status && status.history.length > 0 && (
                   <div className='flex flex-col gap-1'>
-                    <p className='text-xs text-muted-foreground'>已发送文字：</p>
+                    <p className='text-xs text-muted-foreground'>{t('live.sentText')}</p>
                     <ol className='max-h-32 list-decimal space-y-1 overflow-y-auto border rounded-md bg-muted/40 p-2 ps-6 text-xs text-muted-foreground'>
                       {status.history.map((item, i) => (
                         <li key={`${i}-${item}`} className='break-all'>
@@ -626,12 +626,12 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                 <Textarea
                   value={text}
                   onChange={(event) => setText(event.target.value)}
-                  placeholder='例如：大家好！欢迎来到直播间。今天聊聊数字人。'
+                  placeholder={t('live.sendPlaceholder')}
                   rows={4}
                 />
                 <Button onClick={() => void handleSend()} disabled={sending || !text.trim()}>
                   {sending ? <LoaderCircle className='size-4 animate-spin' /> : <Send className='size-4' />}
-                  发送
+                  {t('live.send')}
                 </Button>
               </CardContent>
             </Card>
@@ -643,7 +643,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       <button
         onClick={() => (monitorOpen ? setMonitorOpen(false) : openMonitor())}
         className='fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition hover:bg-primary/90'
-        title={monitorOpen ? '关闭画面监看' : '开启画面监看'}
+        title={monitorOpen ? t('live.closeMonitor') : t('live.openMonitor')}
       >
         {monitorOpen ? <EyeOff className='size-6' /> : <Eye className='size-6' />}
         {started && (
@@ -667,13 +667,13 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
           >
             <span className='flex items-center gap-1.5 text-xs font-medium'>
               <Video className='size-3.5' />
-              画面监看
+              {t('live.monitor')}
               {started && <span className='size-1.5 animate-pulse rounded-full bg-red-500' />}
             </span>
             <button
               onClick={() => setMonitorOpen(false)}
               className='rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground'
-              title='关闭'
+              title={t('common.close')}
             >
               <X className='size-4' />
             </button>
@@ -686,7 +686,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
             ) : (
               <div className='flex aspect-[9/16] w-full flex-col items-center justify-center gap-2 rounded-lg border bg-muted/40 text-sm text-muted-foreground'>
                 <Eye className='size-6' />
-                未开播
+                {t('live.notStarted')}
               </div>
             )}
           </div>

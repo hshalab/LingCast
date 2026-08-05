@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from '@tanstack/react-router'
 import { ChevronRight } from 'lucide-react'
 import {
@@ -34,24 +35,42 @@ import {
 } from './types'
 
 export function NavGroup({ title, items }: NavGroupProps) {
+  const { t } = useTranslation()
   const { state, isMobile } = useSidebar()
   const href = useLocation({ select: (location) => location.href })
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{title}</SidebarGroupLabel>
+      <SidebarGroupLabel>{t(title)}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
           const key = `${item.title}-${item.url}`
+          const itemTitle = t(item.title)
 
           if (!item.items)
-            return <SidebarMenuLink key={key} item={item} href={href} />
+            return (
+              <SidebarMenuLink
+                key={key}
+                item={{ ...item, title: itemTitle }}
+                href={href}
+              />
+            )
 
           if (state === 'collapsed' && !isMobile)
             return (
-              <SidebarMenuCollapsedDropdown key={key} item={item} href={href} />
+              <SidebarMenuCollapsedDropdown
+                key={key}
+                item={{ ...item, title: itemTitle }}
+                href={href}
+              />
             )
 
-          return <SidebarMenuCollapsible key={key} item={item} href={href} />
+          return (
+            <SidebarMenuCollapsible
+              key={key}
+              item={{ ...item, title: itemTitle }}
+              href={href}
+            />
+          )
         })}
       </SidebarMenu>
     </SidebarGroup>

@@ -55,6 +55,11 @@
   重启直播生效。
 - ✅ 管理端用户列表：`GET /api/users`（游客+账号，含消息数），侧边栏「用户相关 →
   用户列表」（/users）展示真实数据。
+- ✅ 国际化（中/英）：管理端（react-i18next，`frontend/src/i18n/`）与观众端
+  （`client/lib/i18n.tsx` 轻量 provider）均有语言切换（localStorage 记忆 +
+  浏览器语言自动检测）；后端按 `Accept-Language` 本地化错误消息
+  （`backend/internal/i18n`，router 注入中间件）；LLM 人设提示词按请求语言生成
+  （`chatSystemPrompt(avatar, lang)`，含 `en` 单测）。
 - ✅ Live Studio 悬浮监看：页内播放器已移除，改为右下角圆形 FAB，点击弹出可拖动的
   9:16 浮窗（默认不渲染，按需开启）。
 - ✅ LLM 回复链路：Go 后端用 `github.com/openai/openai-go` Responses API 调 DeepSeek

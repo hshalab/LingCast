@@ -102,6 +102,10 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   (`LIVEPORTRAIT_DRIVING_SPEED=0.2`).
 - [x] **Digital human categories**: a category (chat/knowledge/entertainment/game/sales/other)
   can be picked when creating; the viewer home filters live streams by category.
+- [x] **i18n (Chinese/English)**: the admin console and viewer app both ship Chinese and
+  English UI with a language switcher (choice is persisted and the browser language is
+  auto-detected); API error messages follow the request `Accept-Language` header; the
+  live-room AI replies in the UI language.
 - [ ] **Mock pipeline** (`AI_MODE=mock`): lightweight placeholder for Docker Worker image demos.
 
 ## Screenshots

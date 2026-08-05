@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { X } from 'lucide-react'
+import { useI18n } from '@/lib/i18n'
 import { useIdentity } from '@/lib/identity'
 
 export default function AuthModal({
@@ -11,6 +12,7 @@ export default function AuthModal({
   mode: 'login' | 'register'
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const { login, register } = useIdentity()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -29,7 +31,7 @@ export default function AuthModal({
       }
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '操作失败')
+      setError(e instanceof Error ? e.message : t('auth.failed'))
     } finally {
       setBusy(false)
     }
@@ -50,7 +52,7 @@ export default function AuthModal({
       >
         <div className='flex items-center justify-between'>
           <h2 className='text-base font-semibold'>
-            {mode === 'register' ? '注册账号' : '登录账号'}
+            {mode === 'register' ? t('auth.registerTitle') : t('auth.loginTitle')}
           </h2>
           <button
             type='button'
@@ -62,20 +64,20 @@ export default function AuthModal({
         </div>
         <p className='text-xs leading-relaxed text-muted'>
           {mode === 'register'
-            ? '注册后当前身份的聊天记录将保留并绑定到该账号。'
-            : '登录后当前身份的聊天记录会合并进该账号，不会丢失。'}
+            ? t('auth.registerDesc')
+            : t('auth.loginDesc')}
         </p>
         <input
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder='用户名'
+          placeholder={t('auth.usernamePlaceholder')}
           autoFocus
           className='w-full rounded-xl border border-border bg-background px-3.5 py-2 text-sm outline-none focus:border-foreground/50'
         />
         <input
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder='密码（至少 4 位）'
+          placeholder={t('auth.passwordPlaceholder')}
           type='password'
           className='w-full rounded-xl border border-border bg-background px-3.5 py-2 text-sm outline-none focus:border-foreground/50'
         />
@@ -85,7 +87,11 @@ export default function AuthModal({
           disabled={busy || !username.trim() || !password}
           className='w-full rounded-xl bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40'
         >
-          {busy ? '处理中…' : mode === 'register' ? '注册' : '登录'}
+          {busy
+            ? t('auth.busy')
+            : mode === 'register'
+              ? t('auth.register')
+              : t('auth.login')}
         </button>
       </form>
     </div>

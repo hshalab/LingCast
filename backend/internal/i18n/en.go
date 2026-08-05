@@ -1,0 +1,75 @@
+package i18n
+
+var en = catalog{
+	// ---- common ----
+	"err.invalid_request":                "invalid request",
+	"err.invalid_request_detail":         "invalid request: %s",
+	"err.invalid_request_body":           "invalid request body: %s",
+	"err.not_found":                      "not found",
+	"err.internal":                       "internal server error",
+
+	// ---- admin ----
+	"err.admin.bad_credentials":          "incorrect username or password",
+	"err.admin.session_issue":            "could not create a session",
+	"err.admin.session_store_failed":     "failed to store the session",
+	"err.admin.not_logged_in":            "not logged in",
+	"err.admin.account_missing":          "account not found",
+	"err.admin.name_length":              "name must be 1-32 characters",
+	"err.admin.password_short":           "new password must be at least 4 characters",
+	"err.admin.old_password_wrong":       "current password is incorrect",
+	"err.admin.password_hash_failed":     "password hashing failed",
+	"err.admin.require_login":            "please sign in with an admin account first",
+
+	// ---- chat ----
+	"err.chat.guest_alloc_failed":        "could not allocate a guest identity",
+	"err.chat.username_length":           "username must be 1-32 characters",
+	"err.chat.password_short":            "password must be at least 4 characters",
+	"err.chat.username_taken":            "username is already taken",
+	"err.chat.already_registered":        "this identity is already registered, please log in",
+	"err.chat.bad_credentials":           "incorrect username or password",
+	"err.chat.avatar_id_required":        "avatarId is required",
+
+	// ---- live ----
+	"err.live.invalid_avatar_id":         "invalid avatarID",
+	"err.live.avatar_not_found":          "avatar not found",
+	"err.live.session_not_started":       "live session not started",
+	"err.live.notify_worker_failed":      "failed to notify worker: %s",
+	"err.live.text_required":             "field 'text' is required",
+	"err.live.push_chunk_failed":         "failed to push chunk: %s",
+	"err.live.llm_empty_reply":           "LLM returned an empty reply",
+
+	// ---- tasks ----
+	"err.task.avatar_id_required":        "field 'avatarId' is required",
+	"err.task.script_text_required":      "field 'scriptText' is required",
+	"err.task.avatar_not_found":          "avatar not found",
+	"err.task.save_failed":               "failed to save task: %s",
+	"err.task.enqueue_failed":            "failed to enqueue task: %s",
+	"err.task.enqueue_retry_failed":      "failed to enqueue retry: %s",
+	"err.task.invalid_id":                "invalid task id",
+	"err.task.not_found":                 "task not found",
+	"err.task.only_failed_retry":         "only failed tasks can be retried",
+	"err.task.avatar_not_ready":          "avatar base video is not ready",
+	"err.task.invalid_status":            "invalid status",
+	"err.task.output_url_required":       "outputVideoS3Url is required when status is completed",
+
+	// ---- avatars ----
+	"err.avatar.name_required":           "field 'name' is required",
+	"err.avatar.image_required":          "field 'image' (file) is required",
+	"err.avatar.upload_failed":           "failed to upload image: %s",
+	"err.avatar.save_failed":             "failed to save avatar: %s",
+	"err.avatar.init_enqueue_failed":     "failed to enqueue avatar init: %s",
+	"err.avatar.invalid_id":              "invalid avatar id",
+	"err.avatar.not_found":               "avatar not found",
+	"err.avatar.base_video_key_required": "field 'baseVideoS3Key' is required",
+	"err.avatar.delete_tasks_failed":     "failed to delete tasks: %s",
+	"err.avatar.delete_session_failed":   "failed to delete live session: %s",
+	"err.avatar.already_initializing":    "avatar is already initializing",
+	"err.avatar.only_initializing_skip":  "only initializing avatars can be skipped",
+	"err.avatar.invalid_live_settings":   "invalid live settings: %s",
+
+	// ---- tts preview ----
+	"err.tts.fields_required":            "fields 'voiceId' and 'text' are required",
+	"err.tts.text_too_long":              "preview text is too long (max 200 chars)",
+	"err.tts.preview_failed":             "TTS preview failed: %s",
+	"err.tts.empty_audio":                "TTS preview returned empty audio",
+}

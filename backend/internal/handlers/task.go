@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"talkingavatar/backend/internal/i18n"
 	"talkingavatar/backend/internal/models"
 	"talkingavatar/backend/internal/queue"
 	"talkingavatar/backend/internal/storage"
@@ -54,22 +55,22 @@ func NewTaskHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client) *TaskHandle
 func (h *TaskHandler) Create(c *gin.Context) {
 	var req createTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_body", err.Error())})
 		return
 	}
 	if req.AvatarID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'avatarId' is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.avatar_id_required")})
 		return
 	}
 	if strings.TrimSpace(req.ScriptText) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'scriptText' is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.script_text_required")})
 		return
 	}
 
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, req.AvatarID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.task.avatar_not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -88,7 +89,7 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		Status:     models.TaskStatusPending,
 	}
 	if err := h.db.Create(&task).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "save task failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.task.save_failed", err.Error())})
 		return
 	}
 
@@ -103,7 +104,7 @@ func (h *TaskHandler) Create(c *gin.Context) {
 
 	if err := h.q.Push(c.Request.Context(), payload); err != nil {
 		h.db.Model(&task).Update("status", models.TaskStatusFailed)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "enqueue task failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.task.enqueue_failed", err.Error())})
 		return
 	}
 
@@ -132,13 +133,13 @@ func (h *TaskHandler) List(c *gin.Context) {
 func (h *TaskHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.invalid_id")})
 		return
 	}
 	var task models.BroadcastTask
 	if err := h.db.First(&task, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.task.not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -158,29 +159,29 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 func (h *TaskHandler) Retry(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.invalid_id")})
 		return
 	}
 	var task models.BroadcastTask
 	if err := h.db.First(&task, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.task.not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		return
 	}
 	if task.Status != models.TaskStatusFailed {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "only failed tasks can be retried"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.only_failed_retry")})
 		return
 	}
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, task.AvatarID).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar not found"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.avatar_not_found")})
 		return
 	}
 	if avatar.Status != models.AvatarStatusReady {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar is not ready"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.avatar_not_ready")})
 		return
 	}
 
@@ -201,7 +202,7 @@ func (h *TaskHandler) Retry(c *gin.Context) {
 	}
 	if err := h.q.Push(c.Request.Context(), payload); err != nil {
 		h.db.Model(&task).Update("status", models.TaskStatusFailed)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "enqueue retry failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.task.enqueue_retry_failed", err.Error())})
 		return
 	}
 	c.JSON(http.StatusOK, toTaskResponse(task))
@@ -211,14 +212,14 @@ func (h *TaskHandler) Retry(c *gin.Context) {
 func (h *TaskHandler) Get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.invalid_id")})
 		return
 	}
 
 	var task models.BroadcastTask
 	if err := h.db.First(&task, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.task.not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -232,31 +233,31 @@ func (h *TaskHandler) Get(c *gin.Context) {
 func (h *TaskHandler) UpdateStatus(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.invalid_id")})
 		return
 	}
 
 	var req updateTaskStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_body", err.Error())})
 		return
 	}
 
 	switch req.Status {
 	case models.TaskStatusProcessing, models.TaskStatusCompleted, models.TaskStatusFailed:
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.invalid_status")})
 		return
 	}
 	if req.Status == models.TaskStatusCompleted && (req.OutputVideoS3URL == nil || *req.OutputVideoS3URL == "") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "outputVideoS3Url is required when status is completed"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.output_url_required")})
 		return
 	}
 
 	var task models.BroadcastTask
 	if err := h.db.First(&task, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.task.not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}

@@ -18,45 +18,45 @@ export const sidebarData: SidebarData = {
     {
       name: '灵播',
       logo: '/images/logo.svg',
-      plan: '数字人直播平台',
+      plan: 'nav.brandPlan',
     },
   ],
   navGroups: [
     {
-      title: '数字人',
+      title: 'nav.groupAvatars',
       items: [
         {
-          title: '数字人列表',
+          title: 'nav.avatarList',
           url: '/avatar-library',
           icon: Images,
         },
         {
-          title: '数字人创建',
+          title: 'nav.avatarCreate',
           url: '/avatar-studio',
           icon: Clapperboard,
         },
         {
-          title: '播报制作',
+          title: 'nav.broadcast',
           url: '/broadcast',
           icon: Video,
         },
         {
-          title: '直播台',
+          title: 'nav.liveStudio',
           url: '/live-studio',
           icon: RadioTower,
         },
         {
-          title: '任务中心',
+          title: 'nav.taskCenter',
           url: '/task-center',
           icon: ListChecks,
         },
       ],
     },
     {
-      title: '用户相关',
+      title: 'nav.groupUsers',
       items: [
         {
-          title: '用户列表',
+          title: 'nav.userList',
           url: '/users',
           icon: UsersRound,
         },

@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"talkingavatar/backend/internal/i18n"
 	"talkingavatar/backend/internal/models"
 	"talkingavatar/backend/internal/queue"
 	"talkingavatar/backend/internal/storage"
@@ -116,20 +117,20 @@ func liveHistoryKey(avatarID uint) string {
 func (h *LiveHandler) Start(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
 	if err != nil || avatarID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatarID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.invalid_avatar_id")})
 		return
 	}
 
 	var req startLiveRequest
 	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_body", err.Error())})
 		return
 	}
 
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, avatarID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.live.avatar_not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -175,7 +176,7 @@ func (h *LiveHandler) Start(c *gin.Context) {
 	}
 	payload.LiveSettings = json.RawMessage(liveSettings)
 	if err := h.q.PushTo(c.Request.Context(), h.liveControlQueueKey, payload); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "notify worker failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.live.notify_worker_failed", err.Error())})
 		return
 	}
 
@@ -194,14 +195,14 @@ func (h *LiveHandler) Start(c *gin.Context) {
 func (h *LiveHandler) Stop(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
 	if err != nil || avatarID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatarID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.invalid_avatar_id")})
 		return
 	}
 
 	var session models.LiveSession
 	if err := h.db.Where("avatar_id = ?", avatarID).First(&session).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "live session not started"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.live.session_not_started")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -214,7 +215,7 @@ func (h *LiveHandler) Stop(c *gin.Context) {
 		StreamID: session.StreamID,
 	}
 	if err := h.q.PushTo(c.Request.Context(), h.liveControlQueueKey, payload); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "notify worker failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.live.notify_worker_failed", err.Error())})
 		return
 	}
 	if err := h.db.Delete(&session).Error; err != nil {
@@ -229,24 +230,24 @@ func (h *LiveHandler) Stop(c *gin.Context) {
 func (h *LiveHandler) Push(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
 	if err != nil || avatarID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatarID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.invalid_avatar_id")})
 		return
 	}
 
 	var req pushLiveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_body", err.Error())})
 		return
 	}
 	if strings.TrimSpace(req.Text) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'text' is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.text_required")})
 		return
 	}
 
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, avatarID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.live.avatar_not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -258,7 +259,7 @@ func (h *LiveHandler) Push(c *gin.Context) {
 	historyKey := liveHistoryKey(avatar.ID)
 	for _, text := range chunks {
 		if err := h.q.RPushList(c.Request.Context(), key, text); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "push chunk failed: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.live.push_chunk_failed", err.Error())})
 			return
 		}
 		_ = h.q.RPushList(c.Request.Context(), historyKey, text)
@@ -276,19 +277,19 @@ func (h *LiveHandler) Push(c *gin.Context) {
 func (h *LiveHandler) Message(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
 	if err != nil || avatarID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatarID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.invalid_avatar_id")})
 		return
 	}
 	var req liveMessageRequest
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Text) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "field 'text' is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.text_required")})
 		return
 	}
 
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, avatarID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.live.avatar_not_found")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -312,7 +313,7 @@ func (h *LiveHandler) Message(c *gin.Context) {
 	reply := h.llmChat(c, req.Text, avatar)
 	chunks := splitSentences(reply)
 	if len(chunks) == 0 {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "llm returned empty reply"})
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.Tc(c, "err.live.llm_empty_reply")})
 		return
 	}
 
@@ -349,9 +350,10 @@ func (h *LiveHandler) llmChat(c *gin.Context, userText string, avatar models.Ava
 		option.WithBaseURL(strings.TrimRight(h.openAIBaseURL, "/")),
 		option.WithAPIKey(h.openAIAPIKey),
 	)
+	lang := i18n.Lang(c)
 	resp, err := client.Responses.New(c.Request.Context(), responses.ResponseNewParams{
 		Model:           h.openAIModel,
-		Instructions:    openai.String(chatSystemPrompt(avatar)),
+		Instructions:    openai.String(chatSystemPrompt(avatar, lang)),
 		Input:           responses.ResponseNewParamsInputUnion{OfString: openai.String(userText)},
 		Temperature:     openai.Float(0.8),
 		MaxOutputTokens: openai.Int(300),
@@ -371,33 +373,73 @@ func (h *LiveHandler) llmChat(c *gin.Context, userText string, avatar models.Ava
 // chatSystemPrompt builds the LLM persona prompt for one avatar. The
 // avatar's creation-time profile (age/height/weight/ethnicity/relationship/
 // personality) is baked in so viewers can ask about it naturally.
-func chatSystemPrompt(a models.Avatar) string {
+func chatSystemPrompt(a models.Avatar, lang string) string {
+	zh := lang == "" || lang == "zh"
 	profile := []string{}
 	if a.Age != nil {
-		profile = append(profile, fmt.Sprintf("年龄 %d 岁", *a.Age))
+		if zh {
+			profile = append(profile, fmt.Sprintf("年龄 %d 岁", *a.Age))
+		} else {
+			profile = append(profile, fmt.Sprintf("Age %d", *a.Age))
+		}
 	}
 	if a.HeightCm != nil {
-		profile = append(profile, fmt.Sprintf("身高 %d 厘米", *a.HeightCm))
+		if zh {
+			profile = append(profile, fmt.Sprintf("身高 %d 厘米", *a.HeightCm))
+		} else {
+			profile = append(profile, fmt.Sprintf("Height %d cm", *a.HeightCm))
+		}
 	}
 	if a.WeightKg != nil {
-		profile = append(profile, fmt.Sprintf("体重 %d 公斤", *a.WeightKg))
+		if zh {
+			profile = append(profile, fmt.Sprintf("体重 %d 公斤", *a.WeightKg))
+		} else {
+			profile = append(profile, fmt.Sprintf("Weight %d kg", *a.WeightKg))
+		}
 	}
 	if s := strings.TrimSpace(a.Ethnicity); s != "" {
-		profile = append(profile, "族裔 "+s)
+		if zh {
+			profile = append(profile, "族裔 "+s)
+		} else {
+			profile = append(profile, "Ethnicity "+s)
+		}
 	}
 	if s := strings.TrimSpace(a.RelationshipStatus); s != "" {
-		profile = append(profile, "感情状态 "+s)
+		if zh {
+			profile = append(profile, "感情状态 "+s)
+		} else {
+			profile = append(profile, "Relationship "+s)
+		}
 	}
 	if s := strings.TrimSpace(a.Personality); s != "" {
-		profile = append(profile, "性格 "+s)
+		if zh {
+			profile = append(profile, "性格 "+s)
+		} else {
+			profile = append(profile, "Personality "+s)
+		}
 	}
 
-	persona := "你是一个直播间里的数字人主播「" + a.Name + "」。"
-	if len(profile) > 0 {
-		persona += "你的人物设定：" + strings.Join(profile, "，") + "。"
+	var persona string
+	if zh {
+		persona = "你是一个直播间里的数字人主播「" + a.Name + "」。"
+	} else {
+		persona = "You are a digital human streamer named \"" + a.Name + "\". "
 	}
-	persona += "用简短、口语化、中文回复观众消息，单次回复不超过3句话。" +
-		"观众问起你的年龄、身高、体重、族裔、感情状态或性格时，严格按照设定回答。"
+	if len(profile) > 0 {
+		if zh {
+			persona += "你的人物设定：" + strings.Join(profile, "，") + "。"
+		} else {
+			persona += "Your profile: " + strings.Join(profile, ", ") + ". "
+		}
+	}
+	if zh {
+		persona += "用简短、口语化、中文回复观众消息，单次回复不超过3句话。" +
+			"观众问起你的年龄、身高、体重、族裔、感情状态或性格时，严格按照设定回答。"
+	} else {
+		persona += "Reply to viewers in short, conversational English, at most 3 sentences per reply. " +
+			"When asked about your age, height, weight, ethnicity, relationship status or personality, " +
+			"answer strictly according to the profile above."
+	}
 	return persona
 }
 
@@ -407,14 +449,14 @@ func chatSystemPrompt(a models.Avatar) string {
 func (h *LiveHandler) Status(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
 	if err != nil || avatarID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatarID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.invalid_avatar_id")})
 		return
 	}
 
 	var session models.LiveSession
 	if err := h.db.Where("avatar_id = ?", avatarID).First(&session).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "live session not started"})
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.live.session_not_started")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}

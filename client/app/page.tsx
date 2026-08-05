@@ -18,18 +18,20 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import NavHeader from '@/components/nav-header'
 import { listLiveSessions, type LiveSessionItem } from '@/lib/api'
+import { useI18n } from '@/lib/i18n'
 
-const CATEGORIES: { key: string; label: string; icon: typeof Compass }[] = [
-  { key: '全部', label: '全部', icon: Compass },
-  { key: '闲聊', label: '闲聊', icon: MessageCircle },
-  { key: '知识', label: '知识', icon: BookOpen },
-  { key: '娱乐', label: '娱乐', icon: Mic },
-  { key: '游戏', label: '游戏', icon: Gamepad2 },
-  { key: '带货', label: '带货', icon: ShoppingCart },
-  { key: '其他', label: '其他', icon: Sparkles },
+const CATEGORIES: { key: string; i18nKey: string; icon: typeof Compass }[] = [
+  { key: '全部', i18nKey: 'category.all', icon: Compass },
+  { key: '闲聊', i18nKey: 'category.chat', icon: MessageCircle },
+  { key: '知识', i18nKey: 'category.knowledge', icon: BookOpen },
+  { key: '娱乐', i18nKey: 'category.entertainment', icon: Mic },
+  { key: '游戏', i18nKey: 'category.game', icon: Gamepad2 },
+  { key: '带货', i18nKey: 'category.sales', icon: ShoppingCart },
+  { key: '其他', i18nKey: 'category.other', icon: Sparkles },
 ]
 
 export default function Home() {
+  const { t } = useI18n()
   const [sessions, setSessions] = useState<LiveSessionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [category, setCategory] = useState('全部')
@@ -75,20 +77,22 @@ export default function Home() {
           <div className='pointer-events-none absolute -bottom-20 -left-10 size-64 rounded-full bg-violet-500/20 blur-3xl' />
           <div className='relative z-10'>
             <h1 className='text-2xl font-bold tracking-tight sm:text-3xl'>
-              正在开播
+              {t('home.liveNow')}
               <Flame className='ml-2 inline size-6 text-orange-400' />
             </h1>
             <p className='mt-2 max-w-md text-sm text-muted'>
-              进入房间观看直播、发消息互动，数字人会通过 AI 实时回复你。
+              {t('home.heroDesc')}
             </p>
             <div className='mt-4 flex flex-wrap gap-2 text-xs'>
               <span className='rounded-full border border-white/10 bg-white/5 px-3 py-1 text-subtle backdrop-blur'>
                 <Tv className='mr-1 inline size-3.5' />
-                开播中 {sessions.length} 个
+                {t('home.liveCount', { count: sessions.length })}
               </span>
               <span className='rounded-full border border-white/10 bg-white/5 px-3 py-1 text-subtle backdrop-blur'>
                 <Palette className='mr-1 inline size-3.5' />
-                分类 {Math.max(availableCategories.length - 1, 0)} 种
+                {t('home.categoryCount', {
+                  count: Math.max(availableCategories.length - 1, 0),
+                })}
               </span>
             </div>
           </div>
@@ -107,7 +111,7 @@ export default function Home() {
               }`}
             >
               <c.icon className='mr-1.5 inline size-4' />
-              {c.label}
+              {t(c.i18nKey)}
             </button>
           ))}
         </div>
@@ -125,9 +129,16 @@ export default function Home() {
           <div className='flex flex-col items-center justify-center gap-3 rounded-3xl border border-border bg-surface/40 py-20 text-center'>
             <Radio className='size-12 text-faint' />
             <p className='font-medium text-foreground'>
-              {category === '全部' ? '暂无开播的数字人' : `「${category}」分类暂无开播`}
+              {category === '全部'
+                ? t('home.emptyAll')
+                : t('home.emptyCategory', {
+                    category: t(
+                      CATEGORIES.find((c) => c.key === category)?.i18nKey ??
+                        'category.other',
+                    ),
+                  })}
             </p>
-            <p className='text-sm text-muted'>管理员在后台开启直播后，会出现在这里。</p>
+            <p className='text-sm text-muted'>{t('home.emptyHint')}</p>
           </div>
         ) : (
           <div className='grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
@@ -152,9 +163,9 @@ export default function Home() {
                 <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/55 to-transparent px-3 pb-3 pt-12'>
                   <p className='truncate text-sm font-semibold text-white'>
                     {session.avatarName}
-                    {session.age != null && (
+                        {session.age != null && (
                       <span className='ml-1 font-normal text-white/60'>
-                        {session.age}岁
+                        {t('home.age', { age: session.age })}
                       </span>
                     )}
                   </p>
@@ -166,7 +177,7 @@ export default function Home() {
                 </div>
                 <span className='absolute right-2 top-2 flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-red-500 px-2 py-0.5 text-xs font-medium text-white shadow-lg shadow-red-600/30'>
                   <span className='size-1.5 animate-pulse rounded-full bg-white' />
-                  直播中
+                      {t('home.live')}
                 </span>
                 <span className='absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white/90 backdrop-blur'>
                   #{session.avatarId}
@@ -178,7 +189,7 @@ export default function Home() {
       </main>
 
       <footer className='border-t border-border/60 py-5 text-center text-xs text-faint'>
-        灵播 · AI 数字人直播平台
+        {t('home.footer')}
       </footer>
     </div>
   )

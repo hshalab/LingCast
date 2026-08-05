@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"talkingavatar/backend/internal/i18n"
 )
 
 type previewTTSRequest struct {
@@ -23,17 +25,17 @@ type previewTTSRequest struct {
 func PreviewTTS(c *gin.Context) {
 	var req previewTTSRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_body", err.Error())})
 		return
 	}
 	voiceID := strings.TrimSpace(req.VoiceID)
 	text := strings.TrimSpace(req.Text)
 	if voiceID == "" || text == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "fields 'voiceId' and 'text' are required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.tts.fields_required")})
 		return
 	}
 	if len([]rune(text)) > 200 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "preview text too long (max 200 chars)"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.tts.text_too_long")})
 		return
 	}
 
@@ -51,12 +53,12 @@ func PreviewTTS(c *gin.Context) {
 	cmd.Stderr = &errBuf
 	if err := cmd.Run(); err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{
-			"error": "tts preview failed: " + strings.TrimSpace(errBuf.String()),
+			"error": i18n.Tcf(c, "err.tts.preview_failed", strings.TrimSpace(errBuf.String())),
 		})
 		return
 	}
 	if out.Len() == 0 {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "tts preview returned empty audio"})
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.Tc(c, "err.tts.empty_audio")})
 		return
 	}
 	c.Data(http.StatusOK, "audio/mpeg", out.Bytes())

@@ -18,7 +18,7 @@ func TestChatSystemPromptIncludesProfile(t *testing.T) {
 		RelationshipStatus: "单身",
 		Personality:        "活泼开朗",
 	}
-	prompt := chatSystemPrompt(a)
+	prompt := chatSystemPrompt(a, "zh")
 	for _, want := range []string{
 		"翠花",
 		"年龄 25 岁",
@@ -35,8 +35,26 @@ func TestChatSystemPromptIncludesProfile(t *testing.T) {
 }
 
 func TestChatSystemPromptEmptyProfile(t *testing.T) {
-	prompt := chatSystemPrompt(models.Avatar{Name: "小美"})
+	prompt := chatSystemPrompt(models.Avatar{Name: "小美"}, "zh")
 	if strings.Contains(prompt, "人物设定") {
 		t.Fatalf("empty profile should not include a persona block:\n%s", prompt)
+	}
+}
+
+func TestChatSystemPromptEnglish(t *testing.T) {
+	age := 25
+	a := models.Avatar{
+		Name: "Xiaomei",
+		Age:  &age,
+	}
+	prompt := chatSystemPrompt(a, "en")
+	for _, want := range []string{
+		"digital human streamer named \"Xiaomei\"",
+		"Age 25",
+		"conversational English",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("en prompt missing %q:\n%s", want, prompt)
+		}
 	}
 }

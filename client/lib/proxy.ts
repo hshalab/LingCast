@@ -24,6 +24,8 @@ export async function proxyRequest(
   if (accept) headers.set('accept', accept)
   const authorization = req.headers.get('authorization')
   if (authorization) headers.set('authorization', authorization)
+  const acceptLanguage = req.headers.get('accept-language')
+  if (acceptLanguage) headers.set('accept-language', acceptLanguage)
 
   const body =
     req.method === 'GET' || req.method === 'HEAD'

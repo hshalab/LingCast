@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { Download, LoaderCircle, Play, Send } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
@@ -36,29 +37,40 @@ import { Textarea } from '@/components/ui/textarea'
 import { EDGE_TTS_VOICES } from '@/features/avatar-studio/voices'
 import { api, type Avatar, type BroadcastTask } from '@/lib/api'
 
-function showApiError(error: unknown) {
+function showApiError(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
     const message = (error.response?.data as { error?: string } | undefined)?.error
-    toast.error(message ?? '请求失败，请稍后重试')
+    toast.error(message ?? fallback)
     return
   }
-  toast.error('请求失败，请稍后重试')
+  toast.error(fallback)
 }
 
-const TASK_STATUS_META: Record<
+const TASK_STATUS_KEY: Record<BroadcastTask['status'], string> = {
+  pending: 'common.pending',
+  processing: 'common.processing',
+  completed: 'common.completed',
+  failed: 'common.failed',
+}
+
+const TASK_STATUS_VARIANT: Record<
   BroadcastTask['status'],
-  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
+  'default' | 'secondary' | 'destructive' | 'outline'
 > = {
-  pending: { label: '排队中', variant: 'secondary' },
-  processing: { label: '合成中', variant: 'default' },
-  completed: { label: '已完成', variant: 'secondary' },
-  failed: { label: '失败', variant: 'destructive' },
+  pending: 'secondary',
+  processing: 'default',
+  completed: 'secondary',
+  failed: 'destructive',
 }
 
-function formatTime(iso: string): string {
+function statusVariant(status: BroadcastTask['status']) {
+  return TASK_STATUS_VARIANT[status]
+}
+
+function formatTime(iso: string, locale: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString('zh-CN', { hour12: false })
+  return d.toLocaleString(locale, { hour12: false })
 }
 
 export function Broadcast({
@@ -68,6 +80,7 @@ export function Broadcast({
   initialAvatarId?: string
   initialTaskId?: string
 }) {
+  const { t, i18n } = useTranslation()
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [history, setHistory] = useState<BroadcastTask[]>([])
   const [selectedAvatarId, setSelectedAvatarId] = useState('')
@@ -78,6 +91,7 @@ export function Broadcast({
   const historyRef = useRef<HTMLDivElement>(null)
   const selectedAvatar = avatars.find((a) => String(a.id) === selectedAvatarId)
   const readyAvatars = avatars.filter((avatar) => avatar.status === 'ready')
+  const locale = i18n.language === 'en' ? 'en-US' : 'zh-CN'
   const selectedVoiceLabel =
     EDGE_TTS_VOICES.find((voice) => voice.id === selectedAvatar?.voiceId)?.label ??
     selectedAvatar?.voiceId
@@ -124,11 +138,11 @@ export function Broadcast({
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     if (!selectedAvatarId) {
-      toast.error('请选择数字人')
+      toast.error(t('broadcast.toastSelectAvatar'))
       return
     }
     if (!script.trim()) {
-      toast.error('请填写播报脚本')
+      toast.error(t('broadcast.toastScriptRequired'))
       return
     }
     setSubmitting(true)
@@ -139,7 +153,7 @@ export function Broadcast({
       })
       void loadHistory()
     } catch (error) {
-      showApiError(error)
+      showApiError(error, t('common.requestFailed'))
     } finally {
       setSubmitting(false)
     }
@@ -154,25 +168,20 @@ export function Broadcast({
 
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div>
-          <h2 className='text-2xl font-bold tracking-tight'>播报制作</h2>
-          <p className='text-muted-foreground'>
-            选择已就绪的数字人并输入脚本，生成离线口播视频（Edge-TTS + Wav2Lip）。
-          </p>
+          <h2 className='text-2xl font-bold tracking-tight'>{t('broadcast.title')}</h2>
+          <p className='text-muted-foreground'>{t('broadcast.subtitle')}</p>
         </div>
 
         {readyAvatars.length === 0 ? (
           <Card>
             <CardHeader className='items-center text-center'>
-              <CardTitle>还没有可用的数字人</CardTitle>
-              <CardDescription>
-                播报需要已完成基础视频生成的数字人（状态为「就绪」）。
-                请先到 Avatar Studio 创建。
-              </CardDescription>
+              <CardTitle>{t('broadcast.noReady')}</CardTitle>
+              <CardDescription>{t('broadcast.noReadyDesc')}</CardDescription>
             </CardHeader>
             <CardContent className='flex justify-center'>
               <Button asChild>
                 <Link to='/avatar-studio' search={{ edit: undefined }}>
-                  去创建数字人
+                  {t('broadcast.goCreate')}
                 </Link>
               </Button>
             </CardContent>
@@ -180,20 +189,18 @@ export function Broadcast({
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle>任务配置</CardTitle>
-              <CardDescription>
-                数字人需已完成基础视频生成（状态为「就绪」）；任务状态请在下方制作历史查看。
-              </CardDescription>
+              <CardTitle>{t('broadcast.configTitle')}</CardTitle>
+              <CardDescription>{t('broadcast.configDesc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className='flex flex-col gap-5'>
                 {/* 横向平铺：左 = 选择数字人，右 = 播报脚本 */}
                 <div className='grid gap-5 lg:grid-cols-2'>
                   <div className='flex flex-col gap-2'>
-                    <Label htmlFor='avatar-select'>选择数字人</Label>
+                    <Label htmlFor='avatar-select'>{t('broadcast.selectAvatar')}</Label>
                     <Select value={selectedAvatarId} onValueChange={setSelectedAvatarId}>
                       <SelectTrigger id='avatar-select' className='w-full'>
-                        <SelectValue placeholder='选择数字人' />
+                        <SelectValue placeholder={t('broadcast.selectAvatar')} />
                       </SelectTrigger>
                       <SelectContent>
                         {avatars.map((avatar) => (
@@ -203,7 +210,7 @@ export function Broadcast({
                             disabled={avatar.status !== 'ready'}
                           >
                             {avatar.name} (#{avatar.id})
-                            {avatar.status !== 'ready' ? ' · 生成中' : ''}
+                            {avatar.status !== 'ready' ? ` · ${t('common.generating')}` : ''}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -220,7 +227,7 @@ export function Broadcast({
                             {selectedAvatar.name} (#{selectedAvatar.id})
                           </p>
                           <p className='truncate text-muted-foreground'>
-                            音色：{selectedVoiceLabel}
+                            {t('broadcast.voice', { voice: selectedVoiceLabel })}
                           </p>
                         </div>
                       </div>
@@ -228,12 +235,12 @@ export function Broadcast({
                   </div>
 
                   <div className='flex flex-col gap-2'>
-                    <Label htmlFor='script'>播报脚本</Label>
+                    <Label htmlFor='script'>{t('broadcast.script')}</Label>
                     <Textarea
                       id='script'
                       value={script}
                       onChange={(event) => setScript(event.target.value)}
-                      placeholder='输入播报内容，例如：大家好，欢迎收听今天的新闻摘要。'
+                      placeholder={t('broadcast.scriptPlaceholder')}
                       rows={6}
                     />
                   </div>
@@ -248,7 +255,7 @@ export function Broadcast({
                   ) : (
                     <Send className='size-4' />
                   )}
-                  提交任务
+                  {t('broadcast.submit')}
                 </Button>
               </form>
             </CardContent>
@@ -257,31 +264,29 @@ export function Broadcast({
 
         <Card>
           <CardHeader className='gap-1'>
-            <CardTitle>制作历史</CardTitle>
-            <CardDescription>
-              本数字人（及全部头像）的历史播报任务，3 秒自动刷新。
-            </CardDescription>
+            <CardTitle>{t('broadcast.historyTitle')}</CardTitle>
+            <CardDescription>{t('broadcast.historyDesc')}</CardDescription>
           </CardHeader>
           <CardContent ref={historyRef}>
             {history.length === 0 ? (
               <p className='py-6 text-center text-sm text-muted-foreground'>
-                暂无制作历史
+                {t('broadcast.historyEmpty')}
               </p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>ID</TableHead>
-                    <TableHead>头像</TableHead>
-                    <TableHead>脚本</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>创建时间</TableHead>
-                    <TableHead className='text-right'>成品</TableHead>
+                    <TableHead>{t('broadcast.colAvatar')}</TableHead>
+                    <TableHead>{t('broadcast.colScript')}</TableHead>
+                    <TableHead>{t('common.status')}</TableHead>
+                    <TableHead>{t('common.createdAt')}</TableHead>
+                    <TableHead className='text-right'>{t('broadcast.colOutput')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {history.map((item) => {
-                    const meta = TASK_STATUS_META[item.status]
+                    const statusLabel = t(TASK_STATUS_KEY[item.status])
                     const highlighted = initialTaskId === String(item.id)
                     return (
                       <TableRow
@@ -299,10 +304,10 @@ export function Broadcast({
                           {item.scriptText}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={meta.variant}>{meta.label}</Badge>
+                          <Badge variant={statusVariant(item.status)}>{statusLabel}</Badge>
                         </TableCell>
                         <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
-                          {formatTime(item.createdAt)}
+                          {formatTime(item.createdAt, locale)}
                         </TableCell>
                         <TableCell className='text-right'>
                           {item.status === 'completed' && item.outputVideoS3Url ? (
@@ -313,7 +318,7 @@ export function Broadcast({
                                 onClick={() => setPlayUrl(item.outputVideoS3Url!)}
                               >
                                 <Play className='size-3.5' />
-                                播放
+                                {t('common.play')}
                               </Button>
                               <Button asChild variant='outline' size='sm'>
                                 <a
@@ -323,7 +328,7 @@ export function Broadcast({
                                   rel='noreferrer'
                                 >
                                   <Download className='size-3.5' />
-                                  下载
+                                  {t('common.download')}
                                 </a>
                               </Button>
                             </div>
@@ -343,7 +348,7 @@ export function Broadcast({
         <VideoPlayerDialog
           open={playUrl !== null}
           url={playUrl ?? undefined}
-          title='播报成品'
+          title={t('broadcast.resultTitle')}
           onClose={() => setPlayUrl(null)}
         />
       </Main>

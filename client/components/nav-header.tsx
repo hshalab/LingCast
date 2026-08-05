@@ -4,11 +4,13 @@ import Link from 'next/link'
 import { Moon, Sun } from 'lucide-react'
 import { useState } from 'react'
 import AuthModal from '@/components/auth-modal'
+import { useI18n } from '@/lib/i18n'
 import { useIdentity } from '@/lib/identity'
 import { useTheme } from '@/lib/theme'
 
 /** Shared audience-site navigation bar: brand + chat identity (register/login/logout). */
 export default function NavHeader() {
+  const { t, lang, setLang } = useI18n()
   const { identity, loading: identityLoading, ensureIdentity, logout } = useIdentity()
   const { theme, toggleTheme } = useTheme()
   const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null)
@@ -21,19 +23,23 @@ export default function NavHeader() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={theme === 'dark' ? '/logo-white.svg' : '/logo.svg'}
-              alt='灵播'
+              alt='LingCast'
               className='size-9 rounded-xl'
             />
-            <span className='text-lg font-bold tracking-tight'>灵播</span>
+            <span className='text-lg font-bold tracking-tight'>
+              {lang === 'zh' ? '灵播' : 'LingCast'}
+            </span>
             <span className='hidden rounded-md bg-white/5 px-1.5 py-0.5 text-xs text-muted sm:inline'>
-              数字人直播
+              {t('nav.slogan')}
             </span>
           </Link>
 
           <div className='flex items-center gap-2'>
             <button
               onClick={toggleTheme}
-              title={theme === 'dark' ? '切换到亮色' : '切换到暗色'}
+              title={
+                theme === 'dark' ? t('nav.switchLight') : t('nav.switchDark')
+              }
               className='grid size-9 place-items-center rounded-lg border border-border bg-surface text-muted transition hover:text-foreground'
             >
               {theme === 'dark' ? (
@@ -41,6 +47,14 @@ export default function NavHeader() {
               ) : (
                 <Moon className='size-4' />
               )}
+            </button>
+
+            <button
+              onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+              title={lang === 'zh' ? 'English' : '中文'}
+              className='grid size-9 place-items-center rounded-lg border border-border bg-surface text-sm font-medium text-muted transition hover:text-foreground'
+            >
+              {lang === 'zh' ? 'EN' : '中'}
             </button>
 
             {identity ? (
@@ -52,7 +66,9 @@ export default function NavHeader() {
                       : 'bg-blue-600/20 text-blue-300'
                   }`}
                 >
-                  <span>{identity.isGuest ? '游客' : '账号'}</span>
+                  <span>
+                    {identity.isGuest ? t('nav.guest') : t('nav.account')}
+                  </span>
                   <span className='font-medium'>{identity.username}</span>
                   <span className='opacity-60'>#{identity.userId}</span>
                 </span>
@@ -62,13 +78,13 @@ export default function NavHeader() {
                       onClick={() => setAuthMode('register')}
                       className='rounded-lg border border-border px-3 py-1.5 text-sm text-foreground transition hover:border-foreground/50'
                     >
-                      注册
+                      {t('nav.register')}
                     </button>
                     <button
                       onClick={() => setAuthMode('login')}
                       className='rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-500'
                     >
-                      登录
+                      {t('nav.login')}
                     </button>
                   </>
                 ) : (
@@ -76,7 +92,7 @@ export default function NavHeader() {
                     onClick={() => void logout()}
                     className='rounded-lg border border-border px-3 py-1.5 text-sm text-subtle transition hover:border-foreground/50'
                   >
-                    退出
+                    {t('nav.logout')}
                   </button>
                 )}
               </>
@@ -86,7 +102,9 @@ export default function NavHeader() {
                 disabled={identityLoading}
                 className='rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-40'
               >
-                {identityLoading ? '获取身份中…' : '获取游客身份'}
+                {identityLoading
+                  ? t('nav.gettingIdentity')
+                  : t('nav.getIdentity')}
               </button>
             )}
           </div>

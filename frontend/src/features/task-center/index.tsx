@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { Eye, ListChecks, RefreshCw, RotateCcw, SkipForward, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
@@ -27,47 +28,63 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api, type Avatar, type BroadcastTask } from '@/lib/api'
 
-function showApiError(error: unknown) {
+function showApiError(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
     const message = (error.response?.data as { error?: string } | undefined)?.error
-    toast.error(message ?? '请求失败，请稍后重试')
+    toast.error(message ?? fallback)
     return
   }
-  toast.error('请求失败，请稍后重试')
+  toast.error(fallback)
 }
 
-const AVATAR_STATUS_META: Record<
+const AVATAR_STATUS_KEY: Record<Avatar['status'], string> = {
+  initializing: 'common.generating',
+  ready: 'common.ready',
+  failed: 'common.failed',
+  skipped: 'common.skipped',
+}
+
+const AVATAR_STATUS_VARIANT: Record<
   Avatar['status'],
-  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
+  'default' | 'secondary' | 'destructive' | 'outline'
 > = {
-  initializing: { label: '生成中', variant: 'default' },
-  ready: { label: '就绪', variant: 'secondary' },
-  failed: { label: '失败', variant: 'destructive' },
-  skipped: { label: '已跳过', variant: 'outline' },
+  initializing: 'default',
+  ready: 'secondary',
+  failed: 'destructive',
+  skipped: 'outline',
 }
 
-const TASK_STATUS_META: Record<
+const TASK_STATUS_KEY: Record<BroadcastTask['status'], string> = {
+  pending: 'common.pending',
+  processing: 'common.processing',
+  completed: 'common.completed',
+  failed: 'common.failed',
+}
+
+const TASK_STATUS_VARIANT: Record<
   BroadcastTask['status'],
-  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
+  'default' | 'secondary' | 'destructive' | 'outline'
 > = {
-  pending: { label: '排队中', variant: 'secondary' },
-  processing: { label: '合成中', variant: 'default' },
-  completed: { label: '已完成', variant: 'secondary' },
-  failed: { label: '失败', variant: 'destructive' },
+  pending: 'secondary',
+  processing: 'default',
+  completed: 'secondary',
+  failed: 'destructive',
 }
 
-function formatTime(iso: string): string {
+function formatTime(iso: string, locale: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString('zh-CN', { hour12: false })
+  return d.toLocaleString(locale, { hour12: false })
 }
 
 export function TaskCenter() {
+  const { t, i18n } = useTranslation()
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [tasks, setTasks] = useState<BroadcastTask[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedAvatars, setSelectedAvatars] = useState<Set<number>>(new Set())
   const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set())
+  const locale = i18n.language === 'en' ? 'en-US' : 'zh-CN'
 
   const load = useCallback(async () => {
     try {
@@ -78,7 +95,7 @@ export function TaskCenter() {
       setAvatars(avatarResp.data.data)
       setTasks(taskResp.data.data)
     } catch (error) {
-      showApiError(error)
+      showApiError(error, t('common.requestFailed'))
     } finally {
       setLoading(false)
     }
@@ -106,7 +123,7 @@ export function TaskCenter() {
       toast.success(success)
       void load()
     } catch (error) {
-      showApiError(error)
+      showApiError(error, t('common.requestFailed'))
     }
   }
 
@@ -128,12 +145,12 @@ export function TaskCenter() {
     clear: () => void,
   ) => {
     if (jobs.length === 0) {
-      toast.info('没有符合该操作的项目')
+      toast.info(t('task.noMatching'))
       return
     }
     const results = await Promise.allSettled(jobs.map((job) => job.fn()))
     const ok = results.filter((r) => r.status === 'fulfilled').length
-    toast.success(`${label}完成：成功 ${ok}/${jobs.length}`)
+    toast.success(t('task.batchDone', { label, ok, total: jobs.length }))
     clear()
     void load()
   }
@@ -166,40 +183,40 @@ export function TaskCenter() {
           <div>
             <h2 className='flex items-center gap-2 text-2xl font-bold tracking-tight'>
               <ListChecks className='size-6' />
-              任务中心
+              {t('task.title')}
             </h2>
-            <p className='text-muted-foreground'>
-              查看头像基础视频生成与播报任务的进度，可重试、跳过或删除。
-            </p>
+            <p className='text-muted-foreground'>{t('task.subtitle')}</p>
           </div>
           <Button variant='outline' size='sm' onClick={() => void load()}>
             <RefreshCw className='size-4' />
-            刷新
+            {t('common.refresh')}
           </Button>
         </div>
 
         <Tabs defaultValue='avatars'>
           <TabsList>
-            <TabsTrigger value='avatars'>头像初始化</TabsTrigger>
-            <TabsTrigger value='tasks'>播报任务</TabsTrigger>
+            <TabsTrigger value='avatars'>{t('task.tabAvatars')}</TabsTrigger>
+            <TabsTrigger value='tasks'>{t('task.tabTasks')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value='avatars'>
             <Card>
               <CardHeader className='gap-1'>
-                <CardTitle>头像基础视频</CardTitle>
-                <CardDescription>
-                  LivePortrait 预处理任务（avatar_init 队列），约 1-3 分钟/个。
-                </CardDescription>
+                <CardTitle>{t('task.avatarCardTitle')}</CardTitle>
+                <CardDescription>{t('task.avatarCardDesc')}</CardDescription>
               </CardHeader>
               <CardContent>
                 {loading ? (
-                  <p className='py-8 text-center text-sm text-muted-foreground'>加载中…</p>
+                  <p className='py-8 text-center text-sm text-muted-foreground'>
+                    {t('common.loading')}
+                  </p>
                 ) : (
                   <>
                     {selectedAvatars.size > 0 && (
                       <div className='mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-2 text-sm'>
-                        <span className='me-1 font-medium'>已选 {selectedAvatars.size} 个头像</span>
+                        <span className='me-1 font-medium'>
+                          {t('task.selectedAvatars', { count: selectedAvatars.size })}
+                        </span>
                         <Button
                           size='sm'
                           variant='outline'
@@ -209,12 +226,12 @@ export function TaskCenter() {
                                 (a) => a.status === 'initializing',
                                 (id) => api.post(`/avatars/${id}/skip`),
                               ),
-                              '批量跳过',
+                              t('task.batchSkip'),
                               () => setSelectedAvatars(new Set()),
                             )
                           }
                         >
-                          批量跳过
+                          {t('task.batchSkip')}
                         </Button>
                         <Button
                           size='sm'
@@ -225,27 +242,33 @@ export function TaskCenter() {
                                 (a) => a.status !== 'initializing',
                                 (id) => api.post(`/avatars/${id}/retry`),
                               ),
-                              '批量重试',
+                              t('task.batchRetryRegen'),
                               () => setSelectedAvatars(new Set()),
                             )
                           }
                         >
-                          批量重试/重新生成
+                          {t('task.batchRetryRegen')}
                         </Button>
                         <Button
                           size='sm'
                           variant='destructive'
                           onClick={() => {
-                            if (window.confirm(`确定删除选中的 ${selectedAvatars.size} 个头像？`)) {
+                            if (
+                              window.confirm(
+                                t('task.confirmDeleteAvatars', {
+                                  count: selectedAvatars.size,
+                                }),
+                              )
+                            ) {
                               void runBatch(
                                 avatarJobs(() => true, (id) => api.delete(`/avatars/${id}`)),
-                                '批量删除',
+                                t('task.batchDelete'),
                                 () => setSelectedAvatars(new Set()),
                               )
                             }
                           }}
                         >
-                          批量删除
+                          {t('task.batchDelete')}
                         </Button>
                       </div>
                     )}
@@ -267,16 +290,16 @@ export function TaskCenter() {
                               }
                             />
                           </TableHead>
-                          <TableHead>头像</TableHead>
-                          <TableHead>音色</TableHead>
-                          <TableHead>状态</TableHead>
-                          <TableHead>创建时间</TableHead>
-                          <TableHead className='text-right'>操作</TableHead>
+                          <TableHead>{t('task.colAvatar')}</TableHead>
+                          <TableHead>{t('task.colVoice')}</TableHead>
+                          <TableHead>{t('common.status')}</TableHead>
+                          <TableHead>{t('common.createdAt')}</TableHead>
+                          <TableHead className='text-right'>{t('common.actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {avatars.map((avatar) => {
-                          const meta = AVATAR_STATUS_META[avatar.status]
+                          const statusLabel = t(AVATAR_STATUS_KEY[avatar.status])
                           return (
                             <TableRow key={avatar.id}>
                               <TableCell>
@@ -306,16 +329,16 @@ export function TaskCenter() {
                               {avatar.voiceId}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={meta.variant}>
-                                {meta.label}
+                              <Badge variant={AVATAR_STATUS_VARIANT[avatar.status]}>
+                                {statusLabel}
                                 {avatar.initQueuePos !== undefined &&
                                 avatar.status === 'initializing'
-                                  ? ` · 排队第 ${avatar.initQueuePos + 1}`
+                                  ? ` · ${t('task.queuePos', { pos: avatar.initQueuePos + 1 })}`
                                   : ''}
                               </Badge>
                             </TableCell>
                             <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
-                              {formatTime(avatar.createdAt)}
+                              {formatTime(avatar.createdAt, locale)}
                             </TableCell>
                             <TableCell className='text-right'>
                               <div className='flex justify-end gap-1'>
@@ -325,7 +348,7 @@ export function TaskCenter() {
                                     search={{ avatarId: String(avatar.id) }}
                                   >
                                     <Eye className='size-3.5' />
-                                    查看
+                                    {t('task.view')}
                                   </Link>
                                 </Button>
                                 {avatar.status === 'initializing' && (
@@ -335,12 +358,12 @@ export function TaskCenter() {
                                     onClick={() =>
                                       void runAction(
                                         () => api.post(`/avatars/${avatar.id}/skip`),
-                                        `已跳过「${avatar.name}」`,
+                                        t('task.toastSkipped', { name: avatar.name }),
                                       )
                                     }
                                   >
                                     <SkipForward className='size-3.5' />
-                                    跳过
+                                    {t('task.skip')}
                                   </Button>
                                 )}
                                 {(avatar.status === 'failed' ||
@@ -353,13 +376,15 @@ export function TaskCenter() {
                                       void runAction(
                                         () => api.post(`/avatars/${avatar.id}/retry`),
                                         avatar.status === 'ready'
-                                          ? `「${avatar.name}」开始重新生成基础视频`
-                                          : `已重新排队「${avatar.name}」`,
+                                          ? t('task.toastRegenerating', { name: avatar.name })
+                                          : t('task.toastRequeued', { name: avatar.name }),
                                       )
                                     }
                                   >
                                     <RotateCcw className='size-3.5' />
-                                    {avatar.status === 'ready' ? '重新生成' : '重试'}
+                                    {avatar.status === 'ready'
+                                      ? t('task.regenerate')
+                                      : t('task.retry')}
                                   </Button>
                                 )}
                                 <Button
@@ -367,16 +392,16 @@ export function TaskCenter() {
                                   size='sm'
                                   className='text-destructive'
                                   onClick={() => {
-                                    if (window.confirm(`确定删除头像「${avatar.name}」？`)) {
+                                    if (window.confirm(t('task.confirmDeleteAvatar', { name: avatar.name }))) {
                                       void runAction(
                                         () => api.delete(`/avatars/${avatar.id}`),
-                                        `已删除「${avatar.name}」`,
+                                        t('task.toastDeleted', { name: avatar.name }),
                                       )
                                     }
                                   }}
                                 >
                                   <Trash2 className='size-3.5' />
-                                  删除
+                                  {t('task.delete')}
                                 </Button>
                               </div>
                               </TableCell>
@@ -394,17 +419,21 @@ export function TaskCenter() {
           <TabsContent value='tasks'>
             <Card>
               <CardHeader className='gap-1'>
-                <CardTitle>播报任务</CardTitle>
-                <CardDescription>Edge-TTS + Wav2Lip 离线合成任务。</CardDescription>
+                <CardTitle>{t('task.taskCardTitle')}</CardTitle>
+                <CardDescription>{t('task.taskCardDesc')}</CardDescription>
               </CardHeader>
               <CardContent>
                 {loading ? (
-                  <p className='py-8 text-center text-sm text-muted-foreground'>加载中…</p>
+                  <p className='py-8 text-center text-sm text-muted-foreground'>
+                    {t('common.loading')}
+                  </p>
                 ) : (
                   <>
                     {selectedTasks.size > 0 && (
                       <div className='mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-2 text-sm'>
-                        <span className='me-1 font-medium'>已选 {selectedTasks.size} 个任务</span>
+                        <span className='me-1 font-medium'>
+                          {t('task.selectedTasks', { count: selectedTasks.size })}
+                        </span>
                         <Button
                           size='sm'
                           variant='outline'
@@ -414,27 +443,33 @@ export function TaskCenter() {
                                 (t) => t.status === 'failed',
                                 (id) => api.post(`/tasks/${id}/retry`),
                               ),
-                              '批量重试',
+                              t('task.batchRetry'),
                               () => setSelectedTasks(new Set()),
                             )
                           }
                         >
-                          批量重试
+                          {t('task.batchRetry')}
                         </Button>
                         <Button
                           size='sm'
                           variant='destructive'
                           onClick={() => {
-                            if (window.confirm(`确定删除选中的 ${selectedTasks.size} 个任务？`)) {
+                            if (
+                              window.confirm(
+                                t('task.confirmDeleteTasks', {
+                                  count: selectedTasks.size,
+                                }),
+                              )
+                            ) {
                               void runBatch(
                                 taskJobs(() => true, (id) => api.delete(`/tasks/${id}`)),
-                                '批量删除',
+                                t('task.batchDelete'),
                                 () => setSelectedTasks(new Set()),
                               )
                             }
                           }}
                         >
-                          批量删除
+                          {t('task.batchDelete')}
                         </Button>
                       </div>
                     )}
@@ -454,11 +489,11 @@ export function TaskCenter() {
                             />
                           </TableHead>
                           <TableHead>ID</TableHead>
-                          <TableHead>头像</TableHead>
-                          <TableHead>脚本</TableHead>
-                          <TableHead>状态</TableHead>
-                          <TableHead>创建时间</TableHead>
-                          <TableHead className='text-right'>操作</TableHead>
+                          <TableHead>{t('task.colAvatar')}</TableHead>
+                          <TableHead>{t('task.colScript')}</TableHead>
+                          <TableHead>{t('common.status')}</TableHead>
+                          <TableHead>{t('common.createdAt')}</TableHead>
+                          <TableHead className='text-right'>{t('common.actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -468,12 +503,12 @@ export function TaskCenter() {
                               colSpan={7}
                               className='py-8 text-center text-sm text-muted-foreground'
                             >
-                              暂无播报任务
+                              {t('task.emptyTasks')}
                             </TableCell>
                           </TableRow>
                         ) : (
                           tasks.map((task) => {
-                            const meta = TASK_STATUS_META[task.status]
+                            const statusLabel = t(TASK_STATUS_KEY[task.status])
                             return (
                               <TableRow key={task.id}>
                               <TableCell>
@@ -488,10 +523,12 @@ export function TaskCenter() {
                               {task.scriptText}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={meta.variant}>{meta.label}</Badge>
+                              <Badge variant={TASK_STATUS_VARIANT[task.status]}>
+                                {statusLabel}
+                              </Badge>
                             </TableCell>
                             <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
-                              {formatTime(task.createdAt)}
+                              {formatTime(task.createdAt, locale)}
                             </TableCell>
                             <TableCell className='text-right'>
                               <div className='flex justify-end gap-1'>
@@ -504,7 +541,7 @@ export function TaskCenter() {
                                     }}
                                   >
                                     <Eye className='size-3.5' />
-                                    查看
+                                    {t('task.view')}
                                   </Link>
                                 </Button>
                                 {task.status === 'failed' && (
@@ -514,12 +551,12 @@ export function TaskCenter() {
                                     onClick={() =>
                                       void runAction(
                                         () => api.post(`/tasks/${task.id}/retry`),
-                                        `任务 #${task.id} 已重新入队`,
+                                        t('task.toastTaskRequeued', { id: task.id }),
                                       )
                                     }
                                   >
                                     <RotateCcw className='size-3.5' />
-                                    重试
+                                    {t('task.retry')}
                                   </Button>
                                 )}
                                 <Button
@@ -527,16 +564,16 @@ export function TaskCenter() {
                                   size='sm'
                                   className='text-destructive'
                                   onClick={() => {
-                                    if (window.confirm(`确定删除任务 #${task.id}？`)) {
+                                    if (window.confirm(t('task.confirmDeleteTask', { id: task.id }))) {
                                       void runAction(
                                         () => api.delete(`/tasks/${task.id}`),
-                                        `任务 #${task.id} 已删除`,
+                                        t('task.toastTaskDeleted', { id: task.id }),
                                       )
                                     }
                                   }}
                                 >
                                   <Trash2 className='size-3.5' />
-                                  删除
+                                  {t('task.delete')}
                                 </Button>
                               </div>
                               </TableCell>

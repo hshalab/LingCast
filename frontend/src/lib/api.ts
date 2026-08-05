@@ -91,6 +91,13 @@ const baseURL = `${import.meta.env.VITE_API_BASE_URL ?? ''}/api`
 
 export const api = axios.create({ baseURL })
 
+// Tell the backend which language to use for error messages.
+api.interceptors.request.use((config) => {
+  const lang = localStorage.getItem('lingcast-lang')
+  config.headers['Accept-Language'] = lang === 'en' ? 'en' : 'zh-CN'
+  return config
+})
+
 export async function adminLogin(username: string, password: string) {
   const { data } = await api.post<{ username: string; name: string }>('/admin/login', {
     username,

@@ -59,9 +59,19 @@ export type ChatMessage = {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let lang = 'zh-CN'
+  try {
+    lang = window.localStorage.getItem('lingcast-lang') === 'en' ? 'en' : 'zh-CN'
+  } catch {
+    // server-side / private mode: fall back to zh-CN
+  }
   const res = await fetch(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept-Language': lang,
+      ...(init?.headers ?? {}),
+    },
     cache: 'no-store',
   })
   if (!res.ok) {

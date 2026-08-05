@@ -11,6 +11,7 @@ import (
 
 	"talkingavatar/backend/internal/config"
 	"talkingavatar/backend/internal/handlers"
+	"talkingavatar/backend/internal/i18n"
 	"talkingavatar/backend/internal/queue"
 	"talkingavatar/backend/internal/storage"
 )
@@ -21,13 +22,14 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(i18n.Middleware())
 
 	// CORS must allow the Vite dev server (e.g. http://localhost:5173) as
 	// well as the nginx-served app origin.
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "Accept-Language"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))

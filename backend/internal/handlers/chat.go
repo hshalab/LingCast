@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"talkingavatar/backend/internal/i18n"
 	"talkingavatar/backend/internal/models"
 )
 
@@ -44,7 +45,7 @@ func (h *ChatHandler) Guest(c *gin.Context) {
 		c.JSON(http.StatusOK, chatIdentityResponse{UserID: u.ID, Username: u.Username, IsGuest: true})
 		return
 	}
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "could not allocate a guest identity"})
+	c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tc(c, "err.chat.guest_alloc_failed")})
 }
 
 type chatRegisterRequest struct {
@@ -58,22 +59,22 @@ type chatRegisterRequest struct {
 func (h *ChatHandler) Register(c *gin.Context) {
 	var req chatRegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_detail", err.Error())})
 		return
 	}
 	username := strings.TrimSpace(req.Username)
 	if username == "" || len(username) > 32 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名需为 1-32 个字符"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.chat.username_length")})
 		return
 	}
 	if len(req.Password) < 4 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "密码至少 4 位"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.chat.password_short")})
 		return
 	}
 
 	var taken models.ChatUser
 	if err := h.db.Where("username = ?", username).First(&taken).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "用户名已被占用"})
+		c.JSON(http.StatusConflict, gin.H{"error": i18n.Tc(c, "err.chat.username_taken")})
 		return
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -82,7 +83,7 @@ func (h *ChatHandler) Register(c *gin.Context) {
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "password hash failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tc(c, "err.admin.password_hash_failed")})
 		return
 	}
 
@@ -90,7 +91,7 @@ func (h *ChatHandler) Register(c *gin.Context) {
 		var guest models.ChatUser
 		if err := h.db.First(&guest, req.GuestUserID).Error; err == nil {
 			if !guest.IsGuest {
-				c.JSON(http.StatusConflict, gin.H{"error": "该身份已注册，请直接登录"})
+				c.JSON(http.StatusConflict, gin.H{"error": i18n.Tc(c, "err.chat.already_registered")})
 				return
 			}
 			guest.Username = username
@@ -126,14 +127,14 @@ type chatLoginRequest struct {
 func (h *ChatHandler) Login(c *gin.Context) {
 	var req chatLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_detail", err.Error())})
 		return
 	}
 
 	var user models.ChatUser
 	if err := h.db.Where("username = ?", strings.TrimSpace(req.Username)).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": i18n.Tc(c, "err.chat.bad_credentials")})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -141,7 +142,7 @@ func (h *ChatHandler) Login(c *gin.Context) {
 	}
 	if user.IsGuest ||
 		bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": i18n.Tc(c, "err.chat.bad_credentials")})
 		return
 	}
 
@@ -163,7 +164,7 @@ func (h *ChatHandler) Login(c *gin.Context) {
 func (h *ChatHandler) History(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Query("avatarId"), 10, 64)
 	if err != nil || avatarID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "avatarId is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.chat.avatar_id_required")})
 		return
 	}
 	var msgs []models.ChatMessage

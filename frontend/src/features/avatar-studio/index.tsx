@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { CheckCircle2, LoaderCircle, Play, Upload, UserRound, Volume2, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getRouteApi, Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
@@ -33,20 +34,37 @@ import {
   type EdgeVoice,
 } from './voices'
 
-function showApiError(error: unknown) {
+function showApiError(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
     const message = (error.response?.data as { error?: string } | undefined)?.error
-    toast.error(message ?? '请求失败，请稍后重试')
+    toast.error(message ?? fallback)
     return
   }
-  toast.error('请求失败，请稍后重试')
+  toast.error(fallback)
 }
 
 const PREVIEW_TEXT = '你好，我是你的数字人助理，很高兴认识你。'
 
+const CATEGORY_KEY: Record<string, string> = {
+  闲聊: 'chat',
+  知识: 'knowledge',
+  娱乐: 'entertainment',
+  游戏: 'game',
+  带货: 'sales',
+  其他: 'other',
+}
+
+const RELATIONSHIP_KEY: Record<string, string> = {
+  单身: 'single',
+  恋爱中: 'dating',
+  已婚: 'married',
+  保密: 'private',
+}
+
 const routeApi = getRouteApi('/_authenticated/avatar-studio')
 
 export function AvatarStudio() {
+  const { t } = useTranslation()
   const { edit: editId } = routeApi.useSearch()
   const navigate = routeApi.useNavigate()
   const editing = Boolean(editId)
@@ -97,7 +115,7 @@ export function AvatarStudio() {
         setRelationshipStatus(data.relationshipStatus ?? '单身')
         setPersonality(data.personality ?? '')
       })
-      .catch(() => toast.error('加载数字人信息失败'))
+      .catch(() => toast.error(t('studio.toastLoadFailed')))
   }, [editId])
 
   // Poll the avatar's initialization status after creation.
@@ -130,22 +148,22 @@ export function AvatarStudio() {
 
   useEffect(() => {
     if (created?.status === 'ready') {
-      toast.success('基础视频已生成，数字人创建完成')
+      toast.success(t('studio.toastReady'))
     }
     if (created?.status === 'failed') {
       setInitFailed(true)
-      toast.error('基础视频生成失败，请检查 worker 日志后重试')
+      toast.error(t('studio.toastInitFailed'))
     }
   }, [created?.status])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     if (!name.trim()) {
-      toast.error('请填写形象名称')
+      toast.error(t('studio.toastNameRequired'))
       return
     }
     if (!editing && !imageFile) {
-      toast.error('请上传形象图片')
+      toast.error(t('studio.toastImageRequired'))
       return
     }
 
@@ -165,7 +183,7 @@ export function AvatarStudio() {
       }
       if (editing && editId) {
         await api.put<Avatar>(`/avatars/${editId}`, profile)
-        toast.success('数字人信息已更新')
+        toast.success(t('studio.toastUpdated'))
         void navigate({ to: '/avatar-library' })
         return
       }
@@ -183,9 +201,9 @@ export function AvatarStudio() {
       form.append('personality', personality.trim())
       const { data } = await api.post<Avatar>('/avatars', form)
       setCreated(data)
-      toast.info('已提交，正在生成基础视频…')
+      toast.info(t('studio.toastSubmitted'))
     } catch (error) {
-      showApiError(error)
+      showApiError(error, t('common.requestFailed'))
     } finally {
       setSubmitting(false)
     }
@@ -206,9 +224,9 @@ export function AvatarStudio() {
       const audio = new Audio(url)
       audio.onended = () => URL.revokeObjectURL(url)
       await audio.play()
-      toast.info('正在播放试听…')
+      toast.info(t('studio.toastPreviewing'))
     } catch (error) {
-      showApiError(error)
+      showApiError(error, t('common.requestFailed'))
     } finally {
       setPreviewing(false)
     }
@@ -223,21 +241,19 @@ export function AvatarStudio() {
 
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div>
-          <h2 className='text-2xl font-bold tracking-tight'>Avatar Studio</h2>
-          <p className='text-muted-foreground'>
-            创建数字人身份：上传形象图片并选择播报音色，系统会自动生成基础驱动视频。
-          </p>
+          <h2 className='text-2xl font-bold tracking-tight'>{t('studio.title')}</h2>
+          <p className='text-muted-foreground'>{t('studio.subtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className='flex flex-col gap-4'>
         <div className='grid gap-4 lg:grid-cols-2'>
           <Card>
             <CardHeader>
-              <CardTitle>{editing ? '编辑数字人' : '创建数字人'}</CardTitle>
+              <CardTitle>
+                {editing ? t('studio.editTitle') : t('studio.createTitle')}
+              </CardTitle>
               <CardDescription>
-                {editing
-                  ? '修改数字人的基本信息与人物设定；形象图片与基础视频不受影响。'
-                  : '提交后进入基础视频生成阶段（LivePortrait 预处理），完成后即可用于播报与直播。'}
+                {editing ? t('studio.editDesc') : t('studio.createDesc')}
               </CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-5'>
@@ -261,26 +277,26 @@ export function AvatarStudio() {
                     )}
                   </div>
                   <div>
-                    <p className='font-medium'>{name.trim() || '数字人头像'}</p>
+                    <p className='font-medium'>{name.trim() || t('studio.avatarPreview')}</p>
                     <p className='text-xs text-muted-foreground'>
-                      上传形象图片后自动作为头像展示，也用于生成直播画面。
+                      {t('studio.avatarHint')}
                     </p>
                   </div>
                 </div>
 
                 <div className='flex flex-col gap-2'>
-                  <Label htmlFor='avatar-name'>形象名称</Label>
+                  <Label htmlFor='avatar-name'>{t('studio.avatarName')}</Label>
                   <Input
                     id='avatar-name'
                     value={name}
                     onChange={(event) => setName(event.target.value)}
-                    placeholder='例如：小美'
+                    placeholder={t('studio.avatarNamePlaceholder')}
                     disabled={isInitializing}
                   />
                 </div>
 
                 <div className='flex flex-col gap-2'>
-                  <Label htmlFor='avatar-image'>形象图片</Label>
+                  <Label htmlFor='avatar-image'>{t('studio.avatarImage')}</Label>
                   <Input
                     id='avatar-image'
                     type='file'
@@ -303,17 +319,17 @@ export function AvatarStudio() {
                   ) : null}
                   {editing && (
                     <p className='text-xs text-muted-foreground'>
-                      编辑模式不更换形象图片；如需新形象请重新创建。
+                      {t('studio.editNoImage')}
                     </p>
                   )}
                 </div>
 
                 <div className='flex flex-col gap-2'>
-                  <Label htmlFor='avatar-voice'>播报音色</Label>
+                  <Label htmlFor='avatar-voice'>{t('studio.voice')}</Label>
                   <div className='flex items-center gap-2'>
                     <Select value={voiceId} onValueChange={setVoiceId} disabled={isInitializing}>
                       <SelectTrigger id='avatar-voice' className='w-full'>
-                        <SelectValue placeholder='选择音色' />
+                        <SelectValue placeholder={t('studio.voicePlaceholder')} />
                       </SelectTrigger>
                       <SelectContent>
                         {voices.map((voice) => (
@@ -329,7 +345,9 @@ export function AvatarStudio() {
                       size='icon'
                       onClick={() => void handlePreview()}
                       disabled={previewing || isInitializing}
-                      title={`试听：${selectedVoice?.label ?? voiceId}`}
+                      title={t('studio.previewVoice', {
+                        voice: selectedVoice?.label ?? voiceId,
+                      })}
                     >
                       {previewing ? (
                         <LoaderCircle className='size-4 animate-spin' />
@@ -339,26 +357,26 @@ export function AvatarStudio() {
                     </Button>
                   </div>
                   <p className='text-xs text-muted-foreground'>
-                    当前：{selectedVoice?.label ?? voiceId}（Edge-TTS，云端合成，无需 GPU）
+                    {t('studio.currentVoice', { voice: selectedVoice?.label ?? voiceId })}
                   </p>
                 </div>
 
                 <div className='flex flex-col gap-2'>
-                  <Label htmlFor='avatar-category'>直播分类</Label>
+                  <Label htmlFor='avatar-category'>{t('studio.category')}</Label>
                   <Select value={category} onValueChange={setCategory} disabled={isInitializing}>
                     <SelectTrigger id='avatar-category' className='w-full'>
-                      <SelectValue placeholder='选择分类' />
+                    <SelectValue placeholder={t('studio.categoryPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       {['闲聊', '知识', '娱乐', '游戏', '带货', '其他'].map((c) => (
                         <SelectItem key={c} value={c}>
-                          {c}
+                          {t(`category.${CATEGORY_KEY[c]}`)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <p className='text-xs text-muted-foreground'>
-                    观看端首页按此分类筛选直播。
+                    {t('studio.categoryHint')}
                   </p>
                 </div>
 
@@ -368,15 +386,13 @@ export function AvatarStudio() {
           {/* 右：人物设定 */}
           <Card>
             <CardHeader>
-              <CardTitle>人物设定</CardTitle>
-              <CardDescription>
-                这些属性会作为内置提示词注入 AI 对话，观众问起时按设定回答。
-              </CardDescription>
+              <CardTitle>{t('studio.persona')}</CardTitle>
+              <CardDescription>{t('studio.personaDesc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className='grid grid-cols-2 gap-3'>
                 <div className='flex flex-col gap-1.5'>
-                  <Label htmlFor='avatar-age'>年龄</Label>
+                  <Label htmlFor='avatar-age'>{t('studio.age')}</Label>
                   <Input
                     id='avatar-age'
                     type='number'
@@ -384,70 +400,70 @@ export function AvatarStudio() {
                     max={120}
                     value={age}
                     onChange={(e) => setAge(e.target.value)}
-                    placeholder='如 25'
+                    placeholder={t('studio.agePlaceholder')}
                     disabled={isInitializing}
                   />
                 </div>
                 <div className='flex flex-col gap-1.5'>
-                  <Label htmlFor='avatar-height'>身高 (cm)</Label>
+                  <Label htmlFor='avatar-height'>{t('studio.height')}</Label>
                   <Input
                     id='avatar-height'
                     type='number'
                     min={1}
                     value={heightCm}
                     onChange={(e) => setHeightCm(e.target.value)}
-                    placeholder='如 165'
+                    placeholder={t('studio.heightPlaceholder')}
                     disabled={isInitializing}
                   />
                 </div>
                 <div className='flex flex-col gap-1.5'>
-                  <Label htmlFor='avatar-weight'>体重 (kg)</Label>
+                  <Label htmlFor='avatar-weight'>{t('studio.weight')}</Label>
                   <Input
                     id='avatar-weight'
                     type='number'
                     min={1}
                     value={weightKg}
                     onChange={(e) => setWeightKg(e.target.value)}
-                    placeholder='如 50'
+                    placeholder={t('studio.weightPlaceholder')}
                     disabled={isInitializing}
                   />
                 </div>
                 <div className='flex flex-col gap-1.5'>
-                  <Label htmlFor='avatar-ethnicity'>族裔</Label>
+                  <Label htmlFor='avatar-ethnicity'>{t('studio.ethnicity')}</Label>
                   <Input
                     id='avatar-ethnicity'
                     value={ethnicity}
                     onChange={(e) => setEthnicity(e.target.value)}
-                    placeholder='如 汉族'
+                    placeholder={t('studio.ethnicityPlaceholder')}
                     disabled={isInitializing}
                   />
                 </div>
                 <div className='flex flex-col gap-1.5'>
-                  <Label htmlFor='avatar-relationship'>感情状态</Label>
+                  <Label htmlFor='avatar-relationship'>{t('studio.relationship')}</Label>
                   <Select
                     value={relationshipStatus}
                     onValueChange={setRelationshipStatus}
                     disabled={isInitializing}
                   >
                     <SelectTrigger id='avatar-relationship' className='w-full'>
-                      <SelectValue placeholder='选择感情状态' />
+                      <SelectValue placeholder={t('studio.relationshipPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       {['单身', '恋爱中', '已婚', '保密'].map((s) => (
                         <SelectItem key={s} value={s}>
-                          {s}
+                          {t(`relationship.${RELATIONSHIP_KEY[s]}`)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className='col-span-2 flex flex-col gap-1.5'>
-                  <Label htmlFor='avatar-personality'>性格</Label>
+                  <Label htmlFor='avatar-personality'>{t('studio.personality')}</Label>
                   <Input
                     id='avatar-personality'
                     value={personality}
                     onChange={(e) => setPersonality(e.target.value)}
-                    placeholder='如 活泼开朗、喜欢聊天、偶尔调皮'
+                    placeholder={t('studio.personalityPlaceholder')}
                     disabled={isInitializing}
                   />
                 </div>
@@ -464,10 +480,10 @@ export function AvatarStudio() {
             <Upload className='size-4' />
           )}
           {isInitializing
-            ? '基础视频生成中…'
+            ? t('studio.generating')
             : editing
-              ? '保存修改'
-              : '创建数字人'}
+              ? t('studio.submitSave')
+              : t('studio.submitCreate')}
         </Button>
         </form>
 
@@ -476,17 +492,14 @@ export function AvatarStudio() {
               <CardHeader>
                 <CardTitle className='flex items-center gap-2'>
                   <LoaderCircle className='size-5 animate-spin' />
-                  正在生成基础视频
+                  {t('studio.generatingTitle')}
                 </CardTitle>
-                <CardDescription>
-                  LivePortrait 正在把形象图片合成为动态驱动视频（约 1-2 分钟），
-                  完成后本页会自动更新。
-                </CardDescription>
+                <CardDescription>{t('studio.generatingDesc')}</CardDescription>
               </CardHeader>
               <CardContent className='flex items-center gap-2'>
-                <Badge variant='secondary'>初始化中</Badge>
+                <Badge variant='secondary'>{t('studio.initializing')}</Badge>
                 <span className='text-sm text-muted-foreground'>
-                  可离开本页，稍后到数字人列表查看状态
+                  {t('studio.generatingHint')}
                 </span>
               </CardContent>
             </Card>
@@ -497,10 +510,10 @@ export function AvatarStudio() {
               <CardHeader>
                 <CardTitle className='flex items-center gap-2 text-green-600'>
                   <CheckCircle2 className='size-5' />
-                  创建完成
+                  {t('studio.createdTitle')}
                 </CardTitle>
                 <CardDescription>
-                  「{created.name}」的基础视频已就绪，可以开始播报或直播了。
+                  {t('studio.createdDesc', { name: created.name })}
                 </CardDescription>
               </CardHeader>
               <CardContent className='flex flex-col gap-3'>
@@ -511,17 +524,17 @@ export function AvatarStudio() {
                     onClick={() => setPreviewOpen(true)}
                   >
                     <Play className='size-4' />
-                    播放默认视频
+                    {t('studio.playDefault')}
                   </Button>
                 )}
                 <div className='flex gap-2'>
                   <Button asChild>
                     <Link to='/broadcast' search={{ avatarId: String(created.id) }}>
-                      去播报
+                      {t('studio.goBroadcast')}
                     </Link>
                   </Button>
                   <Button asChild variant='outline'>
-                    <Link to='/avatar-library'>数字人列表</Link>
+                    <Link to='/avatar-library'>{t('studio.goList')}</Link>
                   </Button>
                 </div>
               </CardContent>
@@ -533,11 +546,9 @@ export function AvatarStudio() {
               <CardHeader>
                 <CardTitle className='flex items-center gap-2 text-destructive'>
                   <XCircle className='size-5' />
-                  生成失败
+                  {t('studio.failedTitle')}
                 </CardTitle>
-                <CardDescription>
-                  基础视频生成失败。请检查宿主机 worker 日志（avatar init 任务）后重试。
-                </CardDescription>
+                <CardDescription>{t('studio.failedDesc')}</CardDescription>
               </CardHeader>
             </Card>
           )}
@@ -545,7 +556,7 @@ export function AvatarStudio() {
         <VideoPlayerDialog
           open={previewOpen}
           url={created?.baseVideoS3Url}
-          title={`${created?.name ?? ''} · 默认驱动视频`}
+          title={`${created?.name ?? ''} · ${t('studio.defaultVideo')}`}
           onClose={() => setPreviewOpen(false)}
         />
       </Main>
