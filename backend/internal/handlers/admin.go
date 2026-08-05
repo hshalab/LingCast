@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"log"
 	"net/http"
@@ -11,6 +10,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
+
+	"talkingavatar/backend/internal/models"
 )
 
 const adminSessionTTL = 24 * time.Hour
@@ -19,12 +22,44 @@ const adminSessionTTL = 24 * time.Hour
 // an HttpOnly cookie). Credentials come from ADMIN_USERNAME / ADMIN_PASSWORD.
 type AdminHandler struct {
 	redis    *redis.Client
-	username string
-	password string
+	db       *gorm.DB
+	seedUser string
+	seedPass string
 }
 
-func NewAdminHandler(rc *redis.Client, username, password string) *AdminHandler {
-	return &AdminHandler{redis: rc, username: username, password: password}
+func NewAdminHandler(db *gorm.DB, rc *redis.Client, seedUser, seedPass string) *AdminHandler {
+	h := &AdminHandler{redis: rc, db: db, seedUser: seedUser, seedPass: seedPass}
+	h.seed()
+	return h
+}
+
+// seed creates the admin account from env credentials on first start (idempotent).
+func (h *AdminHandler) seed() {
+	var count int64
+	if err := h.db.Model(&models.AdminUser{}).Count(&count).Error; err != nil || count > 0 {
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(h.seedPass), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("[admin] seed password hash failed: %v", err)
+		return
+	}
+	if err := h.db.Create(&models.AdminUser{
+		Username:     h.seedUser,
+		DisplayName:  h.seedUser,
+		PasswordHash: string(hash),
+	}).Error; err != nil {
+		log.Printf("[admin] seed failed: %v", err)
+	}
+}
+
+func (h *AdminHandler) findUser(username string) (*models.AdminUser, error) {
+	var user models.AdminUser
+	err := h.db.Where("username = ?", strings.TrimSpace(username)).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func adminSessionKey(token string) string {
@@ -41,10 +76,8 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-	u := strings.TrimSpace(req.Username)
-	userOK := subtle.ConstantTimeCompare([]byte(u), []byte(h.username)) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(req.Password), []byte(h.password)) == 1
-	if !userOK || !passOK {
+	user, err := h.findUser(req.Username)
+	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
@@ -55,7 +88,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if err := h.redis.Set(ctx, adminSessionKey(token), h.username, adminSessionTTL).Err(); err != nil {
+	if err := h.redis.Set(ctx, adminSessionKey(token), user.Username, adminSessionTTL).Err(); err != nil {
 		log.Printf("[admin] session store failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "session store failed"})
 		return
@@ -68,7 +101,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
-	c.JSON(http.StatusOK, gin.H{"username": h.username})
+	c.JSON(http.StatusOK, gin.H{"username": user.Username, "name": user.DisplayName})
 }
 
 func randomToken() (string, error) {
@@ -86,7 +119,12 @@ func (h *AdminHandler) Me(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"username": username})
+	user, err := h.findUser(username)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "账号不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"username": user.Username, "name": user.DisplayName})
 }
 
 // Logout handles POST /api/admin/logout.
@@ -98,6 +136,74 @@ func (h *AdminHandler) Logout(c *gin.Context) {
 		Name: "admin_token", Value: "", Path: "/", MaxAge: -1,
 		HttpOnly: true, SameSite: http.SameSiteLaxMode,
 	})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// ChangeName handles POST /api/admin/change-name — updates the display name.
+func (h *AdminHandler) ChangeName(c *gin.Context) {
+	username, ok := h.sessionUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" || len(name) > 32 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "名字需为 1-32 个字符"})
+		return
+	}
+	if err := h.db.Model(&models.AdminUser{}).
+		Where("username = ?", username).
+		Update("display_name", name).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"name": name})
+}
+
+// ChangePassword handles POST /api/admin/change-password.
+func (h *AdminHandler) ChangePassword(c *gin.Context) {
+	username, ok := h.sessionUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	var req struct {
+		OldPassword string `json:"oldPassword"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	if len(req.NewPassword) < 4 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "新密码至少 4 位"})
+		return
+	}
+	user, err := h.findUser(username)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "账号不存在"})
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.OldPassword)) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "原密码错误"})
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "password hash failed"})
+		return
+	}
+	if err := h.db.Model(user).Update("password_hash", string(hash)).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

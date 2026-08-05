@@ -92,7 +92,7 @@ const baseURL = `${import.meta.env.VITE_API_BASE_URL ?? ''}/api`
 export const api = axios.create({ baseURL })
 
 export async function adminLogin(username: string, password: string) {
-  const { data } = await api.post<{ username: string }>('/admin/login', {
+  const { data } = await api.post<{ username: string; name: string }>('/admin/login', {
     username,
     password,
   })
@@ -100,10 +100,19 @@ export async function adminLogin(username: string, password: string) {
 }
 
 export async function adminMe() {
-  const { data } = await api.get<{ username: string }>('/admin/me')
+  const { data } = await api.get<{ username: string; name: string }>('/admin/me')
   return data
 }
 
 export async function adminLogout() {
   await api.post('/admin/logout')
+}
+
+export async function adminChangeName(name: string) {
+  const { data } = await api.post<{ name: string }>('/admin/change-name', { name })
+  return data
+}
+
+export async function adminChangePassword(oldPassword: string, newPassword: string) {
+  await api.post('/admin/change-password', { oldPassword, newPassword })
 }

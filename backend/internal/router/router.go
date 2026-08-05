@@ -40,6 +40,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel,
 	)
 	adminHandler := handlers.NewAdminHandler(
+		db,
 		redis.NewClient(&redis.Options{
 			Addr:     cfg.RedisAddr,
 			Password: cfg.RedisPassword,
@@ -92,6 +93,8 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 			protected.POST("/live/:avatarID/stop", liveHandler.Stop)
 			protected.POST("/live/:avatarID/push", liveHandler.Push)
 			protected.GET("/users", chatHandler.ListUsers)
+			protected.POST("/admin/change-name", adminHandler.ChangeName)
+			protected.POST("/admin/change-password", adminHandler.ChangePassword)
 		}
 	}
 

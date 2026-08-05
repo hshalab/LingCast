@@ -69,6 +69,9 @@
   `admin_token`；`GET /api/admin/me` 校验、`POST /api/admin/logout` 退出。前端
   `/login` 登录页 + `_authenticated` 路由 `beforeLoad` 守卫；管理端写操作与
   `/api/users` 走 `RequireAdmin()` 中间件，观众端接口与 Worker Webhook 保持公开。
+  账号首次启动时按 env 播种到 `admin_users` 表，之后可通过
+  `POST /api/admin/change-name|change-password` 修改并持久化（登录返回
+  username + displayName，侧边栏显示 displayName）。
 - ✅ 两段式管线：创建时 `avatar_init` 队列 → LivePortrait 生成静音 24fps base 视频
   上传 S3 并回写 `base_video_s3_key`/`status`；使用时 **Edge-TTS**（`TTS_ENGINE=edge`，
   零 GPU，默认）或 GPT-SoVITS（`TTS_ENGINE=gpt-sovits`）→ Wav2Lip ONNX（CoreML 优先）

@@ -124,3 +124,14 @@ type ChatMessage struct {
 	Content   string    `gorm:"type:text;not null" json:"content"`
 	CreatedAt time.Time `json:"createdAt"`
 }
+
+// AdminUser is the management-backend account. The row is seeded from
+// ADMIN_USERNAME/ADMIN_PASSWORD on first start; afterwards name and password
+// are editable through the API and persist in MariaDB.
+type AdminUser struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	Username     string    `gorm:"size:64;not null;uniqueIndex" json:"username"`
+	DisplayName  string    `gorm:"size:64;not null" json:"name"`
+	PasswordHash string    `gorm:"size:255;not null" json:"-"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
