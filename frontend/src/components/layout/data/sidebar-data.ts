@@ -10,28 +10,28 @@ import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
   user: {
-    name: 'Talking Avatar',
+    name: '数字人平台',
     email: 'talking-avatar@local',
     avatar: '/avatars/shadcn.jpg',
   },
   teams: [
     {
-      name: 'Talking Avatar',
+      name: '数字人平台',
       logo: Command,
       plan: '数字人平台',
     },
   ],
   navGroups: [
     {
-      title: 'Talking Avatar',
+      title: '数字人',
       items: [
         {
-          title: 'Avatar Library',
+          title: '数字人列表',
           url: '/avatar-library',
           icon: Images,
         },
         {
-          title: 'Avatar Studio',
+          title: '数字人创建',
           url: '/avatar-studio',
           icon: Clapperboard,
         },
@@ -41,7 +41,7 @@ export const sidebarData: SidebarData = {
           icon: Video,
         },
         {
-          title: 'Live Studio',
+          title: '直播台',
           url: '/live-studio',
           icon: RadioTower,
         },
