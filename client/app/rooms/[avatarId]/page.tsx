@@ -210,16 +210,16 @@ export default function RoomPage() {
 
         {/* 左右结构：画面在左、聊天在右 */}
         <div className='flex min-h-0 flex-1 flex-col gap-3 lg:flex-row'>
-          {/* 视频列 */}
-          <div className='flex min-h-0 shrink-0 flex-col items-center justify-center overflow-y-auto rounded-3xl border border-zinc-800 bg-gradient-to-b from-zinc-900 to-black p-2'>
-            <div className='relative shrink-0 overflow-hidden rounded-2xl'>
+          {/* 视频列：显式宽度，避免 w-full 在自动宽度父级下塌陷 */}
+          <div className='flex min-h-0 w-full shrink-0 flex-col items-center justify-center overflow-y-auto rounded-3xl border border-zinc-800 bg-gradient-to-b from-zinc-900 to-black p-2 lg:w-[336px]'>
+            <div className='relative w-full shrink-0 overflow-hidden rounded-2xl'>
               {started ? (
                 <XgFlvPlayer
                   url={streamUrl}
-                  className='aspect-[9/16] w-full max-w-[320px] overflow-hidden'
+                  className='aspect-[9/16] w-full overflow-hidden'
                 />
               ) : (
-                <div className='flex aspect-[9/16] w-full max-w-[320px] flex-col items-center justify-center gap-2 text-sm text-zinc-500'>
+                <div className='flex aspect-[9/16] w-full flex-col items-center justify-center gap-2 text-sm text-zinc-500'>
                   <Tv className='size-10 text-zinc-600' />
                   主播暂未开播，请稍候…
                 </div>
