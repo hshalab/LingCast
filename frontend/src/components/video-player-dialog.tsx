@@ -1,6 +1,6 @@
 import Player from 'xgplayer'
 import 'xgplayer/dist/index.min.css'
-import { useEffect, useRef } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -23,20 +23,36 @@ export function VideoPlayerDialog({
   onClose: () => void
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const playerRef = useRef<Player | null>(null)
+  const playerId = useId()
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    if (!open || !url || !hostRef.current) return
-    const player = new Player({
-      el: hostRef.current,
-      url,
-      autoplay: true,
-      fluid: true,
-      playbackRate: [0.75, 1, 1.25, 1.5, 2],
+    if (!open || !url) return
+    setFailed(false)
+    // Let the dialog finish its open animation so the container has size.
+    const raf = requestAnimationFrame(() => {
+      if (!hostRef.current) return
+      try {
+        const player = new Player({
+          id: playerId,
+          url,
+          autoplay: true,
+          fluid: true,
+          playbackRate: [0.75, 1, 1.25, 1.5, 2],
+        })
+        player.on('error', () => setFailed(true))
+        playerRef.current = player
+      } catch {
+        setFailed(true)
+      }
     })
     return () => {
-      player.destroy()
+      cancelAnimationFrame(raf)
+      playerRef.current?.destroy()
+      playerRef.current = null
     }
-  }, [open, url])
+  }, [open, url, playerId])
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -44,7 +60,13 @@ export function VideoPlayerDialog({
         <DialogHeader>
           <DialogTitle>{title ?? '视频预览'}</DialogTitle>
         </DialogHeader>
-        <div ref={hostRef} className='w-full' />
+        {failed ? (
+          <p className='py-10 text-center text-sm text-muted-foreground'>
+            无法播放该视频：可能为旧版（MPEG-4）编码任务。请在任务中心删除旧任务并重新生成后重试。
+          </p>
+        ) : (
+          <div ref={hostRef} id={playerId} className='aspect-video w-full' />
+        )}
       </DialogContent>
     </Dialog>
   )
