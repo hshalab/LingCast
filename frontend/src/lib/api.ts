@@ -10,7 +10,8 @@ export type Avatar = {
   voiceId: string
   baseVideoS3Key?: string
   baseVideoS3Url?: string
-  status: 'initializing' | 'ready' | 'failed'
+  status: 'initializing' | 'ready' | 'failed' | 'skipped'
+  initQueuePos?: number
   createdAt: string
 }
 
@@ -23,6 +24,7 @@ export type BroadcastTask = {
   status: TaskStatus
   outputVideoS3Url?: string
   errorMessage?: string
+  avatarName?: string
   createdAt: string
   updatedAt: string
 }

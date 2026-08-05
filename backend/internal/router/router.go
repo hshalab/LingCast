@@ -32,7 +32,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 	}))
 
 	avatarHandler := handlers.NewAvatarHandler(db, s3, q, cfg.AvatarInitQueueKey)
-	taskHandler := handlers.NewTaskHandler(db, q)
+	taskHandler := handlers.NewTaskHandler(db, q, s3)
 	liveHandler := handlers.NewLiveHandler(db, q, cfg.LiveControlQueueKey)
 
 	api := r.Group("/api")
@@ -41,10 +41,16 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		api.POST("/avatars", avatarHandler.Create)
 		api.GET("/avatars", avatarHandler.List)
 		api.GET("/avatars/:id", avatarHandler.Get)
+		api.DELETE("/avatars/:id", avatarHandler.Delete)
+		api.POST("/avatars/:id/retry", avatarHandler.Retry)
+		api.POST("/avatars/:id/skip", avatarHandler.Skip)
 		// Internal webhook: worker persists the pre-processed base video key.
 		api.POST("/avatars/:id/base-video", avatarHandler.UpdateBaseVideo)
 		api.POST("/tasks", taskHandler.Create)
+		api.GET("/tasks", taskHandler.List)
 		api.GET("/tasks/:id", taskHandler.Get)
+		api.DELETE("/tasks/:id", taskHandler.Delete)
+		api.POST("/tasks/:id/retry", taskHandler.Retry)
 		// Internal webhook used by the Python AI worker.
 		api.POST("/tasks/:id/status", taskHandler.UpdateStatus)
 		// Live streaming: session lifecycle, per-avatar text intake and status.

@@ -66,3 +66,15 @@ func (c *Client) PublicURL(key string) string {
 	}
 	return strings.TrimRight(c.publicBaseURL, "/") + "/" + c.bucket + "/" + key
 }
+
+// Delete removes an object from S3 (best-effort for cleanup flows).
+func (c *Client) Delete(ctx context.Context, key string) error {
+	if key == "" {
+		return nil
+	}
+	_, err := c.api.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(key),
+	})
+	return err
+}

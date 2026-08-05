@@ -12,12 +12,14 @@ import (
 
 	"talkingavatar/backend/internal/models"
 	"talkingavatar/backend/internal/queue"
+	"talkingavatar/backend/internal/storage"
 )
 
 // TaskHandler serves broadcast task creation, polling and worker callbacks.
 type TaskHandler struct {
 	db *gorm.DB
 	q  *queue.Queue
+	s3 *storage.Client
 }
 
 type createTaskRequest struct {
@@ -34,6 +36,7 @@ type updateTaskStatusRequest struct {
 type taskResponse struct {
 	ID               uint      `json:"id"`
 	AvatarID         uint      `json:"avatarId"`
+	AvatarName       string    `json:"avatarName,omitempty"`
 	ScriptText       string    `json:"scriptText"`
 	Status           string    `json:"status"`
 	OutputVideoS3URL *string   `json:"outputVideoS3Url,omitempty"`
@@ -42,8 +45,8 @@ type taskResponse struct {
 	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
-func NewTaskHandler(db *gorm.DB, q *queue.Queue) *TaskHandler {
-	return &TaskHandler{db: db, q: q}
+func NewTaskHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client) *TaskHandler {
+	return &TaskHandler{db: db, q: q, s3: s3}
 }
 
 // Create handles POST /api/tasks. It persists the task, pushes a JSON payload
@@ -108,6 +111,106 @@ func (h *TaskHandler) Create(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, toTaskResponse(task))
+}
+
+// List handles GET /api/tasks — returns all broadcast tasks (newest first)
+// with their avatar name, for the task-center UI.
+func (h *TaskHandler) List(c *gin.Context) {
+	var tasks []models.BroadcastTask
+	if err := h.db.Preload("Avatar").Order("created_at DESC").Find(&tasks).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	resp := make([]taskResponse, 0, len(tasks))
+	for _, t := range tasks {
+		item := toTaskResponse(t)
+		item.AvatarName = t.Avatar.Name
+		resp = append(resp, item)
+	}
+	c.JSON(http.StatusOK, gin.H{"data": resp})
+}
+
+// Delete handles DELETE /api/tasks/:id — removes the task record and its
+// output video from S3 (best-effort).
+func (h *TaskHandler) Delete(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+	var task models.BroadcastTask
+	if err := h.db.First(&task, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	if task.OutputVideoS3URL != nil {
+		_ = h.s3.Delete(c.Request.Context(), *task.OutputVideoS3URL)
+	}
+	if err := h.db.Delete(&task).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": task.ID})
+}
+
+// Retry handles POST /api/tasks/:id/retry — re-queues a failed broadcast task.
+func (h *TaskHandler) Retry(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+	var task models.BroadcastTask
+	if err := h.db.First(&task, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	if task.Status != models.TaskStatusFailed {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "only failed tasks can be retried"})
+		return
+	}
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, task.AvatarID).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar not found"})
+		return
+	}
+	if avatar.Status != models.AvatarStatusReady {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar is not ready"})
+		return
+	}
+
+	task.Status = models.TaskStatusPending
+	task.ErrorMessage = nil
+	task.OutputVideoS3URL = nil
+	if err := h.db.Save(&task).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	payload := queue.TaskPayload{
+		TaskID:         task.ID,
+		AvatarID:       avatar.ID,
+		ScriptText:     task.ScriptText,
+		ImageS3Key:     avatar.ImageS3Key,
+		BaseVideoS3Key: *avatar.BaseVideoS3Key,
+		VoiceID:        avatar.VoiceID,
+	}
+	if avatar.VoiceAudioS3Key != nil {
+		payload.VoiceAudioS3Key = *avatar.VoiceAudioS3Key
+	}
+	if err := h.q.Push(c.Request.Context(), payload); err != nil {
+		h.db.Model(&task).Update("status", models.TaskStatusFailed)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "enqueue retry failed: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, toTaskResponse(task))
 }
 
 // Get handles GET /api/tasks/:id, the endpoint the frontend polls.

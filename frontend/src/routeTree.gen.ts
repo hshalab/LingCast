@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ClerkRouteRouteImport } from './routes/clerk/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedTaskCenterRouteImport } from './routes/_authenticated/task-center'
 import { Route as AuthenticatedLiveStudioRouteImport } from './routes/_authenticated/live-studio'
 import { Route as AuthenticatedBroadcastRouteImport } from './routes/_authenticated/broadcast'
 import { Route as AuthenticatedAvatarStudioRouteImport } from './routes/_authenticated/avatar-studio'
@@ -56,6 +57,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedTaskCenterRoute = AuthenticatedTaskCenterRouteImport.update({
+  id: '/task-center',
+  path: '/task-center',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedLiveStudioRoute = AuthenticatedLiveStudioRouteImport.update({
@@ -241,6 +247,7 @@ export interface FileRoutesByFullPath {
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/broadcast': typeof AuthenticatedBroadcastRoute
   '/live-studio': typeof AuthenticatedLiveStudioRoute
+  '/task-center': typeof AuthenticatedTaskCenterRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -272,6 +279,7 @@ export interface FileRoutesByTo {
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/broadcast': typeof AuthenticatedBroadcastRoute
   '/live-studio': typeof AuthenticatedLiveStudioRoute
+  '/task-center': typeof AuthenticatedTaskCenterRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -309,6 +317,7 @@ export interface FileRoutesById {
   '/_authenticated/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/_authenticated/broadcast': typeof AuthenticatedBroadcastRoute
   '/_authenticated/live-studio': typeof AuthenticatedLiveStudioRoute
+  '/_authenticated/task-center': typeof AuthenticatedTaskCenterRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -345,6 +354,7 @@ export interface FileRouteTypes {
     | '/avatar-studio'
     | '/broadcast'
     | '/live-studio'
+    | '/task-center'
     | '/errors/$error'
     | '/settings/account'
     | '/settings/appearance'
@@ -376,6 +386,7 @@ export interface FileRouteTypes {
     | '/avatar-studio'
     | '/broadcast'
     | '/live-studio'
+    | '/task-center'
     | '/'
     | '/errors/$error'
     | '/settings/account'
@@ -412,6 +423,7 @@ export interface FileRouteTypes {
     | '/_authenticated/avatar-studio'
     | '/_authenticated/broadcast'
     | '/_authenticated/live-studio'
+    | '/_authenticated/task-center'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
     | '/_authenticated/settings/account'
@@ -465,6 +477,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/task-center': {
+      id: '/_authenticated/task-center'
+      path: '/task-center'
+      fullPath: '/task-center'
+      preLoaderRoute: typeof AuthenticatedTaskCenterRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/live-studio': {
@@ -716,6 +735,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAvatarStudioRoute: typeof AuthenticatedAvatarStudioRoute
   AuthenticatedBroadcastRoute: typeof AuthenticatedBroadcastRoute
   AuthenticatedLiveStudioRoute: typeof AuthenticatedLiveStudioRoute
+  AuthenticatedTaskCenterRoute: typeof AuthenticatedTaskCenterRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
@@ -731,6 +751,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAvatarStudioRoute: AuthenticatedAvatarStudioRoute,
   AuthenticatedBroadcastRoute: AuthenticatedBroadcastRoute,
   AuthenticatedLiveStudioRoute: AuthenticatedLiveStudioRoute,
+  AuthenticatedTaskCenterRoute: AuthenticatedTaskCenterRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,

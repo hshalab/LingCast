@@ -22,6 +22,7 @@ const (
 	AvatarStatusInitializing = "initializing"
 	AvatarStatusReady        = "ready"
 	AvatarStatusFailed       = "failed"
+	AvatarStatusSkipped      = "skipped"
 )
 
 // DefaultEdgeVoice is the fallback voice when no voiceId is supplied.

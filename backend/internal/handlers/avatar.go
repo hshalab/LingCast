@@ -3,7 +3,9 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -39,6 +41,7 @@ type avatarResponse struct {
 	BaseVideoS3Key  *string   `json:"baseVideoS3Key,omitempty"`
 	BaseVideoS3URL  *string   `json:"baseVideoS3Url,omitempty"`
 	Status          string    `json:"status"`
+	InitQueuePos    *int      `json:"initQueuePos,omitempty"`
 	CreatedAt       time.Time `json:"createdAt"`
 }
 
@@ -171,11 +174,148 @@ func (h *AvatarHandler) List(c *gin.Context) {
 		return
 	}
 
+	queuePos := h.initQueuePositions(c)
 	resp := make([]avatarResponse, 0, len(avatars))
 	for _, a := range avatars {
-		resp = append(resp, toAvatarResponse(a, h.s3))
+		r := toAvatarResponse(a, h.s3)
+		if pos, ok := queuePos[a.ID]; ok {
+			r.InitQueuePos = &pos
+		}
+		resp = append(resp, r)
 	}
 	c.JSON(http.StatusOK, gin.H{"data": resp})
+}
+
+// initQueuePositions returns avatarId -> 0-based queue position for payloads
+// still waiting in the avatar_init queue.
+func (h *AvatarHandler) initQueuePositions(c *gin.Context) map[uint]int {
+	positions := map[uint]int{}
+	items, err := h.q.ListRange(c.Request.Context(), h.avatarInitQueueKey, 0, -1)
+	if err != nil {
+		return positions
+	}
+	for i, raw := range items {
+		var p queue.AvatarInitPayload
+		if json.Unmarshal([]byte(raw), &p) == nil && p.AvatarID > 0 {
+			if _, seen := positions[p.AvatarID]; !seen {
+				positions[p.AvatarID] = i
+			}
+		}
+	}
+	return positions
+}
+
+// Delete handles DELETE /api/avatars/:id — removes the avatar record, its S3
+// objects and any pending queue entries (avatar init / live queue).
+func (h *AvatarHandler) Delete(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		return
+	}
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	ctx := c.Request.Context()
+	// Best-effort cleanup: S3 objects, pending init payload, live queue.
+	_ = h.s3.Delete(ctx, avatar.ImageS3Key)
+	if avatar.VoiceAudioS3Key != nil {
+		_ = h.s3.Delete(ctx, *avatar.VoiceAudioS3Key)
+	}
+	if avatar.BaseVideoS3Key != nil {
+		_ = h.s3.Delete(ctx, *avatar.BaseVideoS3Key)
+	}
+	if raw, err := json.Marshal(queue.AvatarInitPayload{
+		AvatarID:   avatar.ID,
+		ImageS3Key: avatar.ImageS3Key,
+	}); err == nil {
+		_ = h.q.Remove(ctx, h.avatarInitQueueKey, string(raw))
+	}
+	_ = h.q.DeleteKey(ctx, fmt.Sprintf("live_queue:%d", avatar.ID))
+	if err := h.db.Delete(&avatar).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": avatar.ID})
+}
+
+// Retry handles POST /api/avatars/:id/retry — re-queues the LivePortrait
+// base-video pre-processing for failed/skipped avatars.
+func (h *AvatarHandler) Retry(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		return
+	}
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	if avatar.Status == models.AvatarStatusReady {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar is already ready"})
+		return
+	}
+	avatar.Status = models.AvatarStatusInitializing
+	if err := h.db.Save(&avatar).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.q.PushTo(c.Request.Context(), h.avatarInitQueueKey, queue.AvatarInitPayload{
+		AvatarID:   avatar.ID,
+		ImageS3Key: avatar.ImageS3Key,
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "enqueue retry failed: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
+}
+
+// Skip handles POST /api/avatars/:id/skip — marks an initializing avatar as
+// skipped (abandons base-video generation for it).
+func (h *AvatarHandler) Skip(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid avatar id"})
+		return
+	}
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	if avatar.Status != models.AvatarStatusInitializing {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "only initializing avatars can be skipped"})
+		return
+	}
+	avatar.Status = models.AvatarStatusSkipped
+	if err := h.db.Save(&avatar).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	// Remove any pending queue payload so the worker won't pick it up.
+	if raw, err := json.Marshal(queue.AvatarInitPayload{
+		AvatarID:   avatar.ID,
+		ImageS3Key: avatar.ImageS3Key,
+	}); err == nil {
+		_ = h.q.Remove(c.Request.Context(), h.avatarInitQueueKey, string(raw))
+	}
+	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
 }
 
 func (h *AvatarHandler) uploadFormFile(c *gin.Context, header *multipart.FileHeader, prefix string) (string, error) {

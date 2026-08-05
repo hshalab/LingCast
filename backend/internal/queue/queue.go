@@ -91,3 +91,13 @@ func (q *Queue) ListLen(ctx context.Context, key string) (int64, error) {
 func (q *Queue) ListRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
 	return q.client.LRange(ctx, key, start, stop).Result()
 }
+
+// Remove deletes an exact string value from a Redis list (LRem, count 1).
+func (q *Queue) Remove(ctx context.Context, key, value string) error {
+	return q.client.LRem(ctx, key, 1, value).Err()
+}
+
+// DeleteKey removes a whole Redis key (e.g. a per-avatar live queue).
+func (q *Queue) DeleteKey(ctx context.Context, key string) error {
+	return q.client.Del(ctx, key).Err()
+}
