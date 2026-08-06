@@ -147,7 +147,8 @@ AMD GPUs using ROCm.
 - ✅ **检索方案演进（已落地）**：原计划「RedisStack（RediSearch）做 KNN +
   BAAI bge-small 向量化」已由 **rag-service（zvec 进程内全文索引 + 自带
   Jieba 中文分词）** 取代——不需要向量模型、不需要 RediSearch、零下载；
-  Redis 已回退 `redis:8.2.2-alpine`，`worker/rag_worker.py` 停用。
+  Redis 已回退 `redis:8.2.2-alpine`，`worker/rag_worker.py` 及其依赖
+  （pymupdf / sentence-transformers）已删除。
 - ✅ **查询与拼接**：观众提问 → rag-service 按数字人聚合 Top-3 → 作为
   `<Context>` 注入 DeepSeek System Prompt，强制只根据知识库回答，减少
   带货/专业问答幻觉；管理端可在线检索测试并查看文档分块。
@@ -170,8 +171,7 @@ AMD GPUs using ROCm.
 - [x] **RAG 迁移到 rag-service**：compose 新增 `rag-service`（zvec FTS +
   Jieba，volume `rag-zvec-data`），`EMBED_SERVER_URL` 默认
   `http://rag-service:8001`；Redis 回退 `redis:8.2.2-alpine`（不再需要
-  RediSearch），`worker/rag_worker.py` 与 `start_workers.sh` 中的 rag_worker
-  已停用。
+  RediSearch），`worker/rag_worker.py` 与脚本中的 rag_worker 已删除。
 - [x] **TTS 微服务（tts-service）**：async `edge_tts.Communicate` → ffmpeg
   转 16kHz/16-bit/mono PCM WAV → 上传 S3（RustFS，S3 配置走环境变量）→ 只返回
   S3 key + 元数据，`finally` 清理临时文件；compose 内网 :8002，不发布宿主端口。

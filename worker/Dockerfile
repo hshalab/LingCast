@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # uv for dependency management (base deps only -> lightweight mock worker).
 # Installed from PyPI instead of COPY --from=ghcr.io so the build does not

@@ -137,8 +137,9 @@
   - Go 聊天端点：`llmChat` 取最近 10 条房间消息（长期记忆）+ 按 `avatar_id`
     检索该数字人全部知识库的 Top-3 注入 System Prompt（严格按知识库回答）。
   - Go 侧 `EMBED_SERVER_URL` 默认 `http://rag-service:8001`（compose 内网）。
-  - ⚠️ 旧 `worker/rag_worker.py`（bge 向量 + RediSearch）已废弃：不再启动、
-    不再入队；`redis/redis-stack-server` 已回退为 `redis:8.2.2-alpine`。
+  - ⚠️ 旧 `worker/rag_worker.py`（bge 向量 + RediSearch）已删除，相关依赖
+    （pymupdf / sentence-transformers）已从 `worker/pyproject.toml` 移除；
+    `redis/redis-stack-server` 已回退为 `redis:8.2.2-alpine`。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
 - ✅ 客户端用户中心：`frontend-user/app/account/page.tsx`（`/account`）身份卡 +
   注册/登录/退出 + 「我的消息」（`GET /api/chat/history?userId=`）；导航身份
@@ -177,7 +178,6 @@ worker/
   streaming/subtitle.py      Pillow 字幕渲染（位置/边框/字号可配）
   fonts/                     gitignore：用户下载的免费字体（见 fonts/README.md）
   stream_worker.py       流式 Worker 入口（闲置/说话循环，与 worker.py 并存）
-  rag_worker.py          ⚠️ 遗留（bge+RediSearch 时代），已不再启动/使用
 ```
 
 ## 5. 关键约定

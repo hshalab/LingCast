@@ -43,9 +43,7 @@ stop_by_pattern() {
 
 stop_one worker
 stop_one stream_worker
-stop_one rag_worker
 stop_by_pattern worker.py
 stop_by_pattern stream_worker.py
-stop_by_pattern rag_worker.py
 
 echo "done"

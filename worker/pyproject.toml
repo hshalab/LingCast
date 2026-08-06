@@ -2,7 +2,7 @@
 name = "talking-avatar-worker"
 version = "0.1.0"
 description = "Talking Avatar Platform AI worker (GPT-SoVITS voice clone + LivePortrait face animation)"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     # Base worker (also what the lightweight Docker mock worker installs).
     "boto3>=1.34,<2",
@@ -95,10 +95,6 @@ models = [
     "pydantic<=2.10.6",
     "ctranslate2>=4.0,<5",
     "av>=11",
-    # Private knowledge base (RAG): local PDF text extraction + local
-    # embeddings (BAAI/bge-small-zh-v1.5). No paid embedding APIs.
-    "pymupdf>=1.24",
-    "sentence-transformers>=3.0",
 ]
 
 # NVIDIA GPU runtime (Linux x86_64). Keep separate from `rocm`: the two groups

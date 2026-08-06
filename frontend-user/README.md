@@ -6,7 +6,7 @@
 ## 本地开发
 
 ```bash
-cd client
+cd frontend-user
 cp .env.example .env.local   # API_ORIGIN 默认 http://localhost:8080
 pnpm install
 pnpm dev                     # http://localhost:3000
@@ -18,7 +18,7 @@ pnpm dev                     # http://localhost:3000
 ## 生产构建（可选的 Docker 部署）
 
 ```bash
-docker compose build client && docker compose up -d client   # http://localhost:3000
+docker compose build frontend-user && docker compose up -d frontend-user   # http://localhost:3000
 ```
 
 ## 页面
