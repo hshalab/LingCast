@@ -1,6 +1,5 @@
 import {
   BookOpen,
-  Clapperboard,
   Images,
   ListChecks,
   MessageSquare,
@@ -31,11 +30,6 @@ export const sidebarData: SidebarData = {
           title: 'nav.avatarList',
           url: '/avatar-library',
           icon: Images,
-        },
-        {
-          title: 'nav.avatarCreate',
-          url: '/avatar-studio',
-          icon: Clapperboard,
         },
         {
           title: 'nav.knowledge',

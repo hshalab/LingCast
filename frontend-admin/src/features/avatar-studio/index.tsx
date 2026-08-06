@@ -1,5 +1,14 @@
 import axios from 'axios'
-import { CheckCircle2, LoaderCircle, Play, Upload, UserRound, Volume2, XCircle } from 'lucide-react'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  LoaderCircle,
+  Play,
+  Upload,
+  UserRound,
+  Volume2,
+  XCircle,
+} from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getRouteApi, Link } from '@tanstack/react-router'
@@ -241,9 +250,18 @@ export function AvatarStudio() {
       </Header>
 
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div>
-          <h2 className='text-2xl font-bold tracking-tight'>{t('studio.title')}</h2>
-          <p className='text-muted-foreground'>{t('studio.subtitle')}</p>
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <div>
+            <h2 className='text-2xl font-bold tracking-tight'>{t('studio.title')}</h2>
+            <p className='text-muted-foreground'>{t('studio.subtitle')}</p>
+          </div>
+          <Button
+            variant='outline'
+            onClick={() => void navigate({ to: '/avatar-library' })}
+          >
+            <ArrowLeft className='size-4' />
+            {t('common.back')}
+          </Button>
         </div>
 
         <form onSubmit={handleSubmit} className='flex flex-col gap-4'>

@@ -188,7 +188,10 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                     : ''
                 }`}
               >
-                {avatar.imageS3Url ? (
+                {avatar.status !== 'ready' && avatar.status !== 'failed' ? (
+                  /* 生成中：web 模板风格的骨架屏占位（与页面初始加载一致） */
+                  <Skeleton className='aspect-[9/16] w-full rounded-none' />
+                ) : avatar.imageS3Url ? (
                   <img
                     src={avatar.imageS3Url}
                     alt={avatar.name}
@@ -238,7 +241,19 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
 
                 <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-3 text-white'>
                   <div className='flex items-center justify-between gap-2'>
-                    <p className='truncate font-semibold'>{avatar.name}</p>
+                    <div className='flex min-w-0 items-center gap-1.5'>
+                      <p className='truncate font-semibold'>{avatar.name}</p>
+                      {avatar.status === 'ready' && (
+                        <Button
+                          size='icon'
+                          className='h-6 w-6 shrink-0 rounded-full border-white/30 bg-white/20 text-white backdrop-blur hover:bg-white/30 hover:text-white'
+                          onClick={() => setPreview(avatar)}
+                          title={t('library.preview')}
+                        >
+                          <Play className='size-3' />
+                        </Button>
+                      )}
+                    </div>
                     <Badge variant='secondary' className='shrink-0'>
                       #{avatar.id}
                     </Badge>
@@ -270,18 +285,9 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
                             {t('library.live')}
                           </Link>
                         </Button>
-                        <Button
-                          size='icon'
-                          variant='outline'
-                          className='h-8 w-8 shrink-0 border-white/30 bg-white/20 text-white backdrop-blur hover:bg-white/30 hover:text-white'
-                          onClick={() => setPreview(avatar)}
-                          title={t('library.preview')}
-                        >
-                          <Play className='size-3.5' />
-                        </Button>
                       </>
                     ) : (
-                      <p className='flex h-8 items-center text-xs text-white/80'>
+                      <p className='h-8 truncate text-xs leading-8 text-white/80'>
                         {t('library.generating')}
                       </p>
                     )}
