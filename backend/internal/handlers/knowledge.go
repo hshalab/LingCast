@@ -65,22 +65,22 @@ func (h *KnowledgeHandler) ListAll(c *gin.Context) {
 		AvatarName string `json:"avatarName"`
 	}
 	q := h.db.Model(&models.AvatarKnowledge{}).
-		Select("avatar_knowledge.*, avatars.name AS avatar_name").
-		Joins("LEFT JOIN avatars ON avatars.id = avatar_knowledge.avatar_id")
+		Select("avatar_knowledges.*, avatars.name AS avatar_name").
+		Joins("LEFT JOIN avatars ON avatars.id = avatar_knowledges.avatar_id")
 	if avatarID := c.Query("avatarId"); avatarID != "" {
 		if id, err := strconv.ParseUint(avatarID, 10, 64); err == nil && id > 0 {
-			q = q.Where("avatar_knowledge.avatar_id = ?", id)
+			q = q.Where("avatar_knowledges.avatar_id = ?", id)
 		}
 	}
 	if kw := strings.TrimSpace(c.Query("q")); kw != "" {
 		like := "%" + kw + "%"
 		q = q.Where(
-			"(avatar_knowledge.content LIKE ? OR avatar_knowledge.filename LIKE ?)",
+			"(avatar_knowledges.content LIKE ? OR avatar_knowledges.filename LIKE ?)",
 			like, like,
 		)
 	}
 	var rows []row
-	if err := q.Order("avatar_knowledge.created_at desc").Find(&rows).Error; err != nil {
+	if err := q.Order("avatar_knowledges.created_at desc").Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
