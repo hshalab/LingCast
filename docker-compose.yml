@@ -90,6 +90,7 @@ services:
       TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks}
       LIVE_CONTROL_QUEUE_KEY: ${LIVE_CONTROL_QUEUE_KEY:-talking_avatar:live_control}
       AVATAR_INIT_QUEUE_KEY: ${AVATAR_INIT_QUEUE_KEY:-talking_avatar:avatar_init}
+      KNOWLEDGE_INGEST_QUEUE_KEY: ${KNOWLEDGE_INGEST_QUEUE_KEY:-talking_avatar:knowledge_ingest}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.deepseek.com}
       OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-flash}

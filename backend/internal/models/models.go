@@ -135,3 +135,24 @@ type AdminUser struct {
 	PasswordHash string    `gorm:"size:255;not null" json:"-"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
+
+// Knowledge ingestion lifecycle.
+const (
+	KnowledgeStatusPending = "pending"  // queued for chunking + embedding
+	KnowledgeStatusIndexed = "indexed"  // chunks embedded into Redis (RAG-ready)
+	KnowledgeStatusFailed  = "failed"   // extraction/embedding failed (see content)
+)
+
+// AvatarKnowledge is one private-knowledge source document for an avatar
+// (raw text or extracted text from an uploaded .txt/.pdf). Knowledge is
+// strictly isolated per avatar: every row belongs to exactly one AvatarID and
+// the Redis vectors are keyed with the same avatar_id.
+type AvatarKnowledge struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	AvatarID  uint      `gorm:"not null;index" json:"avatarId"`
+	Content   string    `gorm:"type:text;not null" json:"content"` // extracted text (empty while pending)
+	Status    string    `gorm:"size:16;not null;default:pending;index" json:"status"`
+	SourceKey string    `gorm:"size:512" json:"sourceKey,omitempty"` // S3 key of the original file
+	Filename  string    `gorm:"size:255" json:"filename,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+}

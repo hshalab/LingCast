@@ -72,4 +72,15 @@ var zh = catalog{
 	"err.tts.text_too_long":              "试听文本过长（最多 200 字）",
 	"err.tts.preview_failed":             "语音试听生成失败：%s",
 	"err.tts.empty_audio":                "语音试听返回了空音频",
+
+	// ---- knowledge base ----
+	"err.knowledge.source_required":      "请提供 text 或上传 .txt/.pdf 文件",
+	"err.knowledge.both_provided":        "text 与 file 只能二选一",
+	"err.knowledge.unsupported_type":     "仅支持 .txt 或 .pdf 文件",
+	"err.knowledge.upload_failed":        "知识文件上传失败：%s",
+	"err.knowledge.save_failed":          "保存知识失败：%s",
+	"err.knowledge.enqueue_failed":       "知识摄入任务入队失败：%s",
+	"err.knowledge.invalid_id":           "无效的知识条目 ID",
+	"err.knowledge.not_found":            "知识条目不存在",
+	"err.knowledge.invalid_status":       "无效的知识状态",
 }

@@ -60,6 +60,17 @@ export type LiveSessionItem = {
   status: string
 }
 
+export type KnowledgeStatus = 'pending' | 'indexed' | 'failed'
+
+export type KnowledgeItem = {
+  id: number
+  avatarId: number
+  content: string
+  status: KnowledgeStatus
+  filename?: string
+  createdAt: string
+}
+
 export type LiveMessageResponse = {
   reply: string
   chunkCount: number
@@ -104,6 +115,43 @@ export async function adminLogin(username: string, password: string) {
     password,
   })
   return data
+}
+
+export async function listKnowledge(avatarId: number): Promise<KnowledgeItem[]> {
+  const { data } = await api.get<{ data: KnowledgeItem[] }>(
+    `/avatars/${avatarId}/knowledge`,
+  )
+  return data.data
+}
+
+export async function createKnowledgeText(
+  avatarId: number,
+  text: string,
+): Promise<KnowledgeItem> {
+  const form = new FormData()
+  form.append('text', text)
+  const { data } = await api.post<KnowledgeItem>(
+    `/avatars/${avatarId}/knowledge`,
+    form,
+  )
+  return data
+}
+
+export async function createKnowledgeFile(
+  avatarId: number,
+  file: File,
+): Promise<KnowledgeItem> {
+  const form = new FormData()
+  form.append('file', file)
+  const { data } = await api.post<KnowledgeItem>(
+    `/avatars/${avatarId}/knowledge`,
+    form,
+  )
+  return data
+}
+
+export async function deleteKnowledge(avatarId: number, knowledgeId: number) {
+  await api.delete(`/avatars/${avatarId}/knowledge/${knowledgeId}`)
 }
 
 export async function adminMe() {

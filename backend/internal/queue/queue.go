@@ -39,6 +39,18 @@ type AvatarInitPayload struct {
 	ImageS3Key string `json:"imageS3Key"`
 }
 
+// KnowledgeIngestPayload tells the Python RAG worker to extract, chunk and
+// embed one avatar's knowledge source (text or .txt/.pdf uploaded to S3).
+// The worker downloads the file from S3, so the local filePath in the plan
+// maps to the project's cross-service convention: S3 keys only.
+type KnowledgeIngestPayload struct {
+	Type        string `json:"type"` // "ingest_knowledge"
+	AvatarID    uint   `json:"avatarId"`
+	KnowledgeID uint   `json:"knowledgeId"`
+	S3Key       string `json:"s3Key"`
+	Filename    string `json:"filename,omitempty"`
+}
+
 // Queue wraps a Redis list used as a FIFO task queue.
 type Queue struct {
 	client *redis.Client

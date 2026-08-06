@@ -136,6 +136,11 @@ AMD GPUs using ROCm.
 
 ### Task 4.4 私有知识库（RAG）— [ ]
 
+- [~] Part 1（已提交）：`AvatarKnowledge` GORM 模型（按 avatar_id 索引隔离）、
+  `POST/GET/DELETE /api/avatars/:id/knowledge`（text 或 .txt/.pdf，源文件入 S3 +
+  `talking_avatar:knowledge_ingest` 队列）、worker 回写 webhook
+  `POST /api/avatars/:id/knowledge/:kid/status`；管理端 Avatar Studio 编辑模式
+  新增「私有知识库」面板（粘贴文本/上传文件/列表/删除，中英双语）。
 - **轻量向量检索**：不引入 Milvus/Pinecone，直接在现有 Redis 8.2 上启用
   RedisStack（RediSearch）做 KNN。
 - **Embedding**：上传私有知识（TXT/PDF）→ 切段 → 轻量 Embedding API

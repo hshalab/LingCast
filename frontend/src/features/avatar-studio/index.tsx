@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/select'
 import { api, type Avatar } from '@/lib/api'
 import { VideoPlayerDialog } from '@/components/video-player-dialog'
+import { KnowledgePanel } from './knowledge-panel'
 import {
   cacheVoices,
   DEFAULT_VOICE_ID,
@@ -486,6 +487,11 @@ export function AvatarStudio() {
               : t('studio.submitCreate')}
         </Button>
         </form>
+
+        {/* 私有知识库：仅在编辑模式显示（按 avatar 严格隔离） */}
+        {editing && editingAvatar && (
+          <KnowledgePanel avatarId={Number(editId)} />
+        )}
 
           {isInitializing && (
             <Card>

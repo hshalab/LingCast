@@ -72,4 +72,15 @@ var en = catalog{
 	"err.tts.text_too_long":              "preview text is too long (max 200 chars)",
 	"err.tts.preview_failed":             "TTS preview failed: %s",
 	"err.tts.empty_audio":                "TTS preview returned empty audio",
+
+	// ---- knowledge base ----
+	"err.knowledge.source_required":      "provide 'text' or upload a .txt/.pdf file",
+	"err.knowledge.both_provided":        "provide either 'text' or a file, not both",
+	"err.knowledge.unsupported_type":     "only .txt or .pdf files are supported",
+	"err.knowledge.upload_failed":        "failed to upload knowledge file: %s",
+	"err.knowledge.save_failed":          "failed to save knowledge: %s",
+	"err.knowledge.enqueue_failed":       "failed to enqueue knowledge ingestion: %s",
+	"err.knowledge.invalid_id":           "invalid knowledge id",
+	"err.knowledge.not_found":            "knowledge not found",
+	"err.knowledge.invalid_status":       "invalid knowledge status",
 }

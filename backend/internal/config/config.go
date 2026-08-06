@@ -19,6 +19,7 @@ type Config struct {
 	TaskQueueKey        string
 	LiveControlQueueKey string
 	AvatarInitQueueKey  string
+	KnowledgeIngestKey  string
 	OpenAIAPIKey        string
 	OpenAIBaseURL       string
 	OpenAIModel         string
@@ -84,6 +85,7 @@ func Load() Config {
 		TaskQueueKey:        env("TASK_QUEUE_KEY", "talking_avatar:tasks"),
 		LiveControlQueueKey: env("LIVE_CONTROL_QUEUE_KEY", "talking_avatar:live_control"),
 		AvatarInitQueueKey:  env("AVATAR_INIT_QUEUE_KEY", "talking_avatar:avatar_init"),
+		KnowledgeIngestKey:  env("KNOWLEDGE_INGEST_QUEUE_KEY", "talking_avatar:knowledge_ingest"),
 		OpenAIAPIKey:        os.Getenv("OPENAI_API_KEY"),
 		OpenAIBaseURL:       env("OPENAI_BASE_URL", "https://api.deepseek.com"),
 		OpenAIModel:         env("OPENAI_MODEL", "deepseek-v4-flash"),

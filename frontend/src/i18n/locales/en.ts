@@ -322,4 +322,23 @@ export const en = {
     desc: 'Are you sure you want to sign out? You will need to sign in again to access the admin console.',
     confirm: 'Sign out',
   },
+  knowledge: {
+    title: 'Private Knowledge Base',
+    subtitle:
+      "The avatar's exclusive knowledge (strictly isolated per avatar): paste text or upload .txt/.pdf — it is chunked and embedded locally, and live Q&A answers from it.",
+    textPlaceholder: 'Paste knowledge text, e.g. product specs, FAQs…',
+    addText: 'Add text',
+    fileHint: 'Supports .txt / .pdf; text is extracted and embedded automatically',
+    upload: 'Upload file',
+    empty: 'No knowledge yet',
+    pendingContent: '(Processing, content pending…)',
+    status: {
+      pending: 'Processing',
+      indexed: 'Indexed',
+      failed: 'Failed',
+    },
+    toastAdded: 'Knowledge submitted, processing…',
+    toastFailed: 'Submission failed, please retry later',
+    toastDeleteFailed: 'Delete failed',
+  },
 }

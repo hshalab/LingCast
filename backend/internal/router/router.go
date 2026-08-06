@@ -35,6 +35,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 	}))
 
 	avatarHandler := handlers.NewAvatarHandler(db, s3, q, cfg.AvatarInitQueueKey)
+	knowledgeHandler := handlers.NewKnowledgeHandler(db, s3, q, cfg.KnowledgeIngestKey)
 	taskHandler := handlers.NewTaskHandler(db, q, s3)
 	chatHandler := handlers.NewChatHandler(db)
 	liveHandler := handlers.NewLiveHandler(
@@ -65,6 +66,8 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 		api.POST("/avatars/:id/base-video", avatarHandler.UpdateBaseVideo)
 		// Internal webhook used by the Python AI worker.
 		api.POST("/tasks/:id/status", taskHandler.UpdateStatus)
+		// Internal webhook: Python RAG worker reports ingestion progress.
+		api.POST("/avatars/:id/knowledge/:kid/status", knowledgeHandler.UpdateStatus)
 		// Live streaming: audience-facing read + chat intake.
 		api.GET("/live", liveHandler.ListSessions)
 		api.POST("/live/:avatarID/message", liveHandler.Message)
@@ -86,6 +89,9 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 			protected.POST("/avatars/:id/retry", avatarHandler.Retry)
 			protected.POST("/avatars/:id/skip", avatarHandler.Skip)
 			protected.PUT("/avatars/:id/live-settings", avatarHandler.UpdateLiveSettings)
+			protected.POST("/avatars/:id/knowledge", knowledgeHandler.Create)
+			protected.GET("/avatars/:id/knowledge", knowledgeHandler.List)
+			protected.DELETE("/avatars/:id/knowledge/:kid", knowledgeHandler.Delete)
 			protected.POST("/tasks", taskHandler.Create)
 			protected.GET("/tasks", taskHandler.List)
 			protected.GET("/tasks/:id", taskHandler.Get)

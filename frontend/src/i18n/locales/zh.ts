@@ -311,4 +311,23 @@ export const zh = {
     desc: '确定要退出管理员登录吗？退出后需要重新登录才能访问后台。',
     confirm: '退出',
   },
+  knowledge: {
+    title: '私有知识库',
+    subtitle:
+      '数字人的专属知识（按头像严格隔离）：粘贴文本或上传 .txt/.pdf，系统会本地分块并向量化，直播问答时按知识库回答。',
+    textPlaceholder: '粘贴知识文本，例如商品参数、FAQ 等…',
+    addText: '添加文本',
+    fileHint: '支持 .txt / .pdf，自动提取文本并向量化',
+    upload: '上传文件',
+    empty: '还没有知识内容',
+    pendingContent: '（处理中，待提取内容…）',
+    status: {
+      pending: '处理中',
+      indexed: '已入库',
+      failed: '失败',
+    },
+    toastAdded: '知识已提交，正在处理…',
+    toastFailed: '提交失败，请稍后重试',
+    toastDeleteFailed: '删除失败',
+  },
 }

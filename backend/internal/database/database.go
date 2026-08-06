@@ -48,6 +48,7 @@ func Connect(dsn string) (*gorm.DB, error) {
 		&models.ChatUser{},
 		&models.ChatMessage{},
 		&models.AdminUser{},
+		&models.AvatarKnowledge{},
 	); err != nil {
 		return nil, err
 	}
