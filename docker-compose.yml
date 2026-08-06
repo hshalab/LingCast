@@ -29,7 +29,10 @@ services:
     # NOTE: the custom command must load the RediSearch module explicitly —
     # starting plain `redis-server` bypasses the RedisStack entrypoint and the
     # knowledge base (FT.*) silently disappears.
-    command: ["sh", "-c", "exec redis-server --appendonly yes --loadmodule /opt/redis-stack/lib/redisearch.so $${REDIS_PASSWORD:+--requirepass $$REDIS_PASSWORD}"]
+    # protected-mode must be off: Docker's published port makes connections
+    # arrive from the bridge gateway (not loopback), and with no password
+    # protected-mode closes them immediately.
+    command: ["sh", "-c", "exec redis-server --appendonly yes --protected-mode no --loadmodule /opt/redis-stack/lib/redisearch.so $${REDIS_PASSWORD:+--requirepass $$REDIS_PASSWORD}"]
     # Exposed for the hybrid deployment: the Python AI Worker runs natively on
     # the macOS host (MPS) and must reach Redis via localhost.
     ports:
