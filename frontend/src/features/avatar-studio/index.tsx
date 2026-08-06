@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/select'
 import { api, type Avatar } from '@/lib/api'
 import { VideoPlayerDialog } from '@/components/video-player-dialog'
-import { KnowledgePanel } from '@/features/knowledge/knowledge-panel'
+import { AvatarCollections } from '@/features/knowledge/avatar-collections'
 import {
   cacheVoices,
   DEFAULT_VOICE_ID,
@@ -490,7 +490,7 @@ export function AvatarStudio() {
 
         {/* 私有知识库：仅在编辑模式显示（按 avatar 严格隔离） */}
         {editing && editingAvatar && (
-          <KnowledgePanel avatarId={Number(editId)} />
+          <AvatarCollections avatarId={Number(editId)} />
         )}
 
           {isInitializing && (

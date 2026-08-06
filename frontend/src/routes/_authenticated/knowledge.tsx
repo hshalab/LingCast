@@ -1,17 +1,8 @@
-import z from 'zod'
-import { createFileRoute } from '@tanstack/react-router'
-import { Knowledge } from '@/features/knowledge'
-
-const knowledgeSearchSchema = z.object({
-  avatarId: z.string().optional(),
-})
+// Layout route for the knowledge base pages: /knowledge (collection list,
+// see knowledge/index.tsx) and /knowledge/$id (collection detail). The
+// layout itself renders nothing — each page carries its own header.
+import { Outlet, createFileRoute } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authenticated/knowledge')({
-  validateSearch: knowledgeSearchSchema,
-  component: KnowledgeRoute,
+  component: () => <Outlet />,
 })
-
-function KnowledgeRoute() {
-  const { avatarId } = Route.useSearch()
-  return <Knowledge initialAvatarId={avatarId} />
-}

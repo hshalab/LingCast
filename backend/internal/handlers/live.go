@@ -403,24 +403,23 @@ func (h *LiveHandler) recentMessages(avatarID uint, limit int) []models.ChatMess
 	return msgs
 }
 
-// retrieveKnowledge embeds the user message via the local RAG worker's HTTP
-// endpoint and returns the Top-K chunks for THIS avatar only (the query is
-// filtered by avatar_id in Redis). Any failure degrades gracefully: the chat
-// simply continues without knowledge context.
+// retrieveKnowledge sends the user message to the rag-service (Jieba FTS +
+// per-avatar scalar filter) and returns the Top-K chunks for THIS avatar only.
+// Any failure degrades gracefully: the chat simply continues without
+// knowledge context.
 func (h *LiveHandler) retrieveKnowledge(avatarID uint, text string) []string {
 	if strings.TrimSpace(h.embedServerURL) == "" {
 		return nil
 	}
 	body, err := json.Marshal(map[string]any{
-		"avatarId": avatarID,
-		"text":     text,
-		"topK":     3,
+		"avatar_id": avatarID,
+		"query":     text,
 	})
 	if err != nil {
 		return nil
 	}
 	resp, err := http.Post(
-		strings.TrimRight(h.embedServerURL, "/")+"/search",
+		strings.TrimRight(h.embedServerURL, "/")+"/v1/knowledge/search",
 		"application/json",
 		bytes.NewReader(body),
 	)
@@ -434,21 +433,13 @@ func (h *LiveHandler) retrieveKnowledge(avatarID uint, text string) []string {
 		return nil
 	}
 	var out struct {
-		Chunks []struct {
-			Content string `json:"content"`
-		} `json:"chunks"`
+		Contexts []string `json:"contexts"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		log.Printf("[rag] bad embed response: %v", err)
 		return nil
 	}
-	facts := make([]string, 0, len(out.Chunks))
-	for _, c := range out.Chunks {
-		if s := strings.TrimSpace(c.Content); s != "" {
-			facts = append(facts, s)
-		}
-	}
-	return facts
+	return out.Contexts
 }
 
 // chatSystemPrompt builds the LLM persona prompt for one avatar. The
@@ -516,29 +507,33 @@ func chatSystemPrompt(a models.Avatar, lang string, memory []models.ChatMessage,
 		}
 	}
 	if zh {
-		persona += "用简短、口语化、中文回复观众消息，单次回复不超过3句话。" +
+		persona += "用简短、口语化、中文回复观众消息，单次回复不超过3句话（讲解知识库内容时可适当展开）。" +
 			"观众问起你的年龄、身高、体重、族裔、感情状态或性格时，严格按照设定回答。"
 	} else {
-		persona += "Reply to viewers in short, conversational English, at most 3 sentences per reply. " +
+		persona += "Reply to viewers in short, conversational English, at most 3 sentences per reply (feel free to elaborate when explaining knowledge-base facts). " +
 			"When asked about your age, height, weight, ethnicity, relationship status or personality, " +
 			"answer strictly according to the profile above."
 	}
 
 	// Private knowledge base (strictly per-avatar): answer ONLY from these
-	// facts; admit ignorance instead of making things up.
+	// facts; admit ignorance instead of making things up. A viewer may send
+	// just a keyword — treat it as "tell me about this topic" and proactively
+	// explain the matching facts instead of echoing the keyword.
 	if len(ragFacts) > 0 {
 		if zh {
-			persona += "\n以下是该数字人的私有知识库内容（必须严格依据这些事实回答）："
+			persona += "\n以下是该数字人的私有知识库资料（必须严格依据这些资料回答，可直接引用原文）："
 			for i, f := range ragFacts {
 				persona += fmt.Sprintf("\n%d. %s", i+1, f)
 			}
-			persona += "\n如果问题在上述事实中没有提到，必须如实说“这个我不太清楚”。"
+			persona += "\n观众的消息可能只是关键词而不是完整问句：只要关键词对应上述资料中的内容，" +
+				"就把它当作“想了解该主题”，主动结合资料向观众讲解，不要简单重复关键词；" +
+				"只有当观众的问题确实在上述资料中找不到答案时，才如实说“这个我不太清楚”。"
 		} else {
-			persona += "\nThe private knowledge base for this avatar (answer strictly based on these facts):"
+			persona += "\nThe private knowledge base for this avatar (answer strictly based on these facts; quote them directly):"
 			for i, f := range ragFacts {
 				persona += fmt.Sprintf("\n%d. %s", i+1, f)
 			}
-			persona += "\nIf the question is not mentioned in the facts above, say you don't know."
+			persona += "\nThe viewer may send just a keyword instead of a full question: if the keyword matches the facts above, treat it as \"tell me about this topic\" and proactively explain the relevant facts — do not simply echo the keyword. Only if the question truly has no answer in the facts, say you don't know."
 		}
 	}
 

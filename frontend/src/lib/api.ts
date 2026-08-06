@@ -62,14 +62,33 @@ export type LiveSessionItem = {
 
 export type KnowledgeStatus = 'pending' | 'indexed' | 'failed'
 
-export type KnowledgeItem = {
+export type KnowledgeCollection = {
   id: number
   avatarId: number
   avatarName?: string
+  name: string
+  documentCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type KnowledgeDocument = {
+  id: number
+  collectionId: number
   content: string
   status: KnowledgeStatus
   filename?: string
   createdAt: string
+}
+
+export type KnowledgeSearchResult = {
+  content: string
+  score: string
+}
+
+export type KnowledgeChunk = {
+  index: number
+  text: string
 }
 
 export type LiveMessageResponse = {
@@ -110,6 +129,24 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Session expiry fallback: any 401 (except the login attempt itself) bounces
+// back to the login page. The route guard also verifies once on first entry.
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    const status = error.response?.status
+    const url: string = error.config?.url ?? ''
+    if (
+      status === 401 &&
+      !url.includes('/admin/login') &&
+      window.location.pathname !== '/login'
+    ) {
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  },
+)
+
 export async function adminLogin(username: string, password: string) {
   const { data } = await api.post<{ username: string; name: string }>('/admin/login', {
     username,
@@ -118,16 +155,42 @@ export async function adminLogin(username: string, password: string) {
   return data
 }
 
-export async function listKnowledge(avatarId: number): Promise<KnowledgeItem[]> {
-  const { data } = await api.get<{ data: KnowledgeItem[] }>(
-    `/avatars/${avatarId}/knowledge`,
+// ---- Knowledge collections (知识库) ----
+export async function listKnowledgeCollections(params?: {
+  avatarId?: number
+  q?: string
+}): Promise<KnowledgeCollection[]> {
+  const { data } = await api.get<{ data: KnowledgeCollection[] }>(
+    '/knowledge-collections',
+    { params },
   )
   return data.data
 }
 
-export type KnowledgeSearchResult = {
-  content: string
-  score: string
+export async function createKnowledgeCollection(
+  avatarId: number,
+  name: string,
+): Promise<KnowledgeCollection> {
+  const { data } = await api.post<{ data: KnowledgeCollection }>(
+    `/avatars/${avatarId}/knowledge-collections`,
+    { name },
+  )
+  return data.data
+}
+
+export async function renameKnowledgeCollection(
+  id: number,
+  name: string,
+): Promise<KnowledgeCollection> {
+  const { data } = await api.put<{ data: KnowledgeCollection }>(
+    `/knowledge-collections/${id}`,
+    { name },
+  )
+  return data.data
+}
+
+export async function deleteKnowledgeCollection(id: number) {
+  await api.delete(`/knowledge-collections/${id}`)
 }
 
 export type ChatLogItem = {
@@ -150,28 +213,6 @@ export type ChatLogPage = {
   pageSize: number
 }
 
-export async function listAllKnowledge(params?: {
-  avatarId?: number
-  q?: string
-}): Promise<KnowledgeItem[]> {
-  const { data } = await api.get<{ data: KnowledgeItem[] }>('/knowledge', {
-    params,
-  })
-  return data.data
-}
-
-export async function searchKnowledge(
-  avatarId: number,
-  text: string,
-  topK = 3,
-): Promise<KnowledgeSearchResult[]> {
-  const { data } = await api.post<{ data: KnowledgeSearchResult[] }>(
-    '/knowledge/search',
-    { avatarId, text, topK },
-  )
-  return data.data
-}
-
 export async function fetchChatLogs(params?: {
   avatarId?: number
   userId?: number
@@ -186,34 +227,71 @@ export async function fetchChatLogs(params?: {
   return data
 }
 
-export async function createKnowledgeText(
-  avatarId: number,
+// ---- Knowledge documents (文档) ----
+export async function listKnowledgeDocuments(
+  collectionId: number,
+): Promise<KnowledgeDocument[]> {
+  const { data } = await api.get<{ data: KnowledgeDocument[] }>(
+    `/knowledge-collections/${collectionId}/documents`,
+  )
+  return data.data
+}
+
+export async function createKnowledgeDocumentText(
+  collectionId: number,
   text: string,
-): Promise<KnowledgeItem> {
+): Promise<KnowledgeDocument> {
   const form = new FormData()
   form.append('text', text)
-  const { data } = await api.post<KnowledgeItem>(
-    `/avatars/${avatarId}/knowledge`,
+  const { data } = await api.post<{ data: KnowledgeDocument }>(
+    `/knowledge-collections/${collectionId}/documents`,
     form,
   )
-  return data
+  return data.data
 }
 
-export async function createKnowledgeFile(
-  avatarId: number,
+export async function createKnowledgeDocumentFile(
+  collectionId: number,
   file: File,
-): Promise<KnowledgeItem> {
+): Promise<KnowledgeDocument> {
   const form = new FormData()
   form.append('file', file)
-  const { data } = await api.post<KnowledgeItem>(
-    `/avatars/${avatarId}/knowledge`,
+  const { data } = await api.post<{ data: KnowledgeDocument }>(
+    `/knowledge-collections/${collectionId}/documents`,
     form,
   )
-  return data
+  return data.data
 }
 
-export async function deleteKnowledge(avatarId: number, knowledgeId: number) {
-  await api.delete(`/avatars/${avatarId}/knowledge/${knowledgeId}`)
+export async function deleteKnowledgeDocument(
+  collectionId: number,
+  documentId: number,
+) {
+  await api.delete(
+    `/knowledge-collections/${collectionId}/documents/${documentId}`,
+  )
+}
+
+export async function listDocumentChunks(
+  collectionId: number,
+  documentId: number,
+): Promise<KnowledgeChunk[]> {
+  const { data } = await api.post<{ data: KnowledgeChunk[] }>(
+    `/knowledge-collections/${collectionId}/documents/${documentId}/chunks`,
+  )
+  return data.data
+}
+
+export async function searchKnowledge(
+  scope: { avatarId?: number; collectionId?: number },
+  text: string,
+  topK = 3,
+): Promise<KnowledgeSearchResult[]> {
+  const { data } = await api.post<{ data: KnowledgeSearchResult[] }>(
+    '/knowledge/search',
+    { ...scope, text, topK },
+  )
+  return data.data
 }
 
 export async function adminMe() {

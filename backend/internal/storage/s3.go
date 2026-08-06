@@ -57,6 +57,20 @@ func (c *Client) Upload(ctx context.Context, key string, body io.Reader, content
 	return err
 }
 
+// Download reads an object's contents into memory (used by the RAG ingest
+// path to extract knowledge text from the stored source file).
+func (c *Client) Download(ctx context.Context, key string) ([]byte, error) {
+	out, err := c.api.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer out.Body.Close()
+	return io.ReadAll(out.Body)
+}
+
 // PublicURL builds a browser-reachable URL for an object. In the dockerized
 // setup this goes through the nginx /media proxy so the storage service does
 // not need to be exposed to the host.

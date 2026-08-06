@@ -43,11 +43,6 @@ export const sidebarData: SidebarData = {
           icon: BookOpen,
         },
         {
-          title: 'nav.knowledgeList',
-          url: '/knowledge-list',
-          icon: ListChecks,
-        },
-        {
           title: 'nav.broadcast',
           url: '/broadcast',
           icon: Video,

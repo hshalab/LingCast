@@ -15,7 +15,6 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedTaskCenterRouteImport } from './routes/_authenticated/task-center'
 import { Route as AuthenticatedLiveStudioRouteImport } from './routes/_authenticated/live-studio'
-import { Route as AuthenticatedKnowledgeListRouteImport } from './routes/_authenticated/knowledge-list'
 import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
 import { Route as AuthenticatedChatLogsRouteImport } from './routes/_authenticated/chat-logs'
 import { Route as AuthenticatedBroadcastRouteImport } from './routes/_authenticated/broadcast'
@@ -36,6 +35,7 @@ import { Route as ClerkauthRouteRouteImport } from './routes/clerk/(auth)/route'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedTasksIndexRouteImport } from './routes/_authenticated/tasks/index'
+import { Route as AuthenticatedKnowledgeIndexRouteImport } from './routes/_authenticated/knowledge/index'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
@@ -43,6 +43,7 @@ import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/c
 import { Route as ClerkauthSignUpRouteImport } from './routes/clerk/(auth)/sign-up'
 import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-in'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
+import { Route as AuthenticatedKnowledgeIdRouteImport } from './routes/_authenticated/knowledge.$id'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 
 const LoginRoute = LoginRouteImport.update({
@@ -74,12 +75,6 @@ const AuthenticatedLiveStudioRoute = AuthenticatedLiveStudioRouteImport.update({
   path: '/live-studio',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedKnowledgeListRoute =
-  AuthenticatedKnowledgeListRouteImport.update({
-    id: '/knowledge-list',
-    path: '/knowledge-list',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedKnowledgeRoute = AuthenticatedKnowledgeRouteImport.update({
   id: '/knowledge',
   path: '/knowledge',
@@ -181,6 +176,12 @@ const AuthenticatedTasksIndexRoute = AuthenticatedTasksIndexRouteImport.update({
   path: '/tasks/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedKnowledgeIndexRoute =
+  AuthenticatedKnowledgeIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedKnowledgeRoute,
+  } as any)
 const AuthenticatedHelpCenterIndexRoute =
   AuthenticatedHelpCenterIndexRouteImport.update({
     id: '/help-center/',
@@ -219,6 +220,12 @@ const AuthenticatedSettingsAccountRoute =
     path: '/account',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedKnowledgeIdRoute =
+  AuthenticatedKnowledgeIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedKnowledgeRoute,
+  } as any)
 const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
@@ -245,11 +252,11 @@ export interface FileRoutesByFullPath {
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/broadcast': typeof AuthenticatedBroadcastRoute
   '/chat-logs': typeof AuthenticatedChatLogsRoute
-  '/knowledge': typeof AuthenticatedKnowledgeRoute
-  '/knowledge-list': typeof AuthenticatedKnowledgeListRoute
+  '/knowledge': typeof AuthenticatedKnowledgeRouteWithChildren
   '/live-studio': typeof AuthenticatedLiveStudioRoute
   '/task-center': typeof AuthenticatedTaskCenterRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/knowledge/$id': typeof AuthenticatedKnowledgeIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
@@ -257,6 +264,7 @@ export interface FileRoutesByFullPath {
   '/apps/': typeof AuthenticatedAppsIndexRoute
   '/chats/': typeof AuthenticatedChatsIndexRoute
   '/help-center/': typeof AuthenticatedHelpCenterIndexRoute
+  '/knowledge/': typeof AuthenticatedKnowledgeIndexRoute
   '/tasks/': typeof AuthenticatedTasksIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
 }
@@ -278,12 +286,11 @@ export interface FileRoutesByTo {
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/broadcast': typeof AuthenticatedBroadcastRoute
   '/chat-logs': typeof AuthenticatedChatLogsRoute
-  '/knowledge': typeof AuthenticatedKnowledgeRoute
-  '/knowledge-list': typeof AuthenticatedKnowledgeListRoute
   '/live-studio': typeof AuthenticatedLiveStudioRoute
   '/task-center': typeof AuthenticatedTaskCenterRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/knowledge/$id': typeof AuthenticatedKnowledgeIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
@@ -291,6 +298,7 @@ export interface FileRoutesByTo {
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
+  '/knowledge': typeof AuthenticatedKnowledgeIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
 }
@@ -316,12 +324,12 @@ export interface FileRoutesById {
   '/_authenticated/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/_authenticated/broadcast': typeof AuthenticatedBroadcastRoute
   '/_authenticated/chat-logs': typeof AuthenticatedChatLogsRoute
-  '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRoute
-  '/_authenticated/knowledge-list': typeof AuthenticatedKnowledgeListRoute
+  '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRouteWithChildren
   '/_authenticated/live-studio': typeof AuthenticatedLiveStudioRoute
   '/_authenticated/task-center': typeof AuthenticatedTaskCenterRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/_authenticated/knowledge/$id': typeof AuthenticatedKnowledgeIdRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/clerk/(auth)/sign-in': typeof ClerkauthSignInRoute
   '/clerk/(auth)/sign-up': typeof ClerkauthSignUpRoute
@@ -329,6 +337,7 @@ export interface FileRoutesById {
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
+  '/_authenticated/knowledge/': typeof AuthenticatedKnowledgeIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
 }
@@ -354,10 +363,10 @@ export interface FileRouteTypes {
     | '/broadcast'
     | '/chat-logs'
     | '/knowledge'
-    | '/knowledge-list'
     | '/live-studio'
     | '/task-center'
     | '/errors/$error'
+    | '/knowledge/$id'
     | '/settings/account'
     | '/clerk/sign-in'
     | '/clerk/sign-up'
@@ -365,6 +374,7 @@ export interface FileRouteTypes {
     | '/apps/'
     | '/chats/'
     | '/help-center/'
+    | '/knowledge/'
     | '/tasks/'
     | '/users/'
   fileRoutesByTo: FileRoutesByTo
@@ -386,12 +396,11 @@ export interface FileRouteTypes {
     | '/avatar-studio'
     | '/broadcast'
     | '/chat-logs'
-    | '/knowledge'
-    | '/knowledge-list'
     | '/live-studio'
     | '/task-center'
     | '/'
     | '/errors/$error'
+    | '/knowledge/$id'
     | '/settings/account'
     | '/clerk/sign-in'
     | '/clerk/sign-up'
@@ -399,6 +408,7 @@ export interface FileRouteTypes {
     | '/apps'
     | '/chats'
     | '/help-center'
+    | '/knowledge'
     | '/tasks'
     | '/users'
   id:
@@ -424,11 +434,11 @@ export interface FileRouteTypes {
     | '/_authenticated/broadcast'
     | '/_authenticated/chat-logs'
     | '/_authenticated/knowledge'
-    | '/_authenticated/knowledge-list'
     | '/_authenticated/live-studio'
     | '/_authenticated/task-center'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
+    | '/_authenticated/knowledge/$id'
     | '/_authenticated/settings/account'
     | '/clerk/(auth)/sign-in'
     | '/clerk/(auth)/sign-up'
@@ -436,6 +446,7 @@ export interface FileRouteTypes {
     | '/_authenticated/apps/'
     | '/_authenticated/chats/'
     | '/_authenticated/help-center/'
+    | '/_authenticated/knowledge/'
     | '/_authenticated/tasks/'
     | '/_authenticated/users/'
   fileRoutesById: FileRoutesById
@@ -498,13 +509,6 @@ declare module '@tanstack/react-router' {
       path: '/live-studio'
       fullPath: '/live-studio'
       preLoaderRoute: typeof AuthenticatedLiveStudioRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/knowledge-list': {
-      id: '/_authenticated/knowledge-list'
-      path: '/knowledge-list'
-      fullPath: '/knowledge-list'
-      preLoaderRoute: typeof AuthenticatedKnowledgeListRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/knowledge': {
@@ -647,6 +651,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTasksIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/knowledge/': {
+      id: '/_authenticated/knowledge/'
+      path: '/'
+      fullPath: '/knowledge/'
+      preLoaderRoute: typeof AuthenticatedKnowledgeIndexRouteImport
+      parentRoute: typeof AuthenticatedKnowledgeRoute
+    }
     '/_authenticated/help-center/': {
       id: '/_authenticated/help-center/'
       path: '/help-center'
@@ -696,6 +707,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsAccountRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/knowledge/$id': {
+      id: '/_authenticated/knowledge/$id'
+      path: '/$id'
+      fullPath: '/knowledge/$id'
+      preLoaderRoute: typeof AuthenticatedKnowledgeIdRouteImport
+      parentRoute: typeof AuthenticatedKnowledgeRoute
+    }
     '/_authenticated/errors/$error': {
       id: '/_authenticated/errors/$error'
       path: '/errors/$error'
@@ -720,14 +738,29 @@ const AuthenticatedSettingsRouteRouteWithChildren =
     AuthenticatedSettingsRouteRouteChildren,
   )
 
+interface AuthenticatedKnowledgeRouteChildren {
+  AuthenticatedKnowledgeIdRoute: typeof AuthenticatedKnowledgeIdRoute
+  AuthenticatedKnowledgeIndexRoute: typeof AuthenticatedKnowledgeIndexRoute
+}
+
+const AuthenticatedKnowledgeRouteChildren: AuthenticatedKnowledgeRouteChildren =
+  {
+    AuthenticatedKnowledgeIdRoute: AuthenticatedKnowledgeIdRoute,
+    AuthenticatedKnowledgeIndexRoute: AuthenticatedKnowledgeIndexRoute,
+  }
+
+const AuthenticatedKnowledgeRouteWithChildren =
+  AuthenticatedKnowledgeRoute._addFileChildren(
+    AuthenticatedKnowledgeRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedAvatarLibraryRoute: typeof AuthenticatedAvatarLibraryRoute
   AuthenticatedAvatarStudioRoute: typeof AuthenticatedAvatarStudioRoute
   AuthenticatedBroadcastRoute: typeof AuthenticatedBroadcastRoute
   AuthenticatedChatLogsRoute: typeof AuthenticatedChatLogsRoute
-  AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRoute
-  AuthenticatedKnowledgeListRoute: typeof AuthenticatedKnowledgeListRoute
+  AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRouteWithChildren
   AuthenticatedLiveStudioRoute: typeof AuthenticatedLiveStudioRoute
   AuthenticatedTaskCenterRoute: typeof AuthenticatedTaskCenterRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -745,8 +778,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAvatarStudioRoute: AuthenticatedAvatarStudioRoute,
   AuthenticatedBroadcastRoute: AuthenticatedBroadcastRoute,
   AuthenticatedChatLogsRoute: AuthenticatedChatLogsRoute,
-  AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRoute,
-  AuthenticatedKnowledgeListRoute: AuthenticatedKnowledgeListRoute,
+  AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRouteWithChildren,
   AuthenticatedLiveStudioRoute: AuthenticatedLiveStudioRoute,
   AuthenticatedTaskCenterRoute: AuthenticatedTaskCenterRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,

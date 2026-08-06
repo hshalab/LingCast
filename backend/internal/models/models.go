@@ -140,21 +140,30 @@ type AdminUser struct {
 
 // Knowledge ingestion lifecycle.
 const (
-	KnowledgeStatusPending = "pending"  // queued for chunking + embedding
-	KnowledgeStatusIndexed = "indexed"  // chunks embedded into Redis (RAG-ready)
-	KnowledgeStatusFailed  = "failed"   // extraction/embedding failed (see content)
+	KnowledgeStatusPending = "pending" // row created, not ingested yet
+	KnowledgeStatusIndexed = "indexed" // chunks indexed into rag-service (RAG-ready)
+	KnowledgeStatusFailed  = "failed"  // extraction/ingest failed (see content)
 )
 
-// AvatarKnowledge is one private-knowledge source document for an avatar
-// (raw text or extracted text from an uploaded .txt/.pdf). Knowledge is
-// strictly isolated per avatar: every row belongs to exactly one AvatarID and
-// the Redis vectors are keyed with the same avatar_id.
-type AvatarKnowledge struct {
+// KnowledgeCollection is a named knowledge base (zvec "collection" concept)
+// that belongs to exactly one avatar. Documents live under a collection.
+type KnowledgeCollection struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
-	AvatarID  uint      `gorm:"not null;index" json:"avatarId"`
-	Content   string    `gorm:"type:text;not null" json:"content"` // extracted text (empty while pending)
-	Status    string    `gorm:"size:16;not null;default:pending;index" json:"status"`
-	SourceKey string    `gorm:"size:512" json:"sourceKey,omitempty"` // S3 key of the original file
-	Filename  string    `gorm:"size:255" json:"filename,omitempty"`
+	AvatarID  uint      `gorm:"not null;index;uniqueIndex:idx_collection_avatar_name" json:"avatarId"`
+	Name      string    `gorm:"size:128;not null;uniqueIndex:idx_collection_avatar_name" json:"name"`
 	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// KnowledgeDocument is one source document (raw text or uploaded .txt/.pdf)
+// inside a knowledge collection. It is chunked and indexed into rag-service;
+// the DB row mirrors the rag-service chunks via collection_id + source_id.
+type KnowledgeDocument struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	CollectionID uint      `gorm:"not null;index" json:"collectionId"`
+	Content      string    `gorm:"type:text;not null" json:"content"` // extracted text
+	Status       string    `gorm:"size:16;not null;default:pending;index" json:"status"`
+	SourceKey    string    `gorm:"size:512" json:"sourceKey,omitempty"` // S3 key of the original file
+	Filename     string    `gorm:"size:255" json:"filename,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
 }

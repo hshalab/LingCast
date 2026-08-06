@@ -39,3 +39,5 @@ tmp/
 
 # Worker runtime logs/pids
 worker/logs/
+# rag-service local vector/full-text data
+zvec_data/

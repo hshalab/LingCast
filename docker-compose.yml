@@ -19,20 +19,16 @@ services:
       retries: 20
 
   redis:
-    # RedisStack (includes RediSearch FT.*) is required by the private
-    # knowledge base (RAG worker). Plain redis:8.2.2-alpine works for the
-    # rest of the platform but has no vector-search module.
-    image: ${REDIS_IMAGE:-redis/redis-stack-server:latest}
+    # Plain Redis — the knowledge base moved to the rag-service (zvec FTS),
+    # so RediSearch is no longer required.
+    image: ${REDIS_IMAGE:-redis:8.2.2-alpine}
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-    # NOTE: the custom command must load the RediSearch module explicitly —
-    # starting plain `redis-server` bypasses the RedisStack entrypoint and the
-    # knowledge base (FT.*) silently disappears.
     # protected-mode must be off: Docker's published port makes connections
     # arrive from the bridge gateway (not loopback), and with no password
     # protected-mode closes them immediately.
-    command: ["sh", "-c", "exec redis-server --appendonly yes --protected-mode no --loadmodule /opt/redis-stack/lib/redisearch.so $${REDIS_PASSWORD:+--requirepass $$REDIS_PASSWORD}"]
+    command: ["sh", "-c", "exec redis-server --appendonly yes --protected-mode no $${REDIS_PASSWORD:+--requirepass $$REDIS_PASSWORD}"]
     # Exposed for the hybrid deployment: the Python AI Worker runs natively on
     # the macOS host (MPS) and must reach Redis via localhost.
     ports:
@@ -99,11 +95,10 @@ services:
       TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks}
       LIVE_CONTROL_QUEUE_KEY: ${LIVE_CONTROL_QUEUE_KEY:-talking_avatar:live_control}
       AVATAR_INIT_QUEUE_KEY: ${AVATAR_INIT_QUEUE_KEY:-talking_avatar:avatar_init}
-      KNOWLEDGE_INGEST_QUEUE_KEY: ${KNOWLEDGE_INGEST_QUEUE_KEY:-talking_avatar:knowledge_ingest}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.deepseek.com}
       OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-flash}
-      EMBED_SERVER_URL: ${EMBED_SERVER_URL:-http://host.docker.internal:8090}
+      EMBED_SERVER_URL: ${EMBED_SERVER_URL:-http://rag-service:8001}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       S3_ENDPOINT: http://minio:9000
@@ -120,6 +115,18 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+
+  # Local RAG knowledge-base microservice: zvec FTS + Jieba Chinese, zero
+  # model dependencies. The Go API ingests documents and runs retrieval tests
+  # against it over the internal network; zvec data persists in a volume.
+  rag-service:
+    build:
+      context: ./rag-service
+    restart: unless-stopped
+    environment:
+      ZVEC_DATA_DIR: /app/zvec_data
+    volumes:
+      - rag-zvec-data:/app/zvec_data
 
   # ---- Docker mock worker: COMMENTED OUT ----
   # The real AI worker runs natively on the host (AI_MODE=real) and shares the
@@ -194,3 +201,4 @@ volumes:
   mysql-data:
   redis-data:
   minio-data:
+  rag-zvec-data:
