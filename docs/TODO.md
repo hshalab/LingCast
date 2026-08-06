@@ -134,31 +134,30 @@ AMD GPUs using ROCm.
 
 ### Task 4.4 私有知识库（RAG）— [x]
 
-- [~] Part 1（已提交）：`AvatarKnowledge` GORM 模型（按 avatar_id 索引隔离）、
-  `POST/GET/DELETE /api/avatars/:id/knowledge`（text 或 .txt/.pdf，源文件入 S3 +
-  `talking_avatar:knowledge_ingest` 队列）、worker 回写 webhook
-  `POST /api/avatars/:id/knowledge/:kid/status`；管理端 Avatar Studio 编辑模式
-  新增「私有知识库」面板（粘贴文本/上传文件/列表/删除，中英双语）。
-- [x] Part 2 + 3（已提交）：`worker/rag_worker.py` 摄入 Worker —— PyMuPDF/TXT
-  提取 → 按句切块（~300 字 / 50 字重叠）→ 本地 `BAAI/bge-small-zh-v1.5`
-  向量化（无付费 API）→ RediSearch `FT.CREATE idx:knowledge`（键
-  `knowledge:{avatar_id}:{chunk_id}`，严格隔离）；同进程 FastAPI `/embed` +
-  `/search`（KNN Top-3 按 avatar_id 过滤）。Go 聊天端点已接记忆 + 检索注入。
-- **轻量向量检索**：不引入 Milvus/Pinecone，直接在现有 Redis 8.2 上启用
-  RedisStack（RediSearch）做 KNN。
-- **Embedding**：上传私有知识（TXT/PDF）→ 切段 → 轻量 Embedding API
-  （如 BAAI bge-small）→ 向量入库。
-- **查询与拼接**：观众提问先 Embedding → Redis KNN 检索最相关 3 条 →
-  作为 `<Context>` 注入 DeepSeek System Prompt，**强制只根据知识库回答**，
-  减少带货/专业问答幻觉。
+- [x] Part 1 + 2 + 3（已重构）：知识库升级为**两级模型** —— 机器人 →
+  知识库（Collection，`knowledge_collections`，同机器人下名字唯一）→ 文档
+  （Document，`knowledge_documents`：text/.txt/.pdf，源文件入 S3，Go 用
+  `ledongthuc/pdf` 提取 PDF 文本）；`rag-service` 微服务（zvec 全文索引 +
+  Jieba 中文分词，**零模型/零下载**）负责入库 `/v1/knowledge/ingest`、
+  检索 `/v1/knowledge/search`（按 avatar_id 或 collection_id 标量过滤 +
+  BM25 Top-3）、删除 `/v1/knowledge/delete`、分块查看
+  `/v1/knowledge/chunks`。Go 聊天端点按 avatar_id 检索该数字人全部知识库
+  Top-3 注入 System Prompt；观众只发关键词时视为「想了解该主题」主动讲解。
+- ✅ **检索方案演进（已落地）**：原计划「RedisStack（RediSearch）做 KNN +
+  BAAI bge-small 向量化」已由 **rag-service（zvec 进程内全文索引 + 自带
+  Jieba 中文分词）** 取代——不需要向量模型、不需要 RediSearch、零下载；
+  Redis 已回退 `redis:8.2.2-alpine`，`worker/rag_worker.py` 停用。
+- ✅ **查询与拼接**：观众提问 → rag-service 按数字人聚合 Top-3 → 作为
+  `<Context>` 注入 DeepSeek System Prompt，强制只根据知识库回答，减少
+  带货/专业问答幻觉；管理端可在线检索测试并查看文档分块。
 
 ---
 
 ## 近期已完成（Roadmap 之外落地）
 
 - [x] **知识库管理后台**：入库页（`/knowledge`，文本/.txt/.pdf）+ 列表页
-  （`/knowledge-list`，按数字人/文件名/关键字筛选）+ 在线 Top-3 检索测试
-  （`POST /api/knowledge/search` 代理到 rag_worker）。
+  （`/knowledge` 知识库列表 + `/knowledge/$id` 文档详情：创建/重命名/删除
+  知识库、文档增删、按知识库在线 Top-3 检索测试）。
 - [x] **聊天日志页**：`/chat-logs` 按数字人/用户 ID/日期/关键字检索 + 分页
   （`page/pageSize` + total）；机器人回复持久化 `rag_hit`/`rag_sources`，
   页面标注「命中知识库」并可展开查看命中的知识片段。
@@ -167,9 +166,11 @@ AMD GPUs using ROCm.
   首页美化（Hero CTA、卡片悬停进入直播间、页脚账号中心入口）。
 - [x] **直播链路稳定化**：音频切片先于视频帧写入（防 AAC 欠载）、ffmpeg
   保留 `-re`（Watchdog 兜底填帧）、Redis 断连 1s 静默退避。
-- [x] **RedisStack 接入**：compose 默认 `redis/redis-stack-server`
-  （RediSearch），启动命令显式 `--loadmodule` + `--protected-mode no`，
-  `REDIS_IMAGE` 可覆盖回普通 Redis（无向量检索）。
+- [x] **RAG 迁移到 rag-service**：compose 新增 `rag-service`（zvec FTS +
+  Jieba，volume `rag-zvec-data`），`EMBED_SERVER_URL` 默认
+  `http://rag-service:8001`；Redis 回退 `redis:8.2.2-alpine`（不再需要
+  RediSearch），`worker/rag_worker.py` 与 `start_workers.sh` 中的 rag_worker
+  已停用。
 
 ## Strict Rules for Execution
 

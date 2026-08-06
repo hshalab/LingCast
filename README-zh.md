@@ -96,16 +96,16 @@
 - [x] **Watchdog 直播架构（不再转圈）**：独立写帧线程以恒定 24fps 推给 ffmpeg，
   消费 Ready 帧队列；Wav2Lip 还在产帧时立即回退 base 动画 + 静音，播放器
   永不掉线/缓冲。推理异步小批量（8 帧）产帧，连续句子无缝拼接。
-- [x] **私有知识库 + 长期记忆（本地 RAG）**：数字人专属知识（文本或
-  .txt/.pdf）按句切块（~300 字 / 50 字重叠），用本地
-  `BAAI/bge-small-zh-v1.5` 向量化（无付费 API），存 RediSearch
-  `knowledge:{avatar_id}:{chunk_id}`（严格按数字人隔离）。直播问答会注入
-  最近 10 条房间消息与 Top-3 知识，严格按知识库回答、未知即说不知道。
-  **需要 RedisStack**（RediSearch）——compose 已切换
-  `redis/redis-stack-server`（`REDIS_IMAGE` 可覆盖）。
-- [x] **知识库管理界面**：入库页（`/knowledge`，粘贴文本或上传 .txt/.pdf）+
-  列表页（`/knowledge-list`，按数字人/文件名/内容关键字筛选，并可在线做
-  Top-3 检索测试）。
+- [x] **私有知识库 + 长期记忆（本地 RAG，零模型）**：两级模型
+  数字人 → 知识库（Collection）→ 文档（Document）。独立的 `rag-service`
+  微服务（FastAPI + uv + [zvec](https://zvec.org) 进程内全文索引）用自带
+  Jieba 中文分词——**不需要 sentence-transformers / torch / 模型下载，
+  也不需要 RediSearch**。文档（粘贴文本或上传 .txt/.pdf）按 ~300 字 /
+  50 字重叠切块并按知识库建索引；直播问答注入最近 10 条房间消息 +
+  按数字人聚合的 Top-3 知识，严格按知识库回答、未知才说不知道。
+- [x] **知识库管理界面**：`/knowledge` 知识库列表（创建/重命名/删除，知识库
+  归属数字人），`/knowledge/$id` 管理知识库内的文档（文本/.txt/.pdf、删除、
+  查看分块），支持按知识库做 Top-3 检索测试。
 - [x] **聊天日志页**：`/chat-logs` 按数字人/用户 ID/日期/关键字检索 + 分页；
   机器人回复标注「命中知识库」并可展开查看命中的知识片段。
 - [x] **观众端用户中心**：`/account` 展示游客/账号身份，支持注册/登录/退出与
@@ -142,7 +142,7 @@
 
 ```text
 管理后台 :8080 ──> Nginx (frontend)
-  ├── /api    ──> Go API (Gin) ──> MariaDB 11 / Redis 8.2 / MinIO
+  ├── /api    ──> Go API (Gin) ──> MariaDB 11 / Redis 8.2 / MinIO / rag-service
   └── /media  ──> MinIO (S3 兼容, 模拟 RustFS)
 
 观众端 :3000 ──> Next.js（服务端代理 /api、/live）──> Go API / SRS
@@ -151,6 +151,9 @@ Python AI Worker ──> Redis 队列 / boto3 下载素材
                   ──> 创建: LivePortrait 生成 base 视频（一次性预处理）
                   ──> 使用: Edge-TTS → Wav2Lip(ONNX) 离线播报 / 直播推流
                   ──> 上传成品到 S3, 通过 Webhook 回写任务状态
+
+rag-service ──> zvec 进程内全文索引（Jieba 中文分词，零模型）
+             ──> Go API 直连 /v1/knowledge/{ingest,search,delete,chunks}
 ```
 
 - 管理端前端：React + TypeScript + Vite + Tailwind + shadcn/ui（品牌「灵播
@@ -159,6 +162,8 @@ Python AI Worker ──> Redis 队列 / boto3 下载素材
   无需登录）。
 - 后端：Go + Gin + GORM，标准 AWS S3 SDK v2。
 - AI Worker：Python 3.11，uv 管理依赖，boto3 + Redis。
+- 知识库微服务：`rag-service`（FastAPI + uv + zvec FTS，Jieba 分词，零模型依赖，
+  Docker 内网 8001，数据持久化在 volume `rag-zvec-data`）。
 - 存储：S3 兼容对象存储，开发环境用 MinIO 模拟 RustFS。
 - 部署：Docker Compose 编排基础设施与前端；**真实 AI Worker 在宿主机原生运行**
   （macOS Apple Silicon 用 MPS/CoreML，Linux 用 NVIDIA CUDA 或 AMD ROCm），
@@ -337,8 +342,8 @@ curl http://localhost:8080/api/live/9/status
 | `AI_MODE` | `.env` / `.env.local` | `mock`（Docker 默认）或 `real`（宿主机） |
 | `S3_*` | `.env` / `.env.local` | 对象存储端点、凭据、桶名、公网前缀 |
 | `REDIS_*` | `.env` / `.env.local` | Redis 地址、密码、队列 Key |
-| `REDIS_IMAGE` | `.env` | Redis 镜像（默认 `redis/redis-stack-server`，RAG 需要） |
-| `EMBED_SERVER_URL` | `.env` | 本地检索服务地址（默认 `http://host.docker.internal:8090`） |
+| `REDIS_IMAGE` | `.env` | Redis 镜像（默认 `redis:8.2.2-alpine`） |
+| `EMBED_SERVER_URL` | `.env` | 知识库检索服务地址（默认 `http://rag-service:8001`，Docker 内网） |
 | `LIVEPORTRAIT_DEVICE` | `worker/.env.local` | `mps`（macOS 默认）/ `cuda`（Linux）/ `cpu` |
 | `LIVEPORTRAIT_DRIVING*` | `worker/.env.local` | 模板、速度、幅度 |
 | `LIVEPORTRAIT_OUTPUT_FPS` | `worker/.env.local` | base 视频帧率（默认 24） |
@@ -365,12 +370,15 @@ curl http://localhost:8080/api/live/9/status
 | `DELETE` | `/api/avatars/:id` | 删除数字人（级联任务/会话/文件） |
 | `POST` | `/api/avatars/:id/retry` | 重新生成基础视频 |
 | `PUT` | `/api/avatars/:id/live-settings` | 保存直播字幕等配置（JSON） |
-| `POST` | `/api/avatars/:id/knowledge` | 添加知识：`text` 或 `.txt/.pdf` 文件（入 S3 + 摄入队列） |
-| `GET` | `/api/avatars/:id/knowledge` | 某数字人的知识列表 |
-| `DELETE` | `/api/avatars/:id/knowledge/:kid` | 删除知识条目 |
-| `POST` | `/api/avatars/:id/knowledge/:kid/status` | Worker 回写：indexed/failed + 提取文本 |
-| `GET` | `/api/knowledge` | 全部知识，支持 `avatarId` / `q`（文件名/内容）筛选 |
-| `POST` | `/api/knowledge/search` | 在线检索测试：Embedding + 按数字人 KNN Top-3 |
+| `POST` | `/api/avatars/:id/knowledge-collections` | 创建知识库（归属数字人，`{"name": ...}`） |
+| `GET` | `/api/knowledge-collections` | 知识库列表（`avatarId` / `q` 筛选，含文档数） |
+| `PUT` | `/api/knowledge-collections/:id` | 重命名知识库 |
+| `DELETE` | `/api/knowledge-collections/:id` | 删除知识库（级联文档与索引） |
+| `GET` | `/api/knowledge-collections/:id/documents` | 知识库文档列表 |
+| `POST` | `/api/knowledge-collections/:id/documents` | 添加文档：`text` 或 `.txt/.pdf`（直连 rag-service 建索引） |
+| `DELETE` | `/api/knowledge-collections/:id/documents/:did` | 删除文档（含索引） |
+| `POST` | `/api/knowledge-collections/:id/documents/:did/chunks` | 查看文档分块 |
+| `POST` | `/api/knowledge/search` | 在线检索测试（`avatarId` 或 `collectionId`，Top-3） |
 | `POST` | `/api/tasks` | `{avatarId, scriptText}`，入队并返回任务 |
 | `GET` | `/api/tasks/:id` | 轮询任务状态与输出 URL |
 | `POST` | `/api/tasks/:id/status` | Worker 内部 Webhook（processing/completed/failed） |
@@ -400,6 +408,7 @@ curl http://localhost:8080/api/live/9/status
 ```text
 LingCast/
 ├── backend/        Go Gin API（模型、S3、Redis、handlers、Dockerfile）
+├── rag-service/    本地 RAG 微服务（FastAPI + uv + zvec FTS/Jieba，:8001）
 ├── frontend/       灵播管理后台（React + shadcn/ui，:8080）
 │   └── public/images/  品牌 logo（暗/亮）+ favicon
 ├── client/         Next.js 观众端（独立项目，:3000）

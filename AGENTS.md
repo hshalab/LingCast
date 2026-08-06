@@ -18,9 +18,9 @@
   + `uv.lock`），**不要使用 requirements.txt**。
 - 存储：S3 兼容对象存储（开发用 MinIO 模拟 RustFS）；Go 用 `aws-sdk-go-v2`，
   Python 用 boto3；服务间只传 S3 Key，不用本地路径。
-- 基础设施：Docker Compose；**MariaDB 11** + **RedisStack（Redis + RediSearch）**
-  + MinIO。知识库向量检索依赖 RediSearch 模块（compose 已默认
-  `redis/redis-stack-server`，`REDIS_IMAGE` 可覆盖回普通 Redis）。
+- 基础设施：Docker Compose；**MariaDB 11** + **Redis 8.2.2-alpine** + MinIO
+  + **rag-service**（本地 RAG 微服务：zvec 全文索引 + Jieba 中文分词，
+  Docker 内 `rag-service/`，端口 8001，零模型依赖）。
 - 部署模式：Docker 里跑基础设施 + API + 前端 + 轻量 Mock Worker；**真实 AI Worker
   在宿主机原生运行**：macOS Apple Silicon（MPS/CoreML）、Linux NVIDIA CUDA、
   Linux **AMD ROCm**（RX 6800 XT 等 RDNA2，见 README 对应章节）。Docker 发布
@@ -115,25 +115,25 @@
   `-re`（Watchdog 兜底填帧，避免旧版 lag→EOF 复现）。管道断裂
   （`FFmpegPipeClosedError`）会让 session 标记 dead 并停止喂帧，控制监听器
   自动清理后可重新开播；Redis 断连时 1s 静默退避。
-- ✅ 私有知识库 + 长期记忆（RAG）：
-  - Go：`AvatarKnowledge` 表（按 avatar_id 索引隔离）+ `POST/GET/DELETE
-    /api/avatars/:id/knowledge`（text 或 .txt/.pdf，源文件入 S3）+
-    Worker 回写 webhook `POST /api/avatars/:id/knowledge/:kid/status`。
-  - Python：`worker/rag_worker.py` 监听 `talking_avatar:knowledge_ingest`，
-    PyMuPDF/TXT 提取 → 按句切块（~300 字、50 字重叠）→ 本地
-    `BAAI/bge-small-zh-v1.5` 向量化（无付费 API）→ RediSearch
-    `FT.CREATE idx:knowledge`，键 `knowledge:{avatar_id}:{chunk_id}`；
-    同进程跑标准库 HTTP 服务 `/embed` + `/search`（KNN 按 avatar_id 过滤；
-    uvicorn 在非主线程会静默挂掉，故不用 FastAPI）。
-  - Go 聊天端点：`llmChat` 取最近 10 条房间消息（长期记忆）+ 调 embed
-    server 检索 Top-3 知识注入 System Prompt（严格按知识库回答，未知即说不知道），
-    机器人回复持久化 `rag_hit` + 命中的知识片段。
-  - 管理后台：知识库入库页（`/knowledge`）+ 列表/检索测试页（`/knowledge-list`，
-    按数字人/文件名/关键字筛选 + 在线 Top-3 检索）；聊天日志页（`/chat-logs`，
-    按数字人/用户 ID/日期/关键字检索 + 分页，机器人回复显示「命中知识库」并可
-    展开查看命中的知识）。
-  - Go 侧 `EMBED_SERVER_URL` 默认 `http://host.docker.internal:8090`
-    （Docker 内访问宿主机 rag_worker）。
+- ✅ 私有知识库（两级模型：机器人 → 知识库 Collection → 文档 Document，RAG）：
+  - 存储：`knowledge_collections`（avatar_id + name，同机器人下唯一）+
+    `knowledge_documents`（collection_id + content + status + source_key）两张表；
+    源文件入 S3（text 生成 .txt，支持上传 .txt/.pdf，Go 用
+    `github.com/ledongthuc/pdf` 提取 PDF 文本）。
+  - 微服务：`rag-service/`（FastAPI + uv + zvec 全文索引，Jieba 中文分词，
+    **零模型/零下载**）。Go 入库时同步 POST `/v1/knowledge/ingest`
+    （`avatar_id/collection_id/source_id/text_content`），检索 POST
+    `/v1/knowledge/search`（按 `avatar_id` 或 `collection_id` 标量过滤 +
+    BM25 Top-3），删除走 `/v1/knowledge/delete`；数据持久化在 volume
+    `rag-zvec-data:/app/zvec_data`。
+  - 管理后台：`/knowledge` 知识库列表（创建/重命名/删除，删除级联清文档与索引），
+    `/knowledge/$id` 知识库详情（文档增删 + 检索测试）；Avatar Studio 编辑模式
+    显示该数字人的知识库概览；聊天日志页显示「命中知识库」。
+  - Go 聊天端点：`llmChat` 取最近 10 条房间消息（长期记忆）+ 按 `avatar_id`
+    检索该数字人全部知识库的 Top-3 注入 System Prompt（严格按知识库回答）。
+  - Go 侧 `EMBED_SERVER_URL` 默认 `http://rag-service:8001`（compose 内网）。
+  - ⚠️ 旧 `worker/rag_worker.py`（bge 向量 + RediSearch）已废弃：不再启动、
+    不再入队；`redis/redis-stack-server` 已回退为 `redis:8.2.2-alpine`。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
 - ✅ 客户端用户中心：`client/app/account/page.tsx`（`/account`）身份卡 +
   注册/登录/退出 + 「我的消息」（`GET /api/chat/history?userId=`）；导航身份
@@ -146,8 +146,10 @@
 
 ```text
 backend/   Go API（Dockerfile）
+rag-service/  本地 RAG 知识库微服务（FastAPI + uv + zvec FTS/Jieba，端口 8001）
 frontend/  React 管理后台（Dockerfile + nginx.conf）
   src/components/xg-video.tsx   内联 xgplayer 封装（播报预览 720x1080 用）
+  src/features/knowledge/      知识库管理（index=Collection 列表 / detail=文档）
 client/    Next.js 观众端（独立项目）：app/page.tsx 列表 + app/rooms/[avatarId] 直播间
   lib/identity.tsx      全局聊天身份（游客/注册/登录/退出）
   components/auth-modal.tsx  注册/登录弹窗
@@ -169,6 +171,7 @@ worker/
   streaming/subtitle.py      Pillow 字幕渲染（位置/边框/字号可配）
   fonts/                     gitignore：用户下载的免费字体（见 fonts/README.md）
   stream_worker.py       流式 Worker 入口（闲置/说话循环，与 worker.py 并存）
+  rag_worker.py          ⚠️ 遗留（bge+RediSearch 时代），已不再启动/使用
 ```
 
 ## 5. 关键约定

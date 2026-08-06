@@ -118,17 +118,18 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   still producing, it instantly falls back to the base animation + silent audio,
   so the player never drops or buffers ("转圈"). Inference runs async in small
   Wav2Lip batches, splicing consecutive sentences seamlessly.
-- [x] **Private knowledge base + long-term memory (local RAG)**: per-avatar
-  knowledge (text or .txt/.pdf) is chunked (~300 chars / 50 overlap) and embedded
-  locally with `BAAI/bge-small-zh-v1.5` (no paid embedding APIs), stored in
-  RediSearch as `knowledge:{avatar_id}:{chunk_id}` (strictly isolated). The live
-  chat endpoint injects the last 10 room messages and the Top-3 matching chunks
-  into the LLM prompt, answering strictly from the knowledge base.
-  **Requires RedisStack** (RediSearch) — set `REDIS_IMAGE=redis/redis-stack-server`.
-- [x] **Knowledge management UI**: an ingest page (`/knowledge`, paste text or
-  upload .txt/.pdf) plus a list page (`/knowledge-list`) with filters by avatar /
-  filename / content keyword and a live Top-3 retrieval test against the local
-  vectors.
+- [x] **Private knowledge base + long-term memory (local RAG, zero model)**:
+  two-level model avatar → knowledge collection → documents. A dedicated
+  `rag-service` microservice (FastAPI + uv + [zvec](https://zvec.org) in-process
+  full-text search) segments Chinese with its bundled Jieba tokenizer — no
+  sentence-transformers / torch / model downloads, and no RediSearch. Documents
+  (paste text or upload .txt/.pdf) are chunked (~300 chars / 50 overlap) and
+  indexed per collection; the live chat endpoint injects the last 10 room
+  messages plus Top-3 chunks (strictly scoped by avatar) into the LLM prompt.
+- [x] **Knowledge management UI**: `/knowledge` lists collections (create /
+  rename / delete) and `/knowledge/$id` manages the documents inside a
+  collection (add text / upload .txt/.pdf / delete) with a Top-3 retrieval test
+  scoped to that collection.
 - [x] **Chat log page**: `/chat-logs` filters by avatar, user ID, date and
   keyword with pagination; bot replies are tagged "knowledge hit" and the exact
   retrieved chunks can be expanded.
@@ -168,7 +169,7 @@ disable with `FACE_ENHANCER=off`):
 
 ```text
 Admin console :8080 ──> Nginx (frontend)
-  ├── /api    ──> Go API (Gin) ──> MariaDB 11 / Redis 8.2 / MinIO
+  ├── /api    ──> Go API (Gin) ──> MariaDB 11 / Redis 8.2 / MinIO / rag-service
   └── /media  ──> MinIO (S3-compatible, emulates RustFS)
 
 Viewer app :3000 ──> Next.js (server-side proxy for /api, /live) ──> Go API / SRS
@@ -177,6 +178,9 @@ Python AI Worker ──> Redis queue / boto3 downloads assets
                  ──> Create: LivePortrait generates base video (one-time preprocessing)
                  ──> Use: Edge-TTS → Wav2Lip (ONNX) offline broadcast / live stream
                  ──> Uploads results to S3, writes task status back via Webhook
+
+rag-service ──> zvec in-process full-text index (Jieba Chinese, zero model)
+            ──> Go API calls /v1/knowledge/{ingest,search,delete,chunks} directly
 ```
 
 - Admin frontend: React + TypeScript + Vite + Tailwind + shadcn/ui (brand "LingCast", dark
@@ -185,6 +189,8 @@ Python AI Worker ──> Redis queue / boto3 downloads assets
   no login required).
 - Backend: Go + Gin + GORM, standard AWS S3 SDK v2.
 - AI Worker: Python 3.11, uv-managed dependencies, boto3 + Redis.
+- Knowledge microservice: `rag-service` (FastAPI + uv + zvec FTS, Jieba tokenizer,
+  zero model dependencies, internal :8001, data persisted in the `rag-zvec-data` volume).
 - Storage: S3-compatible object storage; MinIO emulates RustFS in dev.
 - Deployment: Docker Compose orchestrates the infrastructure and frontends; **the real AI
   Worker runs natively on the host** (MPS/CoreML on macOS Apple Silicon, NVIDIA CUDA or AMD
@@ -371,8 +377,8 @@ send messages directly; after registering/logging in, chat history follows the a
 | `AI_MODE` | `.env` / `.env.local` | `mock` (Docker default) or `real` (host) |
 | `S3_*` | `.env` / `.env.local` | Object-storage endpoint, credentials, bucket, public prefix |
 | `REDIS_*` | `.env` / `.env.local` | Redis address, password, queue keys |
-| `REDIS_IMAGE` | `.env` | Redis image (default `redis/redis-stack-server`, required for RAG) |
-| `EMBED_SERVER_URL` | `.env` | Local RAG retrieval service (default `http://host.docker.internal:8090`) |
+| `REDIS_IMAGE` | `.env` | Redis image (default `redis:8.2.2-alpine`) |
+| `EMBED_SERVER_URL` | `.env` | Knowledge retrieval service (default `http://rag-service:8001`, Docker internal network) |
 | `LIVEPORTRAIT_DEVICE` | `worker/.env.local` | `mps` (macOS default) / `cuda` (Linux) / `cpu` |
 | `LIVEPORTRAIT_DRIVING*` | `worker/.env.local` | Template, speed, amplitude |
 | `LIVEPORTRAIT_OUTPUT_FPS` | `worker/.env.local` | Base video framerate (default 24) |
@@ -400,12 +406,15 @@ speed / amplitude) is documented in the `LIVEPORTRAIT_DRIVING*` comments and
 | `DELETE` | `/api/avatars/:id` | Delete an avatar (cascades tasks/sessions/files) |
 | `POST` | `/api/avatars/:id/retry` | Regenerate the base video |
 | `PUT` | `/api/avatars/:id/live-settings` | Save live subtitle etc. settings (JSON) |
-| `POST` | `/api/avatars/:id/knowledge` | Add knowledge: `text` or `.txt/.pdf` file (S3 + ingest queue) |
-| `GET` | `/api/avatars/:id/knowledge` | List one avatar's knowledge |
-| `DELETE` | `/api/avatars/:id/knowledge/:kid` | Delete a knowledge entry |
-| `POST` | `/api/avatars/:id/knowledge/:kid/status` | Worker webhook: indexed/failed + extracted text |
-| `GET` | `/api/knowledge` | All knowledge, filter `avatarId` / `q` (filename/content) |
-| `POST` | `/api/knowledge/search` | Live retrieval test: embed + per-avatar KNN Top-3 |
+| `POST` | `/api/avatars/:id/knowledge-collections` | Create a collection for an avatar (`{"name": ...}`) |
+| `GET` | `/api/knowledge-collections` | List collections (filter `avatarId` / `q`, with document count) |
+| `PUT` | `/api/knowledge-collections/:id` | Rename a collection |
+| `DELETE` | `/api/knowledge-collections/:id` | Delete a collection (cascades documents + indexes) |
+| `GET` | `/api/knowledge-collections/:id/documents` | List documents of a collection |
+| `POST` | `/api/knowledge-collections/:id/documents` | Add a document: `text` or `.txt/.pdf` (indexes via rag-service) |
+| `DELETE` | `/api/knowledge-collections/:id/documents/:did` | Delete a document (including its indexes) |
+| `POST` | `/api/knowledge-collections/:id/documents/:did/chunks` | Inspect the indexed chunks of a document |
+| `POST` | `/api/knowledge/search` | Retrieval test (`avatarId` or `collectionId`, Top-3) |
 | `POST` | `/api/tasks` | `{avatarId, scriptText}`, enqueues and returns a task |
 | `GET` | `/api/tasks/:id` | Poll task status and output URL |
 | `POST` | `/api/tasks/:id/status` | Worker-internal Webhook (processing/completed/failed) |
@@ -435,6 +444,7 @@ speed / amplitude) is documented in the `LIVEPORTRAIT_DRIVING*` comments and
 ```text
 LingCast/
 ├── backend/        Go Gin API (models, S3, Redis, handlers, Dockerfile)
+├── rag-service/    Local RAG microservice (FastAPI + uv + zvec FTS/Jieba, :8001)
 ├── frontend/       LingCast admin console (React + shadcn/ui, :8080)
 │   └── public/images/  brand logos (dark/light) + favicon
 ├── client/         Next.js viewer app (standalone project, :3000)
