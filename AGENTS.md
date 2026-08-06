@@ -18,7 +18,9 @@
   + `uv.lock`），**不要使用 requirements.txt**。
 - 存储：S3 兼容对象存储（开发用 MinIO 模拟 RustFS）；Go 用 `aws-sdk-go-v2`，
   Python 用 boto3；服务间只传 S3 Key，不用本地路径。
-- 基础设施：Docker Compose；**MariaDB 11** + **Redis 8.2.2-alpine** + MinIO。
+- 基础设施：Docker Compose；**MariaDB 11** + **RedisStack（Redis + RediSearch）**
+  + MinIO。知识库向量检索依赖 RediSearch 模块（compose 已默认
+  `redis/redis-stack-server`，`REDIS_IMAGE` 可覆盖回普通 Redis）。
 - 部署模式：Docker 里跑基础设施 + API + 前端 + 轻量 Mock Worker；**真实 AI Worker
   在宿主机原生运行**：macOS Apple Silicon（MPS/CoreML）、Linux NVIDIA CUDA、
   Linux **AMD ROCm**（RX 6800 XT 等 RDNA2，见 README 对应章节）。Docker 发布
@@ -109,9 +111,10 @@
 - ✅ 直播 **Watchdog 架构**（`stream_worker.py`）：独立写帧线程以恒定
   `fps`（默认 24）向 ffmpeg 写帧，读 `Ready_Frames_Queue`；队列空时**立即回退**
   base 动画帧 + 静音音频，玩家永不转圈。推理线程异步 Edge-TTS → Wav2Lip 小批量
-  （8 帧）产帧入队，首批即切换说话，连续多句无缝拼接。ffmpeg 不再用 `-re`
-  （由 Watchdog 节流，避免 lag→EOF）。管道断裂（`FFmpegPipeClosedError`）会让
-  session 标记 dead 并停止喂帧，控制监听器自动清理后可重新开播。
+  （8 帧）产帧入队，首批即切换说话，连续多句无缝拼接。ffmpeg 视频输入保留
+  `-re`（Watchdog 兜底填帧，避免旧版 lag→EOF 复现）。管道断裂
+  （`FFmpegPipeClosedError`）会让 session 标记 dead 并停止喂帧，控制监听器
+  自动清理后可重新开播；Redis 断连时 1s 静默退避。
 - ✅ 私有知识库 + 长期记忆（RAG）：
   - Go：`AvatarKnowledge` 表（按 avatar_id 索引隔离）+ `POST/GET/DELETE
     /api/avatars/:id/knowledge`（text 或 .txt/.pdf，源文件入 S3）+
@@ -120,17 +123,23 @@
     PyMuPDF/TXT 提取 → 按句切块（~300 字、50 字重叠）→ 本地
     `BAAI/bge-small-zh-v1.5` 向量化（无付费 API）→ RediSearch
     `FT.CREATE idx:knowledge`，键 `knowledge:{avatar_id}:{chunk_id}`；
-    同进程跑 FastAPI `/embed` + `/search`（KNN 按 avatar_id 过滤）。
+    同进程跑标准库 HTTP 服务 `/embed` + `/search`（KNN 按 avatar_id 过滤；
+    uvicorn 在非主线程会静默挂掉，故不用 FastAPI）。
   - Go 聊天端点：`llmChat` 取最近 10 条房间消息（长期记忆）+ 调 embed
-    server 检索 Top-3 知识注入 System Prompt（严格按知识库回答，未知即说不知道）。
-  - ⚠️ 需要 RedisStack：`redis:8.2.2-alpine` 无 RediSearch 模块，
-    compose 已改 `redis/redis-stack-server`（`REDIS_IMAGE` 可覆盖）；
-    Go 侧 `EMBED_SERVER_URL` 默认 `http://host.docker.internal:8090`。
+    server 检索 Top-3 知识注入 System Prompt（严格按知识库回答，未知即说不知道），
+    机器人回复持久化 `rag_hit` + 命中的知识片段。
+  - 管理后台：知识库入库页（`/knowledge`）+ 列表/检索测试页（`/knowledge-list`，
+    按数字人/文件名/关键字筛选 + 在线 Top-3 检索）；聊天日志页（`/chat-logs`，
+    按数字人/用户 ID/日期/关键字检索 + 分页，机器人回复显示「命中知识库」并可
+    展开查看命中的知识）。
+  - Go 侧 `EMBED_SERVER_URL` 默认 `http://host.docker.internal:8090`
+    （Docker 内访问宿主机 rag_worker）。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
-- ⬜ 待实现（详见 [docs/TODO.md](docs/TODO.md) Phase 4）：口型变形修复
-  （GFPGAN/CodeFormer 嘴部局部超分 + 羽化遮罩）、口型性能与直播卡顿
-  （异步双缓冲管线 + base 动画回退）、长期记忆（Go API 滑动窗口上下文）、
-  私有知识库（RedisStack 向量检索 RAG）。
+- ✅ 客户端用户中心：`client/app/account/page.tsx`（`/account`）身份卡 +
+  注册/登录/退出 + 「我的消息」（`GET /api/chat/history?userId=`）；导航身份
+  胶囊点击进入；首页 Hero CTA / 卡片悬停 / 页脚入口。
+- ⬜ 待办（详见 [docs/TODO.md](docs/TODO.md)）：Phase 1 的 AMD ROCm 容器
+  Dockerfile 与实机验证、Phase 4.2 实机长播压测。
 - ⬜ Linux/CUDA 生产部署未实测（代码路径已预留）。
 
 ## 4. 目录速览

@@ -152,6 +152,25 @@ AMD GPUs using ROCm.
   作为 `<Context>` 注入 DeepSeek System Prompt，**强制只根据知识库回答**，
   减少带货/专业问答幻觉。
 
+---
+
+## 近期已完成（Roadmap 之外落地）
+
+- [x] **知识库管理后台**：入库页（`/knowledge`，文本/.txt/.pdf）+ 列表页
+  （`/knowledge-list`，按数字人/文件名/关键字筛选）+ 在线 Top-3 检索测试
+  （`POST /api/knowledge/search` 代理到 rag_worker）。
+- [x] **聊天日志页**：`/chat-logs` 按数字人/用户 ID/日期/关键字检索 + 分页
+  （`page/pageSize` + total）；机器人回复持久化 `rag_hit`/`rag_sources`，
+  页面标注「命中知识库」并可展开查看命中的知识片段。
+- [x] **客户端用户中心**：`/account` 身份卡（游客/账号）、注册/登录/退出、
+  「我的消息」（`GET /api/chat/history?userId=`）；导航身份胶囊可点击进入；
+  首页美化（Hero CTA、卡片悬停进入直播间、页脚账号中心入口）。
+- [x] **直播链路稳定化**：音频切片先于视频帧写入（防 AAC 欠载）、ffmpeg
+  保留 `-re`（Watchdog 兜底填帧）、Redis 断连 1s 静默退避。
+- [x] **RedisStack 接入**：compose 默认 `redis/redis-stack-server`
+  （RediSearch），启动命令显式 `--loadmodule` + `--protected-mode no`，
+  `REDIS_IMAGE` 可覆盖回普通 Redis（无向量检索）。
+
 ## Strict Rules for Execution
 
 1. 先给出 Phase 1 所需的精确命令与代码调整，测试通过后再进入下一阶段。

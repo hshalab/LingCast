@@ -103,6 +103,13 @@
   最近 10 条房间消息与 Top-3 知识，严格按知识库回答、未知即说不知道。
   **需要 RedisStack**（RediSearch）——compose 已切换
   `redis/redis-stack-server`（`REDIS_IMAGE` 可覆盖）。
+- [x] **知识库管理界面**：入库页（`/knowledge`，粘贴文本或上传 .txt/.pdf）+
+  列表页（`/knowledge-list`，按数字人/文件名/内容关键字筛选，并可在线做
+  Top-3 检索测试）。
+- [x] **聊天日志页**：`/chat-logs` 按数字人/用户 ID/日期/关键字检索 + 分页；
+  机器人回复标注「命中知识库」并可展开查看命中的知识片段。
+- [x] **观众端用户中心**：`/account` 展示游客/账号身份，支持注册/登录/退出与
+  「我的消息」（跨房间）；首页增加 Hero CTA、卡片悬停进入直播间、页脚账号入口。
 - [ ] **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
 
 ## 界面截图
@@ -330,6 +337,8 @@ curl http://localhost:8080/api/live/9/status
 | `AI_MODE` | `.env` / `.env.local` | `mock`（Docker 默认）或 `real`（宿主机） |
 | `S3_*` | `.env` / `.env.local` | 对象存储端点、凭据、桶名、公网前缀 |
 | `REDIS_*` | `.env` / `.env.local` | Redis 地址、密码、队列 Key |
+| `REDIS_IMAGE` | `.env` | Redis 镜像（默认 `redis/redis-stack-server`，RAG 需要） |
+| `EMBED_SERVER_URL` | `.env` | 本地检索服务地址（默认 `http://host.docker.internal:8090`） |
 | `LIVEPORTRAIT_DEVICE` | `worker/.env.local` | `mps`（macOS 默认）/ `cuda`（Linux）/ `cpu` |
 | `LIVEPORTRAIT_DRIVING*` | `worker/.env.local` | 模板、速度、幅度 |
 | `LIVEPORTRAIT_OUTPUT_FPS` | `worker/.env.local` | base 视频帧率（默认 24） |
@@ -356,6 +365,12 @@ curl http://localhost:8080/api/live/9/status
 | `DELETE` | `/api/avatars/:id` | 删除数字人（级联任务/会话/文件） |
 | `POST` | `/api/avatars/:id/retry` | 重新生成基础视频 |
 | `PUT` | `/api/avatars/:id/live-settings` | 保存直播字幕等配置（JSON） |
+| `POST` | `/api/avatars/:id/knowledge` | 添加知识：`text` 或 `.txt/.pdf` 文件（入 S3 + 摄入队列） |
+| `GET` | `/api/avatars/:id/knowledge` | 某数字人的知识列表 |
+| `DELETE` | `/api/avatars/:id/knowledge/:kid` | 删除知识条目 |
+| `POST` | `/api/avatars/:id/knowledge/:kid/status` | Worker 回写：indexed/failed + 提取文本 |
+| `GET` | `/api/knowledge` | 全部知识，支持 `avatarId` / `q`（文件名/内容）筛选 |
+| `POST` | `/api/knowledge/search` | 在线检索测试：Embedding + 按数字人 KNN Top-3 |
 | `POST` | `/api/tasks` | `{avatarId, scriptText}`，入队并返回任务 |
 | `GET` | `/api/tasks/:id` | 轮询任务状态与输出 URL |
 | `POST` | `/api/tasks/:id/status` | Worker 内部 Webhook（processing/completed/failed） |
@@ -369,6 +384,7 @@ curl http://localhost:8080/api/live/9/status
 | `POST` | `/api/chat/register` | 注册（升级当前游客行，保留历史） |
 | `POST` | `/api/chat/login` | 登录（合并游客消息进账号） |
 | `GET` | `/api/chat/history` | 房间持久化聊天记录（`?avatarId=`） |
+| `GET` | `/api/chat/logs` | 管理端聊天日志：`avatarId`/`userId`/`date`/`q` + `page`/`pageSize`，含 `ragHit` + `ragSources` |
 | `GET` | `/api/users` | 用户列表（游客/账号 + 消息数） |
 | `POST` | `/api/admin/login` | 管理员登录（HttpOnly cookie 会话） |
 | `GET` | `/api/admin/me` | 当前管理员（username + name） |

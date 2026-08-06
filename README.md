@@ -125,6 +125,16 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   chat endpoint injects the last 10 room messages and the Top-3 matching chunks
   into the LLM prompt, answering strictly from the knowledge base.
   **Requires RedisStack** (RediSearch) — set `REDIS_IMAGE=redis/redis-stack-server`.
+- [x] **Knowledge management UI**: an ingest page (`/knowledge`, paste text or
+  upload .txt/.pdf) plus a list page (`/knowledge-list`) with filters by avatar /
+  filename / content keyword and a live Top-3 retrieval test against the local
+  vectors.
+- [x] **Chat log page**: `/chat-logs` filters by avatar, user ID, date and
+  keyword with pagination; bot replies are tagged "knowledge hit" and the exact
+  retrieved chunks can be expanded.
+- [x] **Audience account center**: `/account` shows the viewer identity
+  (guest/account), register / login / logout, and "my messages" across rooms;
+  the home page got a hero CTA, card hover overlays and a footer account link.
 - [ ] **Mock pipeline** (`AI_MODE=mock`): lightweight placeholder for Docker Worker image demos.
 
 ## Screenshots
@@ -361,6 +371,8 @@ send messages directly; after registering/logging in, chat history follows the a
 | `AI_MODE` | `.env` / `.env.local` | `mock` (Docker default) or `real` (host) |
 | `S3_*` | `.env` / `.env.local` | Object-storage endpoint, credentials, bucket, public prefix |
 | `REDIS_*` | `.env` / `.env.local` | Redis address, password, queue keys |
+| `REDIS_IMAGE` | `.env` | Redis image (default `redis/redis-stack-server`, required for RAG) |
+| `EMBED_SERVER_URL` | `.env` | Local RAG retrieval service (default `http://host.docker.internal:8090`) |
 | `LIVEPORTRAIT_DEVICE` | `worker/.env.local` | `mps` (macOS default) / `cuda` (Linux) / `cpu` |
 | `LIVEPORTRAIT_DRIVING*` | `worker/.env.local` | Template, speed, amplitude |
 | `LIVEPORTRAIT_OUTPUT_FPS` | `worker/.env.local` | Base video framerate (default 24) |
@@ -388,6 +400,12 @@ speed / amplitude) is documented in the `LIVEPORTRAIT_DRIVING*` comments and
 | `DELETE` | `/api/avatars/:id` | Delete an avatar (cascades tasks/sessions/files) |
 | `POST` | `/api/avatars/:id/retry` | Regenerate the base video |
 | `PUT` | `/api/avatars/:id/live-settings` | Save live subtitle etc. settings (JSON) |
+| `POST` | `/api/avatars/:id/knowledge` | Add knowledge: `text` or `.txt/.pdf` file (S3 + ingest queue) |
+| `GET` | `/api/avatars/:id/knowledge` | List one avatar's knowledge |
+| `DELETE` | `/api/avatars/:id/knowledge/:kid` | Delete a knowledge entry |
+| `POST` | `/api/avatars/:id/knowledge/:kid/status` | Worker webhook: indexed/failed + extracted text |
+| `GET` | `/api/knowledge` | All knowledge, filter `avatarId` / `q` (filename/content) |
+| `POST` | `/api/knowledge/search` | Live retrieval test: embed + per-avatar KNN Top-3 |
 | `POST` | `/api/tasks` | `{avatarId, scriptText}`, enqueues and returns a task |
 | `GET` | `/api/tasks/:id` | Poll task status and output URL |
 | `POST` | `/api/tasks/:id/status` | Worker-internal Webhook (processing/completed/failed) |
@@ -401,6 +419,7 @@ speed / amplitude) is documented in the `LIVEPORTRAIT_DRIVING*` comments and
 | `POST` | `/api/chat/register` | Register (upgrades the current guest row, keeps history) |
 | `POST` | `/api/chat/login` | Login (merges guest messages into the account) |
 | `GET` | `/api/chat/history` | Persisted room chat history (`?avatarId=`) |
+| `GET` | `/api/chat/logs` | Admin chat logs: `avatarId` / `userId` / `date` / `q` + `page` / `pageSize`, includes `ragHit` + `ragSources` |
 | `GET` | `/api/users` | User list (guests/accounts + message counts) |
 | `POST` | `/api/admin/login` | Admin login (HttpOnly cookie session) |
 | `GET` | `/api/admin/me` | Current admin (username + name) |
