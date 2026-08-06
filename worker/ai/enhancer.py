@@ -76,6 +76,12 @@ class BaseEnhancer:
         feather_ratio: float = 0.15,
         min_roi_size: int = 48,
     ):
+        roi_padding = float(
+            os.environ.get("ENHANCER_ROI_PADDING", str(roi_padding))
+        )
+        feather_ratio = float(
+            os.environ.get("ENHANCER_FEATHER_RATIO", str(feather_ratio))
+        )
         self.model_path = Path(
             model_path or os.environ.get("ENHANCER_MODEL", str(self.default_model_path()))
         )
