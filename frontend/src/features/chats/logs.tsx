@@ -52,7 +52,7 @@ export function ChatLogs() {
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [items, setItems] = useState<ChatLogItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [avatarFilter, setAvatarFilter] = useState('')
+  const [avatarFilter, setAvatarFilter] = useState('all')
   const [userId, setUserId] = useState('')
   const [date, setDate] = useState('')
   const [keyword, setKeyword] = useState('')
@@ -72,7 +72,10 @@ export function ChatLogs() {
     try {
       setItems(
         await fetchChatLogs({
-          avatarId: avatarFilter ? Number(avatarFilter) : undefined,
+          avatarId:
+            avatarFilter && avatarFilter !== 'all'
+              ? Number(avatarFilter)
+              : undefined,
           userId: userId ? Number(userId) : undefined,
           date: date || undefined,
           q: keyword.trim() || undefined,
@@ -130,7 +133,7 @@ export function ChatLogs() {
               <SelectValue placeholder={t('chatLogs.filterAllAvatars')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value=''>{t('chatLogs.filterAllAvatars')}</SelectItem>
+              <SelectItem value='all'>{t('chatLogs.filterAllAvatars')}</SelectItem>
               {avatars.map((a) => (
                 <SelectItem key={a.id} value={String(a.id)}>
                   {a.name} (#{a.id})

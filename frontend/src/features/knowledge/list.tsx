@@ -47,7 +47,7 @@ export function KnowledgeList() {
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [items, setItems] = useState<KnowledgeItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [avatarFilter, setAvatarFilter] = useState('')
+  const [avatarFilter, setAvatarFilter] = useState('all')
   const [keyword, setKeyword] = useState('')
 
   // Retrieval test state
@@ -70,7 +70,10 @@ export function KnowledgeList() {
     try {
       setItems(
         await listAllKnowledge({
-          avatarId: avatarFilter ? Number(avatarFilter) : undefined,
+          avatarId:
+            avatarFilter && avatarFilter !== 'all'
+              ? Number(avatarFilter)
+              : undefined,
           q: keyword.trim() || undefined,
         }),
       )
@@ -133,7 +136,7 @@ export function KnowledgeList() {
               <SelectValue placeholder={t('knowledge.filterAllAvatars')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value=''>{t('knowledge.filterAllAvatars')}</SelectItem>
+              <SelectItem value='all'>{t('knowledge.filterAllAvatars')}</SelectItem>
               {avatars.map((a) => (
                 <SelectItem key={a.id} value={String(a.id)}>
                   {a.name} (#{a.id})
