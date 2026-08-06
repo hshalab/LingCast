@@ -404,7 +404,7 @@ class LiveAvatarSession:
         try:
             audio = self.lipsync.audio_pcm16(wav)
             n_frames = len(self.lipsync._mel_chunks(wav, self.fps))
-            seg = _TalkingSegment(text, audio, n_frames, self.fps)
+            seg = _TalkingSegment(text, audio, n_frames)
             self._talk_queue.put(("seg", seg))
             base_slice = self._slice_base(n_frames)
             frames = self.lipsync.iter_frames(wav, base_slice, self.fps)
