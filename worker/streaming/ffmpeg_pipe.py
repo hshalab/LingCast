@@ -20,11 +20,12 @@ deadlocks:
 The muxer assigns timestamps from consumed frames/samples, so interleaving
 order does not affect A/V sync.
 
-Pacing: only the video input gets `-re`, which throttles reads to the frame
-rate. Frames are therefore consumed in real time and a whole 16s chunk is
-spread over 16s of wall clock (true live latency, no unbounded player buffer).
-Audio has no `-re`: it is written in 0.5s slices aligned with every `fps/2`
-frames, so it arrives at exactly the real-time rate as a side effect.
+Pacing: the stream worker's **watchdog writer thread** is the sole pacemaker —
+it pushes exactly `fps` frames/second and the matching per-frame audio slices,
+so ffmpeg is deliberately started WITHOUT `-re`. If ffmpeg throttled reads
+itself (`-re`) and the producer ever stalled, input lag would accumulate until
+ffmpeg gave up with EOF; with the watchdog pacing in Python the pipe simply
+waits during a hiccup and resumes without the lag-death failure mode.
 """
 
 import logging
@@ -83,7 +84,6 @@ class FFmpegPipe:
             self.ffmpeg_bin,
             "-y",
             "-loglevel", "warning",
-            "-re",
             "-f", "rawvideo",
             "-pix_fmt", "bgr24",
             "-s", f"{self.width}x{self.height}",

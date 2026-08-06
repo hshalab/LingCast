@@ -115,14 +115,16 @@ AMD GPUs using ROCm.
   （`noCodeFormer.mp4` vs `CodeFormer.mp4`），观感提升明显；后续可在不同
   形象/语速下微调 `roi_padding`/`feather_ratio`/`CODEFORMER_FIDELITY_WEIGHT`。
 
-### Task 4.2 口型性能与推流卡顿（Latency / Streaming Stutter）— [ ]
+### Task 4.2 口型性能与推流卡顿（Latency / Streaming Stutter）— [x]
 
-- 根因：两段 10 秒处理之间的真空期会让 SRS 推流卡死。重构为
-  **异步双缓冲（Asynchronous Double-Buffering）**：
-  - **生产线程**：持续执行 TTS → Wav2Lip，把音视频帧压入**内存队列（Queue）**。
-  - **消费推流线程**：死循环读队列写 FFmpeg stdin；队列为空时**无缝回退**
-    预生成的 base 动画帧 + 静音音频，保持推流不中断，直到生产线程追上。
-- 切块粒度更细（短句优先），与现有 TTS 异步预取叠加，减少单句等待。
+- ✅ **Watchdog 架构已落地**（`stream_worker.py`）：
+  - **消费推流线程（Watchdog）**：独立线程以恒定 `fps`（默认 24）向 ffmpeg
+    写帧，读 `Ready_Frames_Queue`；队列空时**立即回退** base 动画帧 + 静音音频，
+    推流永不中断、播放器不转圈。
+  - **生产推理线程**：异步 Edge-TTS → Wav2Lip 小批量（8 帧）产帧入队，
+    首批即切换说话；连续多句无缝拼接（产帧快于实时）。
+  - ffmpeg 去掉 `-re`，改由 Watchdog 在 Python 侧精确节流（避免 lag→EOF 断流）。
+- [ ] 实机长播压测：多轮连续弹幕 + 长文本，观察推流/播放器是否持续无卡顿。
 
 ### Task 4.3 长期记忆（Long-term Memory）— [ ]
 

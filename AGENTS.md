@@ -101,13 +101,17 @@
 - ✅ 人脸修复（Wav2Lip 口型变形）：`worker/ai/enhancer.py` 双轨 ONNX 增强器——
   离线 CodeFormer（`w` 输入保真度，默认 0.6）、直播 GFPGANv1.4（人脸 ROI + 羽化
   遮罩）；接入 `lipsync_onnx._run_batch_frames`（offline `real.py` 默认 codeformer；
-  直播 `stream_worker.py` **默认关闭**，GFPGAN 在 Apple Silicon CoreML 约 1s/帧会
-  拖死 24fps 推流，需显式 `FACE_ENHANCER=gfpgan` + `ENHANCER_MAX_FPS` 限频）；模型放
-  `worker/models/restoration/`，`uv run python download_models.py --models restoration`
-  下载；缺模型自动降级为 no-op 不中断管线。离线效果已验收，对比视频在
-  `docs/videos/`（`noCodeFormer.mp4` vs `CodeFormer.mp4`）。ffmpeg 管道断裂
-  （`FFmpegPipeClosedError`）会让 session 标记 dead 并停止喂帧，控制监听器
-  自动清理后可重新开播。
+  **直播管线完全不用人脸增强**——Watchdog 架构要求恒定 24fps，见下方直播条目）；
+  模型放 `worker/models/restoration/`，
+  `uv run python download_models.py --models restoration` 下载；缺模型自动降级为
+  no-op 不中断管线。离线效果已验收，对比视频在 `docs/videos/`
+  （`noCodeFormer.mp4` vs `CodeFormer.mp4`）。
+- ✅ 直播 **Watchdog 架构**（`stream_worker.py`）：独立写帧线程以恒定
+  `fps`（默认 24）向 ffmpeg 写帧，读 `Ready_Frames_Queue`；队列空时**立即回退**
+  base 动画帧 + 静音音频，玩家永不转圈。推理线程异步 Edge-TTS → Wav2Lip 小批量
+  （8 帧）产帧入队，首批即切换说话，连续多句无缝拼接。ffmpeg 不再用 `-re`
+  （由 Watchdog 节流，避免 lag→EOF）。管道断裂（`FFmpegPipeClosedError`）会让
+  session 标记 dead 并停止喂帧，控制监听器自动清理后可重新开播。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
 - ⬜ 待实现（详见 [docs/TODO.md](docs/TODO.md) Phase 4）：口型变形修复
   （GFPGAN/CodeFormer 嘴部局部超分 + 羽化遮罩）、口型性能与直播卡顿

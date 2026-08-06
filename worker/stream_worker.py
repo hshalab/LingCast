@@ -1,20 +1,24 @@
-"""Streaming worker: continuous per-avatar FFmpeg pipe with idle/talking loop.
+"""Streaming worker: continuous per-avatar FFmpeg pipe with a watchdog writer.
 
 One live session per avatar keeps a single ffmpeg process pushing
-`rtmp://localhost:1935/live/avatar_<id>` to SRS. The pipe is NEVER closed
-between chunks:
+`rtmp://localhost:1935/live/avatar_<id>` to SRS. The pipe is NEVER closed and
+the **watchdog writer thread** pushes exactly `fps` frames per second (24 by
+default), so the frontend player never sees a gap and never buffers ("转圈"):
 
-  - IDLE: feed base animation frames + numpy-generated silent audio. The
-    avatar blinks/moves naturally but does not speak.
-  - TALKING: a text chunk popped from `live_queue:<avatar_id>` is synthesized
-    by GPT-SoVITS (async), then Wav2Lip (ONNX) patches the base frames and the
-    lip-synced frames + TTS audio replace the idle stream. When the chunk is
-    done the loop falls straight back to IDLE on the same pipe.
+  - The writer owns the pacing. Every 1/24s it pops the next ready frame from
+    the `Ready_Frames_Queue` (lip-synced frames produced by the inference
+    thread) and writes the matching per-frame audio slice.
+  - If the queue is empty (idle, or Wav2Lip is still producing the first
+    batch), it immediately falls back to the next pre-processed `base_video.mp4`
+    frame + a silent audio slice. The avatar blinks/moves silently; when the
+    first talking batch lands it switches seamlessly back to speech.
+  - The inference thread (async): Edge-TTS runs in the background; finished
+    audio is lip-synced in small Wav2Lip batches (8 frames) and pushed to the
+    queue as fast as possible (faster than real-time), so consecutive chunks
+    splice with no idle gap at all.
 
-FPS and resolution are identical in both states because talking frames are
-generated from the same cached base clip. Video input uses ffmpeg `-re` so the
-stream advances at exactly 1x real time; audio slices are written aligned with
-every `fps/2` frames, so A/V stays in sync and never overruns.
+Face restoration (GFPGAN/CodeFormer) is intentionally OFF in the live pipeline:
+it is ~1s/frame on Apple Silicon CoreML and cannot sustain 24fps.
 """
 
 import json
@@ -32,7 +36,7 @@ from pathlib import Path
 import redis
 
 from storage import S3Storage
-from streaming.ffmpeg_pipe import FFmpegPipeClosedError
+from streaming.ffmpeg_pipe import AUDIO_SAMPLE_RATE, FFmpegPipeClosedError
 from worker import (
     _check_required_env,
     _ensure_nltk_resources,
@@ -45,6 +49,59 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger("stream_worker")
+
+
+class _AudioPacer:
+    """Writes mono 16kHz s16le audio in per-frame slices.
+
+    Each video frame at `fps` represents `sample_rate * 2 / fps` bytes of audio;
+    writing exactly that many bytes per frame keeps the audio input flowing at
+    real time and A/V aligned, without the half-second burst bookkeeping.
+    """
+
+    def __init__(self, fps: float, sample_rate: int = AUDIO_SAMPLE_RATE):
+        self.bytes_per_frame = sample_rate * 2 / fps
+        self._acc = 0.0
+        self._last = 0
+        self._audio: bytes | None = None
+        self._written = 0
+
+    def start(self, audio: bytes | None) -> None:
+        self._audio = audio
+        self._acc = 0.0
+        self._last = 0
+        self._written = 0
+
+    def slice(self) -> bytes:
+        """Bytes to write for the next frame (talking audio or silence)."""
+        self._acc += self.bytes_per_frame
+        target = int(round(self._acc))
+        delta = target - self._last
+        self._last = target
+        if self._audio is not None:
+            seg = self._audio[self._written : self._written + delta]
+            self._written += len(seg)
+            if len(seg) < delta:  # audio ended: pad silence, keep the stream alive
+                seg += b"\x00" * (delta - len(seg))
+            return seg
+        return bytes(delta)
+
+    def remaining(self) -> bytes:
+        return self._audio[self._written :] if self._audio is not None else b""
+
+
+class _TalkingSegment:
+    """One lip-synced sentence waiting in the ready-frames queue."""
+
+    __slots__ = ("text", "audio", "total_frames", "frames_written", "pacer")
+
+    def __init__(self, text: str, audio: bytes, total_frames: int, fps: float):
+        self.text = text
+        self.audio = audio
+        self.total_frames = total_frames
+        self.frames_written = 0
+        self.pacer = _AudioPacer(fps)
+        self.pacer.start(audio)
 
 
 class LiveAvatarSession:
@@ -78,13 +135,20 @@ class LiveAvatarSession:
         self.tts = None
         self.ready = False
 
-        # Talking chunk state (one at a time; TTS runs async while idle).
+        # --- Watchdog architecture state ---
+        # Ready_Frames_Queue: ("seg", _TalkingSegment) then ("frame", ndarray).
+        # The writer thread consumes it at exactly fps; the inference thread
+        # produces it. When empty, the writer falls back to base frames.
+        self._talk_queue: queue_mod.Queue = queue_mod.Queue(maxsize=4096)
+        # Finished TTS results waiting for the frame producer (text, wav|None).
+        self._pending: queue_mod.Queue = queue_mod.Queue(maxsize=4)
         self._tts_results: queue_mod.Queue = queue_mod.Queue(maxsize=2)
         self._tts_thread: threading.Thread | None = None
+        self._produce_thread: threading.Thread | None = None
+        self._writer_thread: threading.Thread | None = None
         self._feed_thread: threading.Thread | None = None
         self._running = False
         self._dead = False
-        self.talking = None  # dict with audio/frames/iter state
         self._subtitle = None
         self._subtitle_text = ""
 
@@ -94,18 +158,11 @@ class LiveAvatarSession:
     def setup(self) -> None:
         """Load the pre-processed base clip from S3 and open the ffmpeg pipe."""
         from ai.lipsync_onnx import Wav2LipOnnxLipSync
-        from ai.enhancer import create_enhancer
         from streaming.ffmpeg_pipe import FFmpegPipe
 
         if not self.base_video_path.exists():
             raise RuntimeError(f"base video not found: {self.base_video_path}")
         self.lipsync = Wav2LipOnnxLipSync()
-        # Live streaming prefers GFPGAN ROI restoration (low latency); missing
-        # models degrade to a no-op with a warning (FACE_ENHANCER=off to disable).
-        enhancer = create_enhancer(pipeline="live")
-        if enhancer is not None:
-            self.lipsync.enhancer = enhancer
-            logger.info("avatar %s face enhancer: %s", self.avatar_id, enhancer.kind)
         self.base_frames, base_fps = Wav2LipOnnxLipSync._read_frames(self.base_video_path)
 
         h, w = self.base_frames[0].shape[:2]
@@ -167,51 +224,17 @@ class LiveAvatarSession:
                 self.tts = GPTSoVITSTTS()
         return self.tts
 
-    # ------------------------------------------------------------------ #
-    # Idle / talking block feeding
-    # ------------------------------------------------------------------ #
-    def tick(self, r: redis.Redis) -> None:
-        """Advance one 0.5s block: take text, switch states, feed the pipe."""
-        # 1) Pull new text from the per-avatar queue when no TTS is in flight
-        #    (LPOP keeps the chunk atomic for this worker). We pop both while
-        #    idle and while talking, so the next sentence is pre-fetched during
-        #    playback; a busy TTS thread never drops the popped chunk.
-        if not self._tts_results.qsize() and (
-            self._tts_thread is None or not self._tts_thread.is_alive()
-        ):
-            new_text = r.lpop(self.queue_key)
-            if new_text:
-                self.maybe_start_tts(new_text)
-
-        # 2) A finished TTS chunk switches the pipe from idle to talking.
-        if self.talking is None:
-            text = None
-            wav = None
-            try:
-                text, wav = self._tts_results.get_nowait()
-            except queue_mod.Empty:
-                pass
-            if wav is not None:
-                self._begin_talking(wav, text)
-            elif text is not None:
-                logger.warning("avatar %s chunk skipped (TTS failed)", self.avatar_id)
-
-        # 3) Feed exactly one block. `-re` on the video input paces everything.
-        if self.talking is not None:
-            if self._feed_talking_block():
-                self.talking = None
-                # Subtitle disappears together with the audio of the chunk.
-                self._subtitle_text = ""
-                logger.info("avatar %s back to idle", self.avatar_id)
-        else:
-            self._feed_idle_block()
-
     def start(self, r: redis.Redis) -> None:
-        """Run the idle/talking feed loop in its own thread so multiple
-        avatars can stream concurrently (each pipe is paced independently)."""
+        """Start the watchdog writer thread and the queue-management loop."""
         if self._feed_thread is not None and self._feed_thread.is_alive():
             return
         self._running = True
+        self._writer_thread = threading.Thread(
+            target=self._writer_loop,
+            daemon=True,
+            name=f"writer-{self.stream_id}",
+        )
+        self._writer_thread.start()
         self._feed_thread = threading.Thread(
             target=self._run_loop,
             args=(r,),
@@ -220,8 +243,126 @@ class LiveAvatarSession:
         )
         self._feed_thread.start()
 
+    # ------------------------------------------------------------------ #
+    # Watchdog writer thread (continuous 24fps consumer)
+    # ------------------------------------------------------------------ #
+    def _writer_loop(self) -> None:
+        """Push exactly `fps` frames/second to ffmpeg, forever.
+
+        Ready frames (lip-synced speech) are consumed from the queue as they
+        arrive; when the queue is empty the writer immediately falls back to
+        the next base-animation frame + a silent audio slice. This is what
+        keeps the player from buffering while Wav2Lip works.
+        """
+        interval = 1.0 / self.fps
+        idle_pacer = _AudioPacer(self.fps)
+        idle_pacer.start(None)
+        cur_seg: _TalkingSegment | None = None
+        logger.info("avatar %s watchdog writer started @ %.3fs/frame", self.avatar_id, interval)
+        try:
+            while self._running:
+                t0 = time.perf_counter()
+
+                try:
+                    kind, payload = self._talk_queue.get_nowait()
+                except queue_mod.Empty:
+                    kind, payload = None, None
+
+                if kind == "seg" and payload is not None:
+                    cur_seg = payload
+                    self._subtitle_text = payload.text
+                    kind = None  # this tick still writes an idle frame
+
+                if kind == "seg_end":
+                    # Producer aborted (e.g. TTS/Wav2Lip failure): abandon the
+                    # current segment and fall back to idle immediately.
+                    cur_seg = None
+                    self._subtitle_text = ""
+                    kind = None
+
+                if kind == "frame" and cur_seg is not None:
+                    audio = cur_seg.pacer.slice()
+                    if audio:
+                        self.pipe.write_audio(audio)
+                    self._write_frame(payload)
+                    cur_seg.frames_written += 1
+                    if cur_seg.frames_written >= cur_seg.total_frames:
+                        rest = cur_seg.pacer.remaining()
+                        if rest:
+                            self.pipe.write_audio(rest)
+                        cur_seg = None
+                        self._subtitle_text = ""
+                else:
+                    # Idle fallback: base animation + silence, never blocking.
+                    audio = idle_pacer.slice()
+                    if audio:
+                        self.pipe.write_audio(audio)
+                    self._write_frame(self._idle_frame())
+
+                delay = interval - (time.perf_counter() - t0)
+                if delay > 0:
+                    time.sleep(delay)
+        except FFmpegPipeClosedError as exc:
+            logger.error(
+                "session %s pipe closed: %s — stopping watchdog writer; "
+                "restart the live to rebuild the pipe",
+                self.stream_id,
+                exc,
+            )
+            self._dead = True
+            self._running = False
+            if self.pipe is not None:
+                self.pipe.stop()
+        except Exception:
+            logger.exception("session %s writer error, stopping", self.stream_id)
+            self._dead = True
+            self._running = False
+            if self.pipe is not None:
+                self.pipe.stop()
+
+    def _idle_frame(self):
+        frame = self.base_frames[self.cursor % len(self.base_frames)]
+        self.cursor += 1
+        return frame
+
+    # ------------------------------------------------------------------ #
+    # Queue management loop (lightweight; no pipe I/O)
+    # ------------------------------------------------------------------ #
+    def tick(self, r: redis.Redis) -> None:
+        """Pop text, hand finished TTS to the producer, keep queues fed."""
+        # 1) Pull new text when no TTS is in flight and pending has room.
+        if (
+            self._tts_thread is None or not self._tts_thread.is_alive()
+        ) and not self._pending.full():
+            new_text = r.lpop(self.queue_key)
+            if new_text:
+                self.maybe_start_tts(new_text)
+
+        # 2) Move finished TTS results into the producer's pending queue.
+        try:
+            text, wav = self._tts_results.get_nowait()
+            self._pending.put((text, wav))
+        except queue_mod.Empty:
+            pass
+
+        # 3) Start the frame producer when it is idle and work is pending.
+        if (
+            self._produce_thread is None or not self._produce_thread.is_alive()
+        ) and not self._pending.empty():
+            text, wav = self._pending.get_nowait()
+            self._produce_thread = threading.Thread(
+                target=self._produce_segment,
+                args=(text, wav),
+                daemon=True,
+                name=f"produce-{self.stream_id}",
+            )
+            self._produce_thread.start()
+        time.sleep(0.05)
+
     def _run_loop(self, r: redis.Redis) -> None:
         while self._running:
+            if self._dead:
+                break
             try:
                 self.tick(r)
             except FFmpegPipeClosedError as exc:
@@ -239,79 +380,44 @@ class LiveAvatarSession:
                 logger.exception("session %s feed error, continuing", self.stream_id)
                 time.sleep(0.2)
 
-    def _feed_idle_block(self) -> None:
-        from streaming.ffmpeg_pipe import AUDIO_SAMPLE_RATE
+    # ------------------------------------------------------------------ #
+    # Inference producer (async; Wav2Lip in small batches)
+    # ------------------------------------------------------------------ #
+    def _produce_segment(self, text: str, wav) -> None:
+        """Lip-sync `wav` in small batches and push frames to the writer queue.
 
-        half_sec_bytes = AUDIO_SAMPLE_RATE * 2 // 2
-        half_sec_frames = max(1, int(round(self.fps / 2)))
-        self.pipe.write_audio(b"\x00\x00" * (half_sec_bytes // 2))
-        for _ in range(half_sec_frames):
-            frame = self.base_frames[self.cursor % len(self.base_frames)]
-            self.cursor += 1
-            self._write_frame(frame)
-
-    def _begin_talking(self, tts_wav: Path, text: str) -> None:
-        from streaming.ffmpeg_pipe import AUDIO_SAMPLE_RATE
-
-        # The spoken sentence stays on screen as a subtitle until the next one.
-        self._subtitle_text = text
-
-        audio = self.lipsync.audio_pcm16(tts_wav)
-        half_sec_bytes = AUDIO_SAMPLE_RATE * 2 // 2
-        half_sec_frames = max(1, int(round(self.fps / 2)))
-        n_frames = len(self.lipsync._mel_chunks(tts_wav, self.fps))
-        self.talking = {
-            "audio": audio,
-            "audio_pos": 0,
-            "half_sec_bytes": half_sec_bytes,
-            "half_sec_frames": half_sec_frames,
-            "total_frames": n_frames,
-            "frames": self.lipsync.iter_frames(
-                tts_wav,
-                self._slice_base(n_frames),
-                self.fps,
-            ),
-            "written": 0,
-        }
-        logger.info("avatar %s talking: %d frames", self.avatar_id, n_frames)
-
-    def _feed_talking_block(self) -> bool:
-        """Feed one 0.5s block of lip-synced frames + audio slice.
-
-        Returns True when the chunk is fully consumed (back to idle).
+        Runs on its own thread so it never blocks the 24fps writer. The segment
+        marker is pushed BEFORE the frames so the writer can start the talking
+        state as soon as the first batch lands; time-to-first-frame is one
+        Wav2Lip batch (~8 frames).
         """
-        t = self.talking
-        half_sec_frames = t["half_sec_frames"]
-
-        # First audio slice precedes any frame: ffmpeg waits for the first
-        # packet of every input before consuming, so video-first deadlocks.
-        if t["written"] == 0:
-            self._write_talking_audio(t)
-
-        for _ in range(half_sec_frames):
-            if t["written"] >= t["total_frames"]:
-                break
+        if wav is None:
+            logger.warning("avatar %s chunk skipped (TTS failed)", self.avatar_id)
+            return
+        try:
+            audio = self.lipsync.audio_pcm16(wav)
+            n_frames = len(self.lipsync._mel_chunks(wav, self.fps))
+            seg = _TalkingSegment(text, audio, n_frames, self.fps)
+            self._talk_queue.put(("seg", seg))
+            base_slice = self._slice_base(n_frames)
+            frames = self.lipsync.iter_frames(wav, base_slice, self.fps)
+            pushed = 0
+            for frame in frames:
+                self._talk_queue.put(("frame", frame))
+                pushed += 1
+            logger.info(
+                "avatar %s talking segment queued: %d frames (%.1fs speech)",
+                self.avatar_id,
+                pushed,
+                len(audio) / 2 / AUDIO_SAMPLE_RATE,
+            )
+        except Exception:
+            logger.exception("avatar %s segment production failed", self.avatar_id)
+            # Let the watchdog drop the unfinished segment and go back to idle.
             try:
-                frame = next(t["frames"])
-            except StopIteration:
-                break
-            self._write_frame(frame)
-            t["written"] += 1
-
-        # One audio slice per half-second of video keeps A/V interleaved.
-        if t["written"] > 0 and t["written"] % half_sec_frames == 0:
-            self._write_talking_audio(t)
-
-        done = t["written"] >= t["total_frames"]
-        if done:
-            self._write_talking_audio(t)  # flush any trailing audio
-        return done
-
-    def _write_talking_audio(self, t: dict) -> None:
-        end = min(t["audio_pos"] + t["half_sec_bytes"], len(t["audio"]))
-        if t["audio_pos"] < len(t["audio"]):
-            self.pipe.write_audio(t["audio"][t["audio_pos"] : end])
-            t["audio_pos"] = end
+                self._talk_queue.put(("seg_end", None))
+            except Exception:
+                pass
 
     def _write_frame(self, frame) -> None:
         """Apply the subtitle overlay then push the frame into the pipe."""
@@ -347,8 +453,13 @@ class LiveAvatarSession:
 
     def close(self) -> None:
         self._running = False
-        if self._feed_thread is not None:
-            self._feed_thread.join(timeout=5)
+        for thread in (self._writer_thread, self._feed_thread, self._produce_thread):
+            if (
+                thread is not None
+                and thread.is_alive()
+                and thread is not threading.current_thread()
+            ):
+                thread.join(timeout=5)
         if self.pipe is not None:
             self.pipe.stop()
 

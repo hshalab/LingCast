@@ -90,9 +90,12 @@
   对应语言；直播间 AI 按界面语言回复。
 - [x] **人脸修复（解决 Wav2Lip 口型变形）**：双轨增强器（`worker/ai/enhancer.py`）——
   离线播报用 CodeFormer ONNX（保真度 `w=0.6`）全脸修复（默认开启），直播链路用
-  GFPGANv1.4 ONNX 只修复人脸 ROI + 羽化遮罩（**需显式 `FACE_ENHANCER=gfpgan` 开启**，
-  Apple Silicon CoreML 约 1s/帧会拖死 24fps 推流；GPU 机器配合 `ENHANCER_MAX_FPS`
-  限频）。纯 ONNX 推理（CoreML/CUDA/ROCm）；离线效果已验证（见下方对比视频）。
+  GFPGANv1.4 ONNX 只修复人脸 ROI + 羽化遮罩（**直播管线完全不用人脸增强**——
+  Watchdog 架构要求恒定 24fps，GFPGAN 在 Apple Silicon CoreML 约 1s/帧）。
+  纯 ONNX 推理（CoreML/CUDA/ROCm）；离线效果已验证（见下方对比视频）。
+- [x] **Watchdog 直播架构（不再转圈）**：独立写帧线程以恒定 24fps 推给 ffmpeg，
+  消费 Ready 帧队列；Wav2Lip 还在产帧时立即回退 base 动画 + 静音，播放器
+  永不掉线/缓冲。推理异步小批量（8 帧）产帧，连续句子无缝拼接。
 - [ ] **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
 
 ### 规划中（Roadmap）
