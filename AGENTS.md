@@ -104,8 +104,10 @@
   直播 `stream_worker.py` **默认关闭**，GFPGAN 在 Apple Silicon CoreML 约 1s/帧会
   拖死 24fps 推流，需显式 `FACE_ENHANCER=gfpgan` + `ENHANCER_MAX_FPS` 限频）；模型放
   `worker/models/restoration/`，`uv run python download_models.py --models restoration`
-  下载；缺模型自动降级为 no-op 不中断管线。ffmpeg 管道断裂（`FFmpegPipeClosedError`）
-  会让 session 标记 dead 并停止喂帧，控制监听器自动清理后可重新开播。
+  下载；缺模型自动降级为 no-op 不中断管线。离线效果已验收，对比视频在
+  `docs/videos/`（`noCodeFormer.mp4` vs `CodeFormer.mp4`）。ffmpeg 管道断裂
+  （`FFmpegPipeClosedError`）会让 session 标记 dead 并停止喂帧，控制监听器
+  自动清理后可重新开播。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
 - ⬜ 待实现（详见 [docs/TODO.md](docs/TODO.md) Phase 4）：口型变形修复
   （GFPGAN/CodeFormer 嘴部局部超分 + 羽化遮罩）、口型性能与直播卡顿

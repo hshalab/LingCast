@@ -111,8 +111,9 @@ AMD GPUs using ROCm.
 - ✅ 管线接入：`lipsync_onnx._run_batch_frames` 增强后帧；`real.py`（离线）默认
   codeformer、`stream_worker.py`（直播）默认 gfpgan，`FACE_ENHANCER=off` 可关，
   缺模型自动降级 no-op。
-- [ ] 实机画质验收：不同形象/语速下微调 `roi_padding`/`feather_ratio`/
-  `CODEFORMER_FIDELITY_WEIGHT`。
+- [x] 实机画质验收：离线成品对比视频已放 `docs/videos/`
+  （`noCodeFormer.mp4` vs `CodeFormer.mp4`），观感提升明显；后续可在不同
+  形象/语速下微调 `roi_padding`/`feather_ratio`/`CODEFORMER_FIDELITY_WEIGHT`。
 
 ### Task 4.2 口型性能与推流卡顿（Latency / Streaming Stutter）— [ ]
 

@@ -111,7 +111,8 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   mask in the live pipeline, CodeFormer ONNX (fidelity `w=0.6`) restores full-face detail
   offline. ONNX-only inference (CoreML/CUDA/ROCm); offline is on by default, live
   requires explicit `FACE_ENHANCER=gfpgan` (GFPGAN is ~1s/frame on Apple Silicon CoreML,
-  throttle with `ENHANCER_MAX_FPS` on GPU machines).
+  throttle with `ENHANCER_MAX_FPS` on GPU machines). Offline quality validated with
+  before/after comparison videos (see below).
 - [ ] **Mock pipeline** (`AI_MODE=mock`): lightweight placeholder for Docker Worker image demos.
 
 ### Planned (roadmap)
@@ -141,6 +142,16 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
 | --- | --- | --- |
 | ![Home](docs/images/pc1.png) | ![Live room - desktop](docs/images/pc2.png) | ![Live room - chat](docs/images/pc3.png) |
 | ![Live room - dark](docs/images/pc4.png) | ![Live room - light](docs/images/pc5.png) | |
+
+## Face Restoration Comparison
+
+Offline broadcast results with and without the CodeFormer face-restoration stage
+(same script, same avatar — compare the chin / mouth region; enabled by default,
+disable with `FACE_ENHANCER=off`):
+
+| Without CodeFormer | With CodeFormer |
+| --- | --- |
+| <video src="docs/videos/noCodeFormer.mp4" controls width="240"></video> | <video src="docs/videos/CodeFormer.mp4" controls width="240"></video> |
 
 ## Architecture
 

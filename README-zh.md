@@ -92,7 +92,7 @@
   离线播报用 CodeFormer ONNX（保真度 `w=0.6`）全脸修复（默认开启），直播链路用
   GFPGANv1.4 ONNX 只修复人脸 ROI + 羽化遮罩（**需显式 `FACE_ENHANCER=gfpgan` 开启**，
   Apple Silicon CoreML 约 1s/帧会拖死 24fps 推流；GPU 机器配合 `ENHANCER_MAX_FPS`
-  限频）。纯 ONNX 推理（CoreML/CUDA/ROCm）。
+  限频）。纯 ONNX 推理（CoreML/CUDA/ROCm）；离线效果已验证（见下方对比视频）。
 - [ ] **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
 
 ### 规划中（Roadmap）
@@ -120,6 +120,15 @@
 | --- | --- | --- |
 | ![首页](docs/images/pc1.png) | ![直播间-桌面](docs/images/pc2.png) | ![直播间-聊天](docs/images/pc3.png) |
 | ![直播间-暗色](docs/images/pc4.png) | ![直播间-亮色](docs/images/pc5.png) | |
+
+## 人脸修复效果对比
+
+离线播报在开启/关闭 CodeFormer 人脸修复下的成品对比（同一脚本、同一数字人，
+重点看下巴与嘴部区域；离线默认开启，`FACE_ENHANCER=off` 可关闭）：
+
+| 未开启 CodeFormer | 开启 CodeFormer |
+| --- | --- |
+| <video src="docs/videos/noCodeFormer.mp4" controls width="240"></video> | <video src="docs/videos/CodeFormer.mp4" controls width="240"></video> |
 
 ## 架构
 
