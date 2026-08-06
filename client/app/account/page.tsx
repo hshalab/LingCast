@@ -101,7 +101,7 @@ export default function AccountPage() {
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs ${
                     identity.isGuest
-                      ? 'bg-muted/80 text-subtle'
+                      ? 'bg-hover text-subtle'
                       : 'bg-blue-600/20 text-blue-300'
                   }`}
                 >

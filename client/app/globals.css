@@ -5,6 +5,7 @@
 :root {
   --bg: 250 250 250; /* zinc-50 */
   --surface: 255 255 255;
+  --hover: 228 228 231; /* zinc-200 — hover/pill background */
   --muted: 113 113 122; /* zinc-500 */
   --subtle: 82 82 91; /* zinc-600 */
   --faint: 161 161 170; /* zinc-400 */
@@ -16,6 +17,7 @@
 .dark {
   --bg: 9 9 11; /* zinc-950 */
   --surface: 24 24 27; /* zinc-900 */
+  --hover: 39 39 42; /* zinc-800 — hover/pill background */
   --muted: 161 161 170; /* zinc-400 */
   --subtle: 212 212 216; /* zinc-300 */
   --faint: 113 113 122; /* zinc-500 */
@@ -27,6 +29,7 @@
 @theme inline {
   --color-background: rgb(var(--bg));
   --color-surface: rgb(var(--surface));
+  --color-hover: rgb(var(--hover));
   --color-muted: rgb(var(--muted));
   --color-subtle: rgb(var(--subtle));
   --color-faint: rgb(var(--faint));

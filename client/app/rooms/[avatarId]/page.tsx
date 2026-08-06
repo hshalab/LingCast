@@ -491,7 +491,7 @@ export default function RoomPage() {
                   <button
                     key={p}
                     onClick={() => setInput((v) => v + p)}
-                    className='rounded-lg px-2 py-1 text-xs text-muted transition hover:bg-muted hover:text-foreground'
+                    className='rounded-lg px-2 py-1 text-xs text-muted transition hover:bg-hover hover:text-foreground'
                   >
                     {p}
                   </button>

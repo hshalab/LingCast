@@ -76,7 +76,7 @@ export default function NavHeader() {
                   <button
                     onClick={() => setMenuOpen((o) => !o)}
                     className={`flex items-center gap-2 rounded-full border border-border px-1.5 py-1.5 pe-3 transition hover:border-foreground/40 ${
-                      identity.isGuest ? 'bg-muted/80' : 'bg-blue-600/15'
+                      identity.isGuest ? 'bg-hover' : 'bg-blue-600/15'
                     }`}
                   >
                     <span
@@ -106,7 +106,7 @@ export default function NavHeader() {
                         <Link
                           href='/account'
                           onClick={() => setMenuOpen(false)}
-                          className='flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-foreground transition hover:bg-muted'
+                          className='flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-foreground transition hover:bg-hover'
                         >
                           <UserRound className='size-4 text-muted' />
                           {t('nav.profile')}
@@ -120,7 +120,7 @@ export default function NavHeader() {
                             setMenuOpen(false)
                             setConfirmLogout(true)
                           }}
-                          className='flex w-full items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-400 transition hover:bg-muted'
+                          className='flex w-full items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-400 transition hover:bg-hover'
                         >
                           <LogOut className='size-4' />
                           {t('nav.logout')}
