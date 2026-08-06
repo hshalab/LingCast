@@ -164,6 +164,20 @@ class LiveAvatarSession:
             raise RuntimeError(f"base video not found: {self.base_video_path}")
         self.lipsync = Wav2LipOnnxLipSync()
         self.base_frames, base_fps = Wav2LipOnnxLipSync._read_frames(self.base_video_path)
+        # Preload the Wav2Lip session + face detector so the FIRST sentence
+        # starts as soon as TTS lands (lazy load would add 2-4s at talk time).
+        try:
+            self.lipsync._load_model()
+            self.lipsync._face_detect(self.base_frames[:1])
+            logger.info(
+                "avatar %s lipsync model + face detector warmed up",
+                self.avatar_id,
+            )
+        except Exception:
+            logger.exception(
+                "avatar %s lipsync warmup failed (will retry lazily)",
+                self.avatar_id,
+            )
 
         h, w = self.base_frames[0].shape[:2]
         self.pipe = FFmpegPipe(
