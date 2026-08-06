@@ -32,6 +32,7 @@ var zh = catalog{
 	// ---- live ----
 	"err.live.invalid_avatar_id":         "无效的 avatarID",
 	"err.live.avatar_not_found":          "数字人不存在",
+	"err.live.base_video_missing":        "该数字人的基础视频尚未就绪，无法开始聊天渲染",
 	"err.live.session_not_started":       "直播尚未开始",
 	"err.live.notify_worker_failed":      "通知 Worker 失败：%s",
 	"err.live.text_required":             "text 字段为必填项",

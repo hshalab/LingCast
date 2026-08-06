@@ -22,7 +22,7 @@ type Client struct {
 }
 
 // New builds an S3 client using path-style addressing, which is required by
-// RustFS / MinIO style endpoints.
+// RustFS / other S3-compatible endpoints.
 func New(cfg config.Config) (*Client, error) {
 	awsCfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),

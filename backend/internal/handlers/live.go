@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -22,12 +25,81 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/packages/param"
 	"github.com/openai/openai-go/responses"
 )
 
 // sentenceSplit matches a run of sentence-final punctuation (Chinese and
 // English, plus newlines). Sentences are kept intact including the delimiter.
 var sentenceSplit = regexp.MustCompile(`[^。！？!?；;\n]+[。！？!?；;\n]*`)
+
+// sentenceBoundaryChars are the delimiters used by the STREAMING splitter
+// (Chinese comma included, per the orchestrator spec). Fragments shorter than
+// minSentenceRunes are merged into the following sentence so comma splits do
+// not produce one-character TTS jobs.
+const sentenceBoundaryChars = "。，！？.!?"
+const minSentenceRunes = 2
+
+// indexSentenceBoundary returns the byte offset just AFTER the first sentence
+// boundary rune in s (delimiter included), or -1 when none is found. It walks
+// runes so multi-byte CJK punctuation is never split.
+func indexSentenceBoundary(s string) int {
+	for i, r := range s {
+		if strings.ContainsRune(sentenceBoundaryChars, r) {
+			return i + utf8.RuneLen(r)
+		}
+	}
+	return -1
+}
+
+// sentenceCollector accumulates streaming LLM deltas and yields complete
+// sentences. It is NOT safe for concurrent use — the orchestrator feeds it
+// from the single stream loop, which is what keeps the sentence order exact.
+type sentenceCollector struct {
+	buf     strings.Builder // current unfinished sentence
+	pending strings.Builder // fragments too short to submit on their own
+}
+
+// feed appends one delta and returns any complete sentences it produced.
+func (sc *sentenceCollector) feed(delta string) []string {
+	sc.buf.WriteString(delta)
+	var out []string
+	for {
+		cur := sc.buf.String()
+		idx := indexSentenceBoundary(cur)
+		if idx < 0 {
+			break
+		}
+		part := cur[:idx] // sentence + its delimiter
+		rest := cur[idx:]
+		sc.buf.Reset()
+		sc.buf.WriteString(rest)
+
+		if utf8.RuneCountInString(strings.TrimSpace(part)) >= minSentenceRunes {
+			if sc.pending.Len() > 0 {
+				part = sc.pending.String() + part
+				sc.pending.Reset()
+			}
+			if s := strings.TrimSpace(part); s != "" {
+				out = append(out, s)
+			}
+		} else {
+			sc.pending.WriteString(part)
+		}
+	}
+	return out
+}
+
+// flush returns any buffered remainder as one final sentence (stream end).
+func (sc *sentenceCollector) flush() []string {
+	tail := sc.pending.String() + sc.buf.String()
+	sc.pending.Reset()
+	sc.buf.Reset()
+	if s := strings.TrimSpace(tail); utf8.RuneCountInString(s) >= minSentenceRunes {
+		return []string{s}
+	}
+	return nil
+}
 
 // LiveHandler manages live sessions: session lifecycle (start), per-avatar
 // text intake (push, sentence-chunked into a Redis list) and status/queue
@@ -41,6 +113,8 @@ type LiveHandler struct {
 	openAIBaseURL       string
 	openAIModel         string
 	embedServerURL      string
+	ttsServiceURL       string
+	taskQueueKey        string
 }
 
 type startLiveRequest struct {
@@ -60,6 +134,35 @@ type liveMessageRequest struct {
 type liveMessageResponse struct {
 	Reply      string `json:"reply"`
 	ChunkCount int    `json:"chunkCount"`
+}
+
+// liveChatRequest is the input of POST /api/live/chat. sessionId identifies
+// the avatar's live session — in this platform a session maps 1:1 to an
+// avatar (live_sessions.avatar_id), so chat_messages are keyed by avatar_id.
+type liveChatRequest struct {
+	SessionID uint   `json:"sessionId"`
+	Text      string `json:"text"`
+	UserID    uint   `json:"userId"`
+	Username  string `json:"username"`
+}
+
+// liveChatResponse reports the orchestration result. Only counters and the
+// full reply text are returned — media never crosses this HTTP response.
+type liveChatResponse struct {
+	Status    string `json:"status"`
+	Sentences int    `json:"sentences"`
+	Queued    int    `json:"queued"`
+	Reply     string `json:"reply,omitempty"`
+}
+
+// renderTaskPayload is pushed to the Redis task queue (talking_avatar:tasks)
+// for EACH sentence. Services communicate exclusively via S3 object keys —
+// no raw audio/video bytes ever travel in the payload.
+type renderTaskPayload struct {
+	Type           string `json:"type"` // "render"
+	Text           string `json:"text"`
+	TTSS3Key       string `json:"tts_s3_key"`
+	BaseVideoS3Key string `json:"base_video_s3_key"`
 }
 
 type liveSessionResponse struct {
@@ -98,11 +201,12 @@ type liveSessionItem struct {
 	LiveSettings       models.LiveSettings `json:"liveSettings"`
 }
 
-func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey, openAIAPIKey, openAIBaseURL, openAIModel, embedServerURL string) *LiveHandler {
+func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey, taskQueueKey, openAIAPIKey, openAIBaseURL, openAIModel, embedServerURL, ttsServiceURL string) *LiveHandler {
 	return &LiveHandler{
 		db: db, q: q, s3: s3, liveControlQueueKey: liveControlQueueKey,
 		openAIAPIKey: openAIAPIKey, openAIBaseURL: openAIBaseURL, openAIModel: openAIModel,
-		embedServerURL: embedServerURL,
+		embedServerURL: embedServerURL, ttsServiceURL: ttsServiceURL,
+		taskQueueKey: taskQueueKey,
 	}
 }
 
@@ -349,6 +453,232 @@ func (h *LiveHandler) Message(c *gin.Context) {
 	c.JSON(http.StatusOK, liveMessageResponse{Reply: reply, ChunkCount: len(chunks)})
 }
 
+// Chat implements POST /api/live/chat — the live-chat orchestrator. It runs
+// the pipeline in a strict order:
+//
+//  1. Long-term memory: fetch the last 10 chat_messages of this session
+//     (avatar_id) and format them as LLM messages [{"role","content"}].
+//  2. RAG knowledge: POST to the knowledge service
+//     (http://rag-service:8001/v1/knowledge/search) with a 500ms timeout;
+//     on timeout/failure log a warning and continue WITHOUT knowledge.
+//  3. Streaming LLM (DeepSeek Responses, stream=true): tokens are appended
+//     to a sentence buffer and split on Chinese/English punctuation
+//     [。，！？.!?]; each complete sentence is handed to step 4 immediately.
+//  4. Ordered TTS + queueing: sentences are synthesized and pushed to the
+//     Redis queue (talking_avatar:tasks) ONE BY ONE in the exact order the
+//     LLM produced them — the serial loop guarantees no race can reorder
+//     them. Each TTS call (http://tts-service:8002/v1/tts/synthesize) is
+//     bounded by a 3s timeout and returns an S3 key; the render payload
+//     carries only S3 keys.
+//
+// Client disconnects: the request context is honored everywhere (LLM stream,
+// TTS calls, Redis pushes); the loop bails out as soon as ctx is canceled,
+// so no goroutine is spawned and nothing leaks.
+func (h *LiveHandler) Chat(c *gin.Context) {
+	var req liveChatRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.SessionID == 0 || strings.TrimSpace(req.Text) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.text_required")})
+		return
+	}
+
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, req.SessionID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.live.avatar_not_found")})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	if strings.TrimSpace(strPtrOrEmpty(avatar.BaseVideoS3Key)) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.base_video_missing")})
+		return
+	}
+
+	ctx := c.Request.Context()
+	userText := strings.TrimSpace(req.Text)
+
+	// Persist the viewer message so long-term memory stays populated.
+	sender := strings.TrimSpace(req.Username)
+	if sender == "" {
+		sender = "游客"
+	}
+	_ = h.db.Create(&models.ChatMessage{
+		AvatarID: avatar.ID,
+		UserID:   req.UserID,
+		Username: sender,
+		Role:     "user",
+		Content:  userText,
+	})
+
+	// ---- 1. Long-term memory (GORM -> standard LLM messages) ----
+	msgs := h.recentMessages(avatar.ID, 10)
+	input := make(responses.ResponseInputParam, 0, len(msgs)+1)
+	for _, m := range msgs {
+		role := responses.EasyInputMessageRoleUser
+		if m.Role == "bot" {
+			role = responses.EasyInputMessageRoleAssistant
+		}
+		input = append(input, responses.ResponseInputItemUnionParam{
+			OfMessage: &responses.EasyInputMessageParam{
+				Role: role,
+				Content: responses.EasyInputMessageContentUnionParam{
+					OfString: param.NewOpt(m.Content),
+				},
+			},
+		})
+	}
+	input = append(input, responses.ResponseInputItemUnionParam{
+		OfMessage: &responses.EasyInputMessageParam{
+			Role: responses.EasyInputMessageRoleUser,
+			Content: responses.EasyInputMessageContentUnionParam{
+				OfString: param.NewOpt(userText),
+			},
+		},
+	})
+
+	// ---- 2. RAG knowledge (500ms timeout, graceful fallback) ----
+	ragFacts := h.retrieveKnowledge(ctx, avatar.ID, userText, 500*time.Millisecond)
+	systemPrompt := chatSystemPrompt(avatar, i18n.Lang(c), nil, ragFacts)
+
+	// ---- 3. Streaming LLM + sentence chunking ----
+	client := openai.NewClient(
+		option.WithBaseURL(strings.TrimRight(h.openAIBaseURL, "/")),
+		option.WithAPIKey(h.openAIAPIKey),
+	)
+	stream := client.Responses.NewStreaming(ctx, responses.ResponseNewParams{
+		Model:           h.openAIModel,
+		Instructions:    openai.String(systemPrompt),
+		Input:           responses.ResponseNewParamsInputUnion{OfInputItemList: input},
+		Temperature:     openai.Float(0.8),
+		MaxOutputTokens: openai.Int(300),
+	})
+	defer stream.Close()
+
+	collector := &sentenceCollector{}
+	sentences := make([]string, 0, 8)
+	var reply strings.Builder
+	for stream.Next() {
+		event := stream.Current()
+		delta := event.AsResponseOutputTextDelta()
+		if delta.Type != "response.output_text.delta" {
+			continue
+		}
+		reply.WriteString(delta.Delta)
+		sentences = append(sentences, collector.feed(delta.Delta)...)
+
+		// Bail out promptly if the Gin client disconnected mid-stream.
+		if ctx.Err() != nil {
+			log.Printf("[chat] client disconnected during streaming; stopping")
+			return
+		}
+	}
+	if err := stream.Err(); err != nil {
+		log.Printf("[chat] LLM stream error (partial reply kept): %v", err)
+	}
+	sentences = append(sentences, collector.flush()...)
+
+	// ---- 4. Ordered TTS synthesis + queueing (serial => strict order) ----
+	queued := 0
+	for _, sentence := range sentences {
+		if ctx.Err() != nil {
+			log.Printf("[chat] client disconnected; %d/%d sentences queued", queued, len(sentences))
+			return
+		}
+		if err := h.synthesizeAndEnqueue(ctx, avatar, sentence); err != nil {
+			// One bad sentence must not crash the whole turn.
+			log.Printf("[chat] sentence skipped (%v): %q", err, sentence)
+			continue
+		}
+		queued++
+	}
+
+	finalReply := strings.TrimSpace(reply.String())
+	ragJSON := ""
+	if len(ragFacts) > 0 {
+		if b, err := json.Marshal(ragFacts); err == nil {
+			ragJSON = string(b)
+		}
+	}
+	_ = h.db.Create(&models.ChatMessage{
+		AvatarID:   avatar.ID,
+		UserID:     req.UserID,
+		Username:   avatar.Name,
+		Role:       "bot",
+		Content:    finalReply,
+		RAGHit:     len(ragFacts) > 0,
+		RAGSources: ragJSON,
+	})
+
+	c.JSON(http.StatusOK, liveChatResponse{
+		Status:    "success",
+		Sentences: len(sentences),
+		Queued:    queued,
+		Reply:     finalReply,
+	})
+}
+
+// synthesizeAndEnqueue runs ONE sentence through tts-service (3s timeout),
+// reads the returned S3 key and pushes a render task to the Redis queue.
+// The call is serial, which is what preserves the LLM's sentence order.
+func (h *LiveHandler) synthesizeAndEnqueue(ctx context.Context, avatar models.Avatar, sentence string) error {
+	if strings.TrimSpace(h.ttsServiceURL) == "" {
+		return fmt.Errorf("tts-service URL not configured")
+	}
+	body, err := json.Marshal(map[string]any{
+		"text":    sentence,
+		"voiceId": avatar.VoiceID,
+	})
+	if err != nil {
+		return err
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(
+		reqCtx,
+		http.MethodPost,
+		strings.TrimRight(h.ttsServiceURL, "/")+"/v1/tts/synthesize",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("tts-service request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("tts-service returned %d", resp.StatusCode)
+	}
+	var out struct {
+		S3Key string `json:"s3_key"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return fmt.Errorf("bad tts-service response: %w", err)
+	}
+	if strings.TrimSpace(out.S3Key) == "" {
+		return fmt.Errorf("tts-service returned an empty s3_key")
+	}
+
+	payload := renderTaskPayload{
+		Type:           "render",
+		Text:           sentence,
+		TTSS3Key:       out.S3Key,
+		BaseVideoS3Key: strPtrOrEmpty(avatar.BaseVideoS3Key),
+	}
+	return h.q.PushTo(ctx, h.taskQueueKey, payload)
+}
+
+// strPtrOrEmpty dereferences a *string (GORM pointer columns) safely.
+func strPtrOrEmpty(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
 // llmChat sends the user text to the LLM through the OpenAI SDK pointed at the
 // configured base URL (DeepSeek by default, Responses API) and returns the
 // assistant's reply. Without an API key the input is spoken verbatim (test).
@@ -364,7 +694,7 @@ func (h *LiveHandler) llmChat(c *gin.Context, userText string, avatar models.Ava
 	)
 	lang := i18n.Lang(c)
 	memory := h.recentMessages(avatar.ID, 10)
-	ragFacts := h.retrieveKnowledge(avatar.ID, userText)
+	ragFacts := h.retrieveKnowledge(c.Request.Context(), avatar.ID, userText, 500*time.Millisecond)
 	if len(ragFacts) > 0 {
 		log.Printf("[rag] avatar %d retrieved %d fact(s)", avatar.ID, len(ragFacts))
 	}
@@ -403,11 +733,12 @@ func (h *LiveHandler) recentMessages(avatarID uint, limit int) []models.ChatMess
 	return msgs
 }
 
-// retrieveKnowledge sends the user message to the rag-service (Jieba FTS +
-// per-avatar scalar filter) and returns the Top-K chunks for THIS avatar only.
-// Any failure degrades gracefully: the chat simply continues without
-// knowledge context.
-func (h *LiveHandler) retrieveKnowledge(avatarID uint, text string) []string {
+// retrieveKnowledge sends the user message to the knowledge service
+// (rag-service, zvec Jieba FTS + per-avatar scalar filter) and returns the
+// Top-K chunks for THIS avatar only. The request is bounded by `timeout`
+// (the orchestrator uses 500ms); any failure or timeout degrades gracefully —
+// the chat continues WITHOUT knowledge and never crashes the request.
+func (h *LiveHandler) retrieveKnowledge(ctx context.Context, avatarID uint, text string, timeout time.Duration) []string {
 	if strings.TrimSpace(h.embedServerURL) == "" {
 		return nil
 	}
@@ -418,13 +749,21 @@ func (h *LiveHandler) retrieveKnowledge(avatarID uint, text string) []string {
 	if err != nil {
 		return nil
 	}
-	resp, err := http.Post(
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(
+		reqCtx,
+		http.MethodPost,
 		strings.TrimRight(h.embedServerURL, "/")+"/v1/knowledge/search",
-		"application/json",
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		log.Printf("[rag] embed server unreachable (%v); continuing without knowledge", err)
+		return nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Printf("[rag] knowledge service unreachable (%v); continuing without knowledge", err)
 		return nil
 	}
 	defer resp.Body.Close()

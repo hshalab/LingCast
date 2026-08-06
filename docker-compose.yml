@@ -25,12 +25,12 @@ services:
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    # Exposed for the hybrid deployment: the Python AI Worker runs natively on
+    # the macOS host (MPS) and must reach Redis via localhost.
     # protected-mode must be off: Docker's published port makes connections
     # arrive from the bridge gateway (not loopback), and with no password
     # protected-mode closes them immediately.
     command: ["sh", "-c", "exec redis-server --appendonly yes --protected-mode no $${REDIS_PASSWORD:+--requirepass $$REDIS_PASSWORD}"]
-    # Exposed for the hybrid deployment: the Python AI Worker runs natively on
-    # the macOS host (MPS) and must reach Redis via localhost.
     ports:
       - "${REDIS_HOST_PORT:-6379}:6379"
     volumes:
@@ -41,52 +41,102 @@ services:
       timeout: 3s
       retries: 10
 
-  # Dev stand-in for RustFS (S3-compatible object storage).
-  minio:
-    image: minio/minio:latest
+  # S3-compatible object storage (RustFS).
+  rustfs:
+    image: rustfs/rustfs:latest
     restart: unless-stopped
-    command: ["server", "/data", "--console-address", ":9001"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      # Single node, single disk (SNSD) mode for the dev environment: one
+      # named volume, no erasure-coding disk-topology checks.
+      RUSTFS_VOLUMES: /data/rustfs0
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      # RustFS reads its own RUSTFS_* env names; the project-wide credential
+      # variables are the S3_* pair shared by every S3 consumer.
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+      RUSTFS_OBS_LOGGER_LEVEL: info
     # Exposed for the hybrid deployment: the host-native worker needs the
-    # S3-compatible endpoint at localhost:9000.
+    # S3-compatible endpoint at localhost:9000. The console (9001) stays on
+    # the internal network only — no host debugging ports.
     ports:
-      - "${MINIO_HOST_PORT:-9000}:9000"
+      - "${RUSTFS_HOST_PORT:-9000}:9000"
     volumes:
-      - minio-data:/data
+      - rustfs-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
+      interval: 10s
       timeout: 5s
       retries: 20
+      start_period: 20s
 
   # One-shot bootstrap: create bucket + public read policy (dev only).
-  minio-init:
+  # mc is a generic S3 client, so it works against the RustFS endpoint too.
+  rustfs-init:
     image: minio/mc:latest
     restart: "no"
     depends_on:
-      minio:
+      rustfs:
         condition: service_healthy
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
       S3_BUCKET: ${S3_BUCKET:-talking-avatar}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+        mc alias set local http://rustfs:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" &&
         mc mb --ignore-existing "local/$$S3_BUCKET" &&
         mc anonymous set download "local/$$S3_BUCKET" &&
         echo "object storage bucket ready"
 
   # ---- Application services (internal network only) ----
-  api:
+  # API split into three microservices sharing the same Go module:
+  #   api-admin     management console (:8081, behind nginx /api)
+  #   api-user      audience / live chat (:8082, behind Next.js proxy)
+  #   api-scheduler worker callbacks  (:8083, behind nginx webhook routes)
+  api-admin:
     build:
       context: ./backend
+      args:
+        SERVICE: api-admin
     restart: unless-stopped
     environment:
-      API_PORT: "8080"
+      API_ADMIN_PORT: "8081"
+      GIN_MODE: release
+      MYSQL_DSN: "${MYSQL_USER:-talking}:${MYSQL_PASSWORD:-talking123}@tcp(mysql:3306)/${MYSQL_DATABASE:-talking_avatar}?charset=utf8mb4&parseTime=True&loc=Local"
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "0"
+      TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks}
+      LIVE_CONTROL_QUEUE_KEY: ${LIVE_CONTROL_QUEUE_KEY:-talking_avatar:live_control}
+      AVATAR_INIT_QUEUE_KEY: ${AVATAR_INIT_QUEUE_KEY:-talking_avatar:avatar_init}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      S3_ENDPOINT: http://rustfs:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+      S3_BUCKET: ${S3_BUCKET:-talking-avatar}
+      S3_USE_SSL: "false"
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000,http://localhost:8080}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+
+  api-user:
+    build:
+      context: ./backend
+      args:
+        SERVICE: api-user
+    restart: unless-stopped
+    environment:
+      API_USER_PORT: "8082"
       GIN_MODE: release
       MYSQL_DSN: "${MYSQL_USER:-talking}:${MYSQL_PASSWORD:-talking123}@tcp(mysql:3306)/${MYSQL_DATABASE:-talking_avatar}?charset=utf8mb4&parseTime=True&loc=Local"
       REDIS_ADDR: redis:6379
@@ -99,11 +149,10 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.deepseek.com}
       OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-flash}
       EMBED_SERVER_URL: ${EMBED_SERVER_URL:-http://rag-service:8001}
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      TTS_SERVICE_URL: ${TTS_SERVICE_URL:-http://tts-service:8002}
+      S3_ENDPOINT: http://rustfs:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
       S3_BUCKET: ${S3_BUCKET:-talking-avatar}
       S3_USE_SSL: "false"
       S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
@@ -113,7 +162,35 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      rustfs:
+        condition: service_healthy
+
+  api-scheduler:
+    build:
+      context: ./backend
+      args:
+        SERVICE: api-scheduler
+    restart: unless-stopped
+    environment:
+      API_SCHEDULER_PORT: "8083"
+      GIN_MODE: release
+      MYSQL_DSN: "${MYSQL_USER:-talking}:${MYSQL_PASSWORD:-talking123}@tcp(mysql:3306)/${MYSQL_DATABASE:-talking_avatar}?charset=utf8mb4&parseTime=True&loc=Local"
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "0"
+      TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks}
+      AVATAR_INIT_QUEUE_KEY: ${AVATAR_INIT_QUEUE_KEY:-talking_avatar:avatar_init}
+      S3_ENDPOINT: http://rustfs:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+      S3_BUCKET: ${S3_BUCKET:-talking-avatar}
+      S3_USE_SSL: "false"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rustfs:
         condition: service_healthy
 
   # Local RAG knowledge-base microservice: zvec FTS + Jieba Chinese, zero
@@ -136,12 +213,12 @@ services:
       context: ./tts-service
     restart: unless-stopped
     environment:
-      S3_ENDPOINT: http://minio:9000
+      S3_ENDPOINT: http://rustfs:9000
       S3_BUCKET: ${S3_BUCKET:-talking-avatar}
-      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
     depends_on:
-      minio:
+      rustfs:
         condition: service_healthy
 
   # ---- Docker mock worker: COMMENTED OUT ----
@@ -159,10 +236,10 @@ services:
   #     REDIS_PASSWORD: ${REDIS_PASSWORD:-}
   #     REDIS_DB: "0"
   #     TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks}
-  #     API_BASE_URL: http://api:8080
-  #     S3_ENDPOINT: http://minio:9000
-  #     S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-  #     S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  #     API_BASE_URL: http://api-scheduler:8083
+  #     S3_ENDPOINT: http://rustfs:9000
+  #     S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+  #     S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
   #     S3_BUCKET: ${S3_BUCKET:-talking-avatar}
   #     S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
   #     AI_MODE: ${AI_MODE:-mock}
@@ -171,7 +248,7 @@ services:
   #       condition: service_started
   #     redis:
   #       condition: service_healthy
-  #     minio:
+  #     rustfs:
   #       condition: service_healthy
 
   # Real-time streaming gateway (SRS v5). The host-native AI worker pushes
@@ -187,32 +264,35 @@ services:
       - srs-data:/usr/local/srs/objs
 
   # ---- Public entry point (the only host-published service) ----
-  frontend:
+  frontend-admin:
     build:
-      context: ./frontend
+      context: ./frontend-admin
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8080}:80"
     depends_on:
-      - api
+      - api-admin
 
   # ---- 观众端（独立 Next.js 客户端，不属于管理后台） ----
-  client:
+  frontend-user:
     build:
-      context: ./client
+      context: ./frontend-user
     restart: unless-stopped
     ports:
       - "${CLIENT_PORT:-3000}:3000"
     environment:
       # Server-side proxy target: browser only talks to :3000, no CORS needed.
-      API_ORIGIN: http://api:8080
+      # Override Docker's injected HOSTNAME (container id) which Next.js
+      # standalone otherwise tries to resolve as its listen address.
+      HOSTNAME: "0.0.0.0"
+      API_ORIGIN: http://api-user:8082
       LIVE_ORIGIN: http://srs:8080
     depends_on:
-      - api
+      - api-user
 
 volumes:
   srs-data:
   mysql-data:
   redis-data:
-  minio-data:
+  rustfs-data:
   rag-zvec-data:

@@ -32,6 +32,7 @@ var en = catalog{
 	// ---- live ----
 	"err.live.invalid_avatar_id":         "invalid avatarID",
 	"err.live.avatar_not_found":          "avatar not found",
+	"err.live.base_video_missing":        "base video is not ready for this avatar; cannot render chat replies",
 	"err.live.session_not_started":       "live session not started",
 	"err.live.notify_worker_failed":      "failed to notify worker: %s",
 	"err.live.text_required":             "field 'text' is required",

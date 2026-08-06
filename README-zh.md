@@ -1,7 +1,7 @@
 # 灵播 LingCast
 
 <p align="center">
-  <img src="frontend/public/images/logo.svg" alt="灵播 LingCast" width="128">
+  <img src="frontend-admin/public/images/logo.svg" alt="灵播 LingCast" width="128">
 </p>
 
 <p align="center"><a href="README.md">English</a> | <a href="README-zh.md">简体中文</a></p>
@@ -49,7 +49,7 @@
   表，重启不丢）。
 - [x] **Broadcast（离线播报）**：选择已就绪数字人 + 输入脚本 → 提交任务 → 轮询 →
   状态卡片内嵌 **xgplayer** 播放成品（9:16 竖版，最大 720×1080，模态窗播放）。
-- [x] **客户端直播间（观众端）**：独立 Next.js + TailwindCSS 项目（`client/`，端口
+- [x] **客户端直播间（观众端）**：独立 Next.js + TailwindCSS 项目（`frontend-user/`，端口
   **3000**，不属于管理后台）：首页有导航头（游客/账号身份、注册/登录/退出）与
   **分类筛选**，列出所有开播机器人（`GET /api/live`）；进入 `/rooms/:avatarId`
   后 xgplayer 拉 HTTP-FLV 观看，聊天面板按用户展示 `用户名 #ID`，可直接向数字人
@@ -108,7 +108,7 @@
   查看分块），支持按知识库做 Top-3 检索测试。
 - [x] **Edge-TTS 微服务**（`tts-service/`，Docker 内网 :8002）：async
   `edge_tts.Communicate` → ffmpeg → **16kHz / 16-bit / 单声道 PCM WAV**
-  （Wav2Lip 下游要求的确切格式）→ 上传 S3（MinIO）→ 只返回 S3 key + 元数据；
+  （Wav2Lip 下游要求的确切格式）→ 上传 S3（RustFS）→ 只返回 S3 key + 元数据；
   `finally` 清理临时文件，S3 配置全部来自环境变量。
 - [x] **聊天日志页**：`/chat-logs` 按数字人/用户 ID/日期/关键字检索 + 分页；
   机器人回复标注「命中知识库」并可展开查看命中的知识片段。
@@ -147,10 +147,11 @@
 
 ```text
 管理后台 :8080 ──> Nginx (frontend)
-  ├── /api    ──> Go API (Gin) ──> MariaDB 11 / Redis 8.2 / MinIO / rag-service
-  └── /media  ──> MinIO (S3 兼容, 模拟 RustFS)
+  ├── /api    ──> api-admin (Gin) ──> MariaDB 11 / Redis 8.2 / RustFS / rag-service
+  └── webhooks ──> api-scheduler（Worker 任务/基础视频回调）
+  └── /media  ──> RustFS (S3 兼容)
 
-观众端 :3000 ──> Next.js（服务端代理 /api、/live）──> Go API / SRS
+观众端 :3000 ──> Next.js（服务端代理 /api、/live）──> api-user / SRS
 
 Python AI Worker ──> Redis 队列 / boto3 下载素材
                   ──> 创建: LivePortrait 生成 base 视频（一次性预处理）
@@ -160,24 +161,27 @@ Python AI Worker ──> Redis 队列 / boto3 下载素材
 rag-service ──> zvec 进程内全文索引（Jieba 中文分词，零模型）
              ──> Go API 直连 /v1/knowledge/{ingest,search,delete,chunks}
 
-tts-service ──> async edge-tts → 16kHz PCM WAV → S3（MinIO）
+tts-service ──> async edge-tts → 16kHz PCM WAV → S3（RustFS）
              ──> POST /v1/tts/synthesize 只返回 S3 key（媒体不过 HTTP）
 ```
 
 - 管理端前端：React + TypeScript + Vite + Tailwind + shadcn/ui（品牌「灵播
   LingCast」，默认暗色主题，可切换亮色；需管理员登录）。
-- 观众端前端：独立 Next.js 16 + TailwindCSS 4（`client/`，亮/暗双主题可切换，
+- 观众端前端：独立 Next.js 16 + TailwindCSS 4（`frontend-user/`，亮/暗双主题可切换，
   无需登录）。
-- 后端：Go + Gin + GORM，标准 AWS S3 SDK v2。
+- 后端：Go + Gin + GORM，拆分为三个微服务（同一 module 共享 internal 包）——
+  `api-admin`（管理端，:8081）、`api-user`（观众端/直播聊天，:8082）、
+  `api-scheduler`（Worker 回调，:8083）；标准 AWS S3 SDK v2。
 - AI Worker：Python 3.11，uv 管理依赖，boto3 + Redis。
 - 知识库微服务：`rag-service`（FastAPI + uv + zvec FTS，Jieba 分词，零模型依赖，
   Docker 内网 8001，数据持久化在 volume `rag-zvec-data`）。
-- 存储：S3 兼容对象存储，开发环境用 MinIO 模拟 RustFS。
+- 存储：S3 兼容对象存储（开发环境直接运行 RustFS）。
 - 部署：Docker Compose 编排基础设施与前端；**真实 AI Worker 在宿主机原生运行**
   （macOS Apple Silicon 用 MPS/CoreML，Linux 用 NVIDIA CUDA 或 AMD ROCm），
   宿主机仅开放必要端口：**3000**（观众端）、**8080**（管理端/API）、**1935**
-  （RTMP 推流）、**6379**（Redis）与 **9000**（MinIO）；`api`、`rag-service`、
-  `tts-service` 均在内网，不开放宿主端口。
+  （RTMP 推流）、**6379**（Redis）与 **9000**（RustFS）；`api-admin`、
+  `api-user`、`api-scheduler`、`rag-service`、`tts-service` 均在内网，不开放
+  宿主端口。
 
 ## 快速开始
 
@@ -286,7 +290,7 @@ uv run python -u worker.py
 ```
 
 > **Warning**：`--inexact` 很重要——镜像预装的 torch 不在 lock 里，不加这个参数
-> `uv sync` 会把 torch 剪掉。`--network=host` 让容器直接访问宿主机的 Redis/MinIO。
+> `uv sync` 会把 torch 剪掉。`--network=host` 让容器直接访问宿主机的 Redis/RustFS。
 
 **方式 B：裸机 Ubuntu + ROCm**
 
@@ -418,12 +422,13 @@ curl http://localhost:8080/api/live/9/status
 
 ```text
 LingCast/
-├── backend/        Go Gin API（模型、S3、Redis、handlers、Dockerfile）
+├── backend/        Go module — 三个微服务：cmd/api-admin、cmd/api-user、
+│                   cmd/api-scheduler（共享 internal/ 包）
 ├── rag-service/    本地 RAG 微服务（FastAPI + uv + zvec FTS/Jieba，:8001）
 ├── tts-service/    Edge-TTS 微服务（FastAPI + uv + edge-tts + ffmpeg，:8002）
-├── frontend/       灵播管理后台（React + shadcn/ui，:8080）
+├── frontend-admin/ 灵播管理后台（React + shadcn/ui，:8080）
 │   └── public/images/  品牌 logo（暗/亮）+ favicon
-├── client/         Next.js 观众端（独立项目，:3000）
+├── frontend-user/  Next.js 观众端（独立项目，:3000）
 │   ├── lib/        聊天身份（identity.tsx）/ 主题（theme.tsx）
 │   └── public/     logo.svg + logo-white.svg
 ├── worker/         Python 3.11 AI Worker（uv、Redis、boto3）
@@ -450,7 +455,7 @@ LingCast/
 
 ## 生产注意事项
 
-- 开发环境用 MinIO 模拟 RustFS 并开放 bucket 公开读（便于浏览器播放）。生产应改用
+- 开发环境直接运行 RustFS 并开放 bucket 公开读（便于浏览器播放）。生产应改用
   真实 RustFS + 私有 bucket + 预签名 URL，调整 `S3_PUBLIC_BASE_URL` 与 nginx
   `/media` 代理。
 - 生产环境请收紧 Worker 回调 Webhook 的鉴权。

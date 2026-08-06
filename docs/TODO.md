@@ -5,7 +5,7 @@
 ## Mission Overview
 
 The "Talking Avatar Platform" currently works perfectly in a local macOS Docker
-environment using a decoupled architecture (Go API + Python Worker + MinIO +
+environment using a decoupled architecture (Go API + Python Worker + RustFS +
 Redis).
 
 Our next evolutionary leap is to upgrade the platform from an **"Offline
@@ -84,7 +84,7 @@ AMD GPUs using ROCm.
 3. [x] `POST /api/live/{id}/start|push|status` 已落地；LLM 链路由
    `POST /api/live/{id}/message` 完成（OpenAI Go SDK → DeepSeek Responses
    `deepseek-v4-flash` → 回复切句入 `live_queue:{id}`；无 key 时回显原文）。
-   观众端已拆为**独立 Next.js + TailwindCSS 项目**（`client/`，:3000）：
+   观众端已拆为**独立 Next.js + TailwindCSS 项目**（`frontend-user/`，:3000）：
    `/` 开播列表 + `/rooms/:avatarId` 直播间（xgplayer + 服务端代理）。
 
 ### Step 3.3: 7x24 Long-form Broadcast（长时直播）— [~]
@@ -173,7 +173,7 @@ AMD GPUs using ROCm.
   RediSearch），`worker/rag_worker.py` 与 `start_workers.sh` 中的 rag_worker
   已停用。
 - [x] **TTS 微服务（tts-service）**：async `edge_tts.Communicate` → ffmpeg
-  转 16kHz/16-bit/mono PCM WAV → 上传 S3（MinIO，S3 配置走环境变量）→ 只返回
+  转 16kHz/16-bit/mono PCM WAV → 上传 S3（RustFS，S3 配置走环境变量）→ 只返回
   S3 key + 元数据，`finally` 清理临时文件；compose 内网 :8002，不发布宿主端口。
 - [x] **端口收敛**：宿主机不调试，SRS 只发布 1935（RTMP 推流），1985/8081
   收回内网；`api`/`rag-service`/`tts-service` 均不发布端口；对外仅

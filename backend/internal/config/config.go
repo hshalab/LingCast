@@ -8,7 +8,10 @@ import (
 
 // Config aggregates all runtime configuration read from environment variables.
 type Config struct {
-	ServerPort string
+	ServerPort string // legacy single-entry port (kept for tooling)
+	AdminPort  string
+	UserPort   string
+	SchedulerPort string
 	GinMode    string
 
 	MySQLDSN string
@@ -23,6 +26,7 @@ type Config struct {
 	OpenAIBaseURL       string
 	OpenAIModel         string
 	EmbedServerURL      string
+	TTSServiceURL       string
 	AdminUsername       string
 	AdminPassword       string
 
@@ -75,6 +79,9 @@ func splitCSV(s string) []string {
 func Load() Config {
 	return Config{
 		ServerPort: env("API_PORT", "8080"),
+		AdminPort:    env("API_ADMIN_PORT", "8081"),
+		UserPort:     env("API_USER_PORT", "8082"),
+		SchedulerPort: env("API_SCHEDULER_PORT", "8083"),
 		GinMode:    env("GIN_MODE", "debug"),
 		MySQLDSN: env("MYSQL_DSN",
 			"talking:talking123@tcp(127.0.0.1:3306)/talking_avatar?charset=utf8mb4&parseTime=True&loc=Local"),
@@ -89,12 +96,13 @@ func Load() Config {
 		OpenAIBaseURL:       env("OPENAI_BASE_URL", "https://api.deepseek.com"),
 		OpenAIModel:         env("OPENAI_MODEL", "deepseek-v4-flash"),
 		EmbedServerURL:      env("EMBED_SERVER_URL", "http://host.docker.internal:8090"),
+		TTSServiceURL:       env("TTS_SERVICE_URL", "http://tts-service:8002"),
 		AdminUsername:       env("ADMIN_USERNAME", "admin"),
 		AdminPassword:       env("ADMIN_PASSWORD", "admin123"),
 
 		S3Endpoint:      env("S3_ENDPOINT", "http://127.0.0.1:9000"),
-		S3AccessKey:     env("S3_ACCESS_KEY", "minioadmin"),
-		S3SecretKey:     env("S3_SECRET_KEY", "minioadmin"),
+		S3AccessKey:     env("S3_ACCESS_KEY", "rustfsadmin"),
+		S3SecretKey:     env("S3_SECRET_KEY", "rustfsadmin"),
 		S3Bucket:        env("S3_BUCKET", "talking-avatar"),
 		S3UseSSL:        envBool("S3_USE_SSL", false),
 		S3PublicBaseURL: env("S3_PUBLIC_BASE_URL", ""),

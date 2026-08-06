@@ -1,7 +1,7 @@
 # LingCast
 
 <p align="center">
-  <img src="frontend/public/images/logo.svg" alt="LingCast" width="128">
+  <img src="frontend-admin/public/images/logo.svg" alt="LingCast" width="128">
 </p>
 
 <p align="center"><a href="README.md">English</a> | <a href="README-zh.md">简体中文</a></p>
@@ -56,7 +56,7 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   submit a task → poll → the result is embedded in the status card and played with
   **xgplayer** (9:16 portrait, up to 720×1080, modal playback).
 - [x] **Client live room (viewer app)**: a standalone Next.js + TailwindCSS project
-  (`client/`, port **3000**, separate from the admin console): the home page has a nav bar
+  (`frontend-user/`, port **3000**, separate from the admin console): the home page has a nav bar
   (guest/account identity, register/login/logout) and **category filtering**, listing all
   live bots (`GET /api/live`); `/rooms/:avatarId` plays HTTP-FLV via xgplayer, the chat panel
   shows `username #ID`, and messages can be sent directly to the digital human
@@ -132,7 +132,7 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   scoped to that collection.
 - [x] **Edge-TTS microservice** (`tts-service/`, internal :8002): async
   `edge_tts.Communicate` → ffmpeg → **16 kHz / 16-bit / mono PCM WAV** (the exact
-  format Wav2Lip requires) → upload to S3 (MinIO) → returns only the S3 object
+  format Wav2Lip requires) → upload to S3 (RustFS) → returns only the S3 object
   key + metadata; temp files are removed in `finally`, S3 config comes from env.
 - [x] **Chat log page**: `/chat-logs` filters by avatar, user ID, date and
   keyword with pagination; bot replies are tagged "knowledge hit" and the exact
@@ -174,10 +174,11 @@ disable with `FACE_ENHANCER=off`):
 
 ```text
 Admin console :8080 ──> Nginx (frontend)
-  ├── /api    ──> Go API (Gin) ──> MariaDB 11 / Redis 8.2 / MinIO / rag-service
-  └── /media  ──> MinIO (S3-compatible, emulates RustFS)
+  ├── /api    ──> api-admin (Gin) ──> MariaDB 11 / Redis 8.2 / RustFS / rag-service
+  └── webhooks ──> api-scheduler (worker task/base-video callbacks)
+  └── /media  ──> RustFS (S3-compatible)
 
-Viewer app :3000 ──> Next.js (server-side proxy for /api, /live) ──> Go API / SRS
+Viewer app :3000 ──> Next.js (server-side proxy for /api, /live) ──> api-user / SRS
 
 Python AI Worker ──> Redis queue / boto3 downloads assets
                  ──> Create: LivePortrait generates base video (one-time preprocessing)
@@ -187,25 +188,27 @@ Python AI Worker ──> Redis queue / boto3 downloads assets
 rag-service ──> zvec in-process full-text index (Jieba Chinese, zero model)
             ──> Go API calls /v1/knowledge/{ingest,search,delete,chunks} directly
 
-tts-service ──> async edge-tts → 16kHz PCM WAV → S3 (MinIO)
+tts-service ──> async edge-tts → 16kHz PCM WAV → S3 (RustFS)
             ──> POST /v1/tts/synthesize returns the S3 key only (no media over HTTP)
 ```
 
 - Admin frontend: React + TypeScript + Vite + Tailwind + shadcn/ui (brand "LingCast", dark
   theme by default, switchable to light; requires admin login).
-- Viewer frontend: standalone Next.js 16 + TailwindCSS 4 (`client/`, light/dark themes,
+- Viewer frontend: standalone Next.js 16 + TailwindCSS 4 (`frontend-user/`, light/dark themes,
   no login required).
-- Backend: Go + Gin + GORM, standard AWS S3 SDK v2.
+- Backend: Go + Gin + GORM split into three microservices sharing one module —
+  `api-admin` (management console, :8081), `api-user` (audience/live chat,
+  :8082) and `api-scheduler` (worker webhooks, :8083); standard AWS S3 SDK v2.
 - AI Worker: Python 3.11, uv-managed dependencies, boto3 + Redis.
 - Knowledge microservice: `rag-service` (FastAPI + uv + zvec FTS, Jieba tokenizer,
   zero model dependencies, internal :8001, data persisted in the `rag-zvec-data` volume).
-- Storage: S3-compatible object storage; MinIO emulates RustFS in dev.
+- Storage: S3-compatible object storage (RustFS in dev).
 - Deployment: Docker Compose orchestrates the infrastructure and frontends; **the real AI
   Worker runs natively on the host** (MPS/CoreML on macOS Apple Silicon, NVIDIA CUDA or AMD
   ROCm on Linux). Host-published ports are limited to what the host worker and
   the web apps need: **3000** (viewer), **8080** (admin/API), **1935** (RTMP ingest),
-  **6379** (Redis) and **9000** (MinIO). `api`, `rag-service` and `tts-service`
-  stay on the internal network.
+  **6379** (Redis) and **9000** (RustFS). `api-admin`, `api-user`,
+  `api-scheduler`, `rag-service` and `tts-service` stay on the internal network.
 
 ## Quick Start
 
@@ -315,7 +318,7 @@ uv run python -u worker.py
 ```
 
 > **Warning**: `--inexact` matters — the preinstalled torch is not in the lock file; without
-> it `uv sync` removes torch. `--network=host` lets the container reach Redis/MinIO on the
+> it `uv sync` removes torch. `--network=host` lets the container reach Redis/RustFS on the
 > host directly.
 
 **Option B: bare-metal Ubuntu + ROCm**
@@ -455,12 +458,13 @@ speed / amplitude) is documented in the `LIVEPORTRAIT_DRIVING*` comments and
 
 ```text
 LingCast/
-├── backend/        Go Gin API (models, S3, Redis, handlers, Dockerfile)
+├── backend/        Go module — three microservices: cmd/api-admin, cmd/api-user,
+│                   cmd/api-scheduler (shared internal/ packages)
 ├── rag-service/    Local RAG microservice (FastAPI + uv + zvec FTS/Jieba, :8001)
 ├── tts-service/    Edge-TTS microservice (FastAPI + uv + edge-tts + ffmpeg, :8002)
-├── frontend/       LingCast admin console (React + shadcn/ui, :8080)
+├── frontend-admin/ LingCast admin console (React + shadcn/ui, :8080)
 │   └── public/images/  brand logos (dark/light) + favicon
-├── client/         Next.js viewer app (standalone project, :3000)
+├── frontend-user/  Next.js viewer app (standalone project, :3000)
 │   ├── lib/        chat identity (identity.tsx) / theme (theme.tsx)
 │   └── public/     logo.svg + logo-white.svg
 ├── worker/         Python 3.11 AI Worker (uv, Redis, boto3)
@@ -490,7 +494,7 @@ LingCast/
 
 ## Production Notes
 
-- The dev environment uses MinIO to emulate RustFS with the bucket publicly readable (so the
+- The dev environment runs RustFS with the bucket publicly readable (so the
   browser can play videos). In production, switch to real RustFS + a private bucket +
   presigned URLs, and adjust `S3_PUBLIC_BASE_URL` and the nginx `/media` proxy.
 - Harden the Worker callback Webhook authentication in production.

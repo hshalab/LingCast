@@ -81,3 +81,53 @@ func TestChatSystemPromptRAGAndMemory(t *testing.T) {
 		}
 	}
 }
+
+func TestSentenceCollectorOrderAndBoundaries(t *testing.T) {
+	cases := []struct {
+		name    string
+		deltas  []string
+		want    []string
+	}{
+		{
+			// Boundary set is [。，！？.!?] — English commas are NOT split.
+			name:   "chinese and english boundaries, order preserved",
+			deltas: []string{"你好，欢迎", "来到直播间！今天给大家", "讲个故事。See you, bye!"},
+			want:   []string{"你好，", "欢迎来到直播间！", "今天给大家讲个故事。", "See you, bye!"},
+		},
+		{
+			name:   "short fragments merged after chinese comma",
+			deltas: []string{"好，", "吧", "。好的！"},
+			// "好，" (2 runes) is long enough, "吧。" (2 runes) too short is
+			// merged with nothing, then "好的！" submits on its own.
+			want: []string{"好，", "吧。", "好的！"},
+		},
+		{
+			name:   "flush trailing sentence without boundary",
+			deltas: []string{"第一句。第二句没有标点"},
+			want:   []string{"第一句。", "第二句没有标点"},
+		},
+		{
+			name:   "single punctuation fragment kept for next sentence",
+			deltas: []string{"我", "，", "很"}, // "我，" is 2 runes -> submitted; "很" too short to flush
+			want:   []string{"我，"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sc := &sentenceCollector{}
+			var got []string
+			for _, d := range tc.deltas {
+				got = append(got, sc.feed(d)...)
+			}
+			got = append(got, sc.flush()...)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %d sentences %q, want %d %q", len(got), got, len(tc.want), tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("sentence %d = %q, want %q (all: %q)", i, got[i], tc.want[i], got)
+				}
+			}
+		})
+	}
+}

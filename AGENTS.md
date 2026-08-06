@@ -12,13 +12,13 @@
 ## 2. 当前技术栈（已落地，勿按旧文档改回）
 
 - 前端：React + TypeScript + Vite + Tailwind + shadcn/ui（基于 satnaing/shadcn-admin），
-  pnpm 10.25.0 管理，`frontend/`。
+  pnpm 10.25.0 管理，`frontend-admin/`。
 - 后端：Go + Gin + GORM，`backend/`（模型、S3、Redis、handlers）。
 - AI Worker：Python **3.11**（`worker/.python-version`），uv 管理依赖（`pyproject.toml`
   + `uv.lock`），**不要使用 requirements.txt**。
-- 存储：S3 兼容对象存储（开发用 MinIO 模拟 RustFS）；Go 用 `aws-sdk-go-v2`，
+- 存储：S3 兼容对象存储（RustFS，Docker Compose 内运行）；Go 用 `aws-sdk-go-v2`，
   Python 用 boto3；服务间只传 S3 Key，不用本地路径。
-- 基础设施：Docker Compose；**MariaDB 11** + **Redis 8.2.2-alpine** + MinIO
+- 基础设施：Docker Compose；**MariaDB 11** + **Redis 8.2.2-alpine** + RustFS
   + **rag-service**（本地 RAG 微服务：zvec 全文索引 + Jieba 中文分词，
   Docker 内 `rag-service/`，端口 8001，零模型依赖）+ **tts-service**
   （Edge-TTS 微服务：async edge-tts → 16kHz PCM WAV → S3，`tts-service/`，
@@ -27,7 +27,8 @@
   在宿主机原生运行**：macOS Apple Silicon（MPS/CoreML）、Linux NVIDIA CUDA、
   Linux **AMD ROCm**（RX 6800 XT 等 RDNA2，见 README 对应章节）。宿主机仅开放
   必要端口：3000（观众端）/ 8080（管理端）/ 1935（RTMP 推流）/ 6379（Redis）/
-  9000（MinIO）；`api`、`rag-service`、`tts-service` 均在内网，不发布端口。
+  9000（RustFS）；`api-admin`/`api-user`/`api-scheduler`、`rag-service`、
+  `tts-service` 均在内网，不发布端口。
 - 依赖组（`worker/pyproject.toml`）：`models`（macOS 默认）、`cuda`、
   `rocm`（仅 `onnxruntime-rocm`，torch 用官方 ROCm 镜像或手动装）——cuda/rocm
   互斥，Linux 用 `--no-group` 二选一；ROCm 容器里 `uv sync` 必须加 `--inexact`
@@ -39,12 +40,12 @@
   默认 zh-CN-XiaoxiaoNeural）+ 人物设定（年龄/身高/体重/族裔/感情状态/性格），提交后
   轮询 `GET /api/avatars/:id` 直到 ready。
 - ✅ Broadcast（离线播报）页面：选数字人 + 脚本 → 任务轮询 → 播放成品。
-- ✅ 客户端直播间（观众端）：**独立 Next.js + TailwindCSS 项目**（`client/`，端口
+- ✅ 客户端直播间（观众端）：**独立 Next.js + TailwindCSS 项目**（`frontend-user/`，端口
   **3000**，不属于管理后台）——首页有导航头（身份/注册/登录/退出）与**分类筛选**
   （`GET /api/live` 携带 avatar 的 `category`），`app/rooms/[avatarId]/page.tsx`
   用 xgplayer 拉 HTTP-FLV + 聊天输入 `POST /api/live/:id/message`；`app/api/[...path]`
   与 `app/live/[...path]` 路由处理器在**服务端**代理（`API_ORIGIN` / `LIVE_ORIGIN`
-  运行时读取，docker 内为 `http://api:8080` / `http://srs:8080`，本地默认
+  运行时读取，docker 内为 `http://api-user:8082` / `http://srs:8080`，本地默认
   `http://localhost:8080`）。
 - ✅ 聊天身份与记录持久化：`chat_users`（游客/账号，bcrypt）与 `chat_messages`
   （user/bot）两张表；`POST /api/chat/guest` 发临时身份，`register` 原地升级游客行
@@ -60,8 +61,8 @@
   重启直播生效。
 - ✅ 管理端用户列表：`GET /api/users`（游客+账号，含消息数），侧边栏「用户相关 →
   用户列表」（/users）展示真实数据。
-- ✅ 国际化（中/英）：管理端（react-i18next，`frontend/src/i18n/`）与观众端
-  （`client/lib/i18n.tsx` 轻量 provider）均有语言切换（localStorage 记忆 +
+- ✅ 国际化（中/英）：管理端（react-i18next，`frontend-admin/src/i18n/`）与观众端
+  （`frontend-user/lib/i18n.tsx` 轻量 provider）均有语言切换（localStorage 记忆 +
   浏览器语言自动检测）；后端按 `Accept-Language` 本地化错误消息
   （`backend/internal/i18n`，router 注入中间件）；LLM 人设提示词按请求语言生成
   （`chatSystemPrompt(avatar, lang)`，含 `en` 单测）。
@@ -139,7 +140,7 @@
   - ⚠️ 旧 `worker/rag_worker.py`（bge 向量 + RediSearch）已废弃：不再启动、
     不再入队；`redis/redis-stack-server` 已回退为 `redis:8.2.2-alpine`。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
-- ✅ 客户端用户中心：`client/app/account/page.tsx`（`/account`）身份卡 +
+- ✅ 客户端用户中心：`frontend-user/app/account/page.tsx`（`/account`）身份卡 +
   注册/登录/退出 + 「我的消息」（`GET /api/chat/history?userId=`）；导航身份
   胶囊点击进入；首页 Hero CTA / 卡片悬停 / 页脚入口。
 - ⬜ 待办（详见 [docs/TODO.md](docs/TODO.md)）：Phase 1 的 AMD ROCm 容器
@@ -152,10 +153,10 @@
 backend/   Go API（Dockerfile）
 rag-service/  本地 RAG 知识库微服务（FastAPI + uv + zvec FTS/Jieba，端口 8001）
 tts-service/  Edge-TTS 微服务（FastAPI + uv + edge-tts + ffmpeg，端口 8002，内网）
-frontend/  React 管理后台（Dockerfile + nginx.conf）
+frontend-admin/  React 管理后台（Dockerfile + nginx.conf）
   src/components/xg-video.tsx   内联 xgplayer 封装（播报预览 720x1080 用）
   src/features/knowledge/      知识库管理（index=Collection 列表 / detail=文档）
-client/    Next.js 观众端（独立项目）：app/page.tsx 列表 + app/rooms/[avatarId] 直播间
+frontend-user/    Next.js 观众端（独立项目）：app/page.tsx 列表 + app/rooms/[avatarId] 直播间
   lib/identity.tsx      全局聊天身份（游客/注册/登录/退出）
   components/auth-modal.tsx  注册/登录弹窗
 worker/

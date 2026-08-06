@@ -4,7 +4,7 @@ S3 shared-storage data flow (media files NEVER cross HTTP/Redis):
     1. edge-tts (async API) synthesizes speech into a temp file;
     2. ffmpeg (async subprocess) converts it to 16 kHz / 16-bit / mono PCM WAV
        (the exact format Wav2Lip downstream requires);
-    3. the WAV is uploaded to S3 (MinIO) via boto3 wrapped in
+    3. the WAV is uploaded to S3 (RustFS) via boto3 wrapped in
        ``asyncio.to_thread`` so the event loop is never blocked;
     4. the response returns ONLY the S3 object key + metadata;
     5. all temporary files are removed in a ``finally`` block.
@@ -65,7 +65,7 @@ async def lifespan(_app: FastAPI):
     access_key = _require_env("S3_ACCESS_KEY")
     secret_key = _require_env("S3_SECRET_KEY")
     # Client creation is lazy (no network I/O until the first call); path-style
-    # addressing is required by MinIO / S3-compatible endpoints.
+    # addressing is required by RustFS / S3-compatible endpoints.
     _s3 = boto3.client(
         "s3",
         endpoint_url=endpoint,
@@ -82,7 +82,7 @@ app = FastAPI(
     title="tts-service",
     description=(
         "Edge-TTS microservice: async edge-tts -> 16kHz PCM WAV -> S3 "
-        "(MinIO) shared storage. Returns S3 keys only, never media bytes."
+        "(RustFS) shared storage. Returns S3 keys only, never media bytes."
     ),
     version="0.1.0",
     lifespan=lifespan,

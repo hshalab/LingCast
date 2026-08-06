@@ -1,5 +1,5 @@
 {
-  "name": "talking-avatar-client",
+  "name": "lingcast-user",
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@10.25.0",

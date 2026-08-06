@@ -3,6 +3,9 @@ import logging
 import os
 import shutil
 import time
+import uuid
+from collections import OrderedDict
+from hashlib import md5
 from pathlib import Path
 
 import redis
@@ -107,6 +110,111 @@ def load_config() -> dict:
     }
 
 
+class BaseVideoCache:
+    """Tiny LRU cache for the heavily-reused base driving video.
+
+    Every render sentence uses the SAME avatar base video. Downloading it from
+    S3 for each sentence would be wasteful, so the worker keeps a small LRU of
+    local files keyed by `base_video_s3_key`. Evicted entries are removed from
+    disk to keep the cache directory bounded.
+    """
+
+    def __init__(self, storage: S3Storage, cache_dir: Path, maxsize: int = 2):
+        self.storage = storage
+        self.cache_dir = cache_dir
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.maxsize = max(1, maxsize)
+        self._paths: OrderedDict[str, Path] = OrderedDict()
+
+    def get(self, s3_key: str) -> Path:
+        """Return a local path for `s3_key`, downloading on first use."""
+        if s3_key in self._paths:
+            self._paths.move_to_end(s3_key)
+            return self._paths[s3_key]
+
+        suffix = Path(s3_key).suffix or ".mp4"
+        name = f"base_{md5(s3_key.encode()).hexdigest()[:12]}{suffix}"
+        dest = self.cache_dir / name
+        self.storage.download(s3_key, dest)
+        self._paths[s3_key] = dest
+        while len(self._paths) > self.maxsize:
+            evicted_key, evicted_path = self._paths.popitem(last=False)
+            try:
+                evicted_path.unlink(missing_ok=True)
+            except OSError:
+                logger.warning("failed to remove evicted base video %s", evicted_path)
+            logger.info("base video cache evicted: %s", evicted_key)
+        return dest
+
+
+def process_render(
+    payload: dict,
+    storage: S3Storage,
+    pipeline,
+    base_cache: BaseVideoCache,
+    work_root: Path,
+) -> None:
+    """Consume a `type=render` task produced by the live-chat orchestrator.
+
+    The payload carries ONLY S3 keys (global S3-shared-storage rule):
+        {"type": "render", "text": "...",
+         "tts_s3_key": "tts/...wav", "base_video_s3_key": "base_videos/2.mp4"}
+
+    Flow:
+      1. Download the TTS WAV into a private temp dir.
+      2. Get the base video through the LRU cache (downloaded once per key).
+      3. Feed the local paths into Wav2Lip; the rendered MP4 comes back.
+      4. Upload the render result back to S3 (no media stays on disk).
+      5. finally: delete the TTS WAV and the temp dir — zero leak even on crash.
+    """
+    tts_s3_key = payload["tts_s3_key"]
+    base_s3_key = payload["base_video_s3_key"]
+    text = payload.get("text", "")
+
+    work_dir = work_root / f"render-{uuid.uuid4().hex[:12]}"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    tts_path = work_dir / f"tts_{uuid.uuid4().hex[:8]}.wav"
+    try:
+        storage.download(tts_s3_key, tts_path)
+        base_video_path = base_cache.get(base_s3_key)
+
+        if not hasattr(pipeline, "lipsync"):
+            logger.warning(
+                "render task skipped: pipeline %s has no lipsync engine "
+                "(render tasks require the real pipeline)",
+                type(pipeline).__name__,
+            )
+            return
+
+        # Wav2Lip inference over the downloaded local paths.
+        rendered = pipeline.lipsync.sync(tts_path, base_video_path, work_dir)
+        if not rendered or not Path(rendered).exists():
+            raise RuntimeError(f"wav2lip returned no output file: {rendered!r}")
+
+        # Store the result in S3 (media never stays on the worker disk).
+        output_key = f"render/{uuid.uuid4().hex}.mp4"
+        storage.upload(output_key, Path(rendered))
+        logger.info(
+            "render completed: text=%r tts=%s base=%s -> s3://%s/%s",
+            text,
+            tts_s3_key,
+            base_s3_key,
+            storage.bucket,
+            output_key,
+        )
+    except Exception:
+        logger.exception("render task failed: %s", payload)
+        raise
+    finally:
+        # Zero-leak cleanup: the TTS WAV must always be removed, whether
+        # Wav2Lip succeeded or crashed.
+        try:
+            tts_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("failed to remove temp tts file %s", tts_path)
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
 def process_task(
     payload: dict,
     storage: S3Storage,
@@ -192,6 +300,20 @@ def main() -> None:
     storage = S3Storage()
     pipeline = create_pipeline(os.environ.get("AI_MODE", "mock"))
     callback = TaskCallback(cfg["api_base_url"])
+    base_cache = BaseVideoCache(
+        storage,
+        cfg["work_root"] / "base_cache",
+        maxsize=int(os.environ.get("BASE_VIDEO_CACHE_SIZE", "2")),
+    )
+    # A SIGKILLed worker cannot run its finally blocks; sweep any stale
+    # per-render temp dirs at startup so /tmp never accumulates.
+    cfg["work_root"].mkdir(parents=True, exist_ok=True)
+    for stale in cfg["work_root"].glob("render-*"):
+        try:
+            shutil.rmtree(stale, ignore_errors=True)
+            logger.info("removed stale render temp dir: %s", stale)
+        except Exception:
+            logger.warning("failed to remove stale render temp dir: %s", stale)
 
     r = redis.Redis(
         host=cfg["redis_host"],
@@ -222,6 +344,14 @@ def main() -> None:
                 continue
 
             logger.info("received task payload: %s", payload)
+            if payload.get("type") == "render":
+                try:
+                    process_render(
+                        payload, storage, pipeline, base_cache, cfg["work_root"]
+                    )
+                except Exception:
+                    logger.exception("render task failed, continuing")
+                continue
             try:
                 process_task(payload, storage, pipeline, callback, cfg["work_root"])
             except Exception:
