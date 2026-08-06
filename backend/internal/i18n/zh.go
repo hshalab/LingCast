@@ -83,4 +83,7 @@ var zh = catalog{
 	"err.knowledge.invalid_id":           "无效的知识条目 ID",
 	"err.knowledge.not_found":            "知识条目不存在",
 	"err.knowledge.invalid_status":       "无效的知识状态",
+	"err.knowledge.search_required":      "请提供 avatarId 与检索文本",
+	"err.knowledge.embed_unavailable":    "本地检索服务不可用（请确认 rag_worker 已启动）",
+	"err.knowledge.search_failed":        "知识检索失败",
 }

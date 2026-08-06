@@ -35,7 +35,9 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 	}))
 
 	avatarHandler := handlers.NewAvatarHandler(db, s3, q, cfg.AvatarInitQueueKey)
-	knowledgeHandler := handlers.NewKnowledgeHandler(db, s3, q, cfg.KnowledgeIngestKey)
+	knowledgeHandler := handlers.NewKnowledgeHandler(
+		db, s3, q, cfg.KnowledgeIngestKey, cfg.EmbedServerURL,
+	)
 	taskHandler := handlers.NewTaskHandler(db, q, s3)
 	chatHandler := handlers.NewChatHandler(db)
 	liveHandler := handlers.NewLiveHandler(
@@ -93,6 +95,8 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 			protected.POST("/avatars/:id/knowledge", knowledgeHandler.Create)
 			protected.GET("/avatars/:id/knowledge", knowledgeHandler.List)
 			protected.DELETE("/avatars/:id/knowledge/:kid", knowledgeHandler.Delete)
+			protected.GET("/knowledge", knowledgeHandler.ListAll)
+			protected.POST("/knowledge/search", knowledgeHandler.SearchTest)
 			protected.POST("/tasks", taskHandler.Create)
 			protected.GET("/tasks", taskHandler.List)
 			protected.GET("/tasks/:id", taskHandler.Get)

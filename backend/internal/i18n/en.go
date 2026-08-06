@@ -83,4 +83,7 @@ var en = catalog{
 	"err.knowledge.invalid_id":           "invalid knowledge id",
 	"err.knowledge.not_found":            "knowledge not found",
 	"err.knowledge.invalid_status":       "invalid knowledge status",
+	"err.knowledge.search_required":      "provide avatarId and search text",
+	"err.knowledge.embed_unavailable":    "local retrieval service unavailable (is rag_worker running?)",
+	"err.knowledge.search_failed":        "knowledge retrieval failed",
 }

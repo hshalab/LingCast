@@ -65,6 +65,7 @@ export type KnowledgeStatus = 'pending' | 'indexed' | 'failed'
 export type KnowledgeItem = {
   id: number
   avatarId: number
+  avatarName?: string
   content: string
   status: KnowledgeStatus
   filename?: string
@@ -120,6 +121,33 @@ export async function adminLogin(username: string, password: string) {
 export async function listKnowledge(avatarId: number): Promise<KnowledgeItem[]> {
   const { data } = await api.get<{ data: KnowledgeItem[] }>(
     `/avatars/${avatarId}/knowledge`,
+  )
+  return data.data
+}
+
+export type KnowledgeSearchResult = {
+  content: string
+  score: string
+}
+
+export async function listAllKnowledge(params?: {
+  avatarId?: number
+  q?: string
+}): Promise<KnowledgeItem[]> {
+  const { data } = await api.get<{ data: KnowledgeItem[] }>('/knowledge', {
+    params,
+  })
+  return data.data
+}
+
+export async function searchKnowledge(
+  avatarId: number,
+  text: string,
+  topK = 3,
+): Promise<KnowledgeSearchResult[]> {
+  const { data } = await api.post<{ data: KnowledgeSearchResult[] }>(
+    '/knowledge/search',
+    { avatarId, text, topK },
   )
   return data.data
 }

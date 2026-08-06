@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -27,15 +29,17 @@ type KnowledgeHandler struct {
 	s3         *storage.Client
 	q          *queue.Queue
 	ingestKey  string
+	embedURL   string
 }
 
-func NewKnowledgeHandler(db *gorm.DB, s3 *storage.Client, q *queue.Queue, ingestKey string) *KnowledgeHandler {
-	return &KnowledgeHandler{db: db, s3: s3, q: q, ingestKey: ingestKey}
+func NewKnowledgeHandler(db *gorm.DB, s3 *storage.Client, q *queue.Queue, ingestKey, embedURL string) *KnowledgeHandler {
+	return &KnowledgeHandler{db: db, s3: s3, q: q, ingestKey: ingestKey, embedURL: embedURL}
 }
 
 type knowledgeResponse struct {
 	ID        uint      `json:"id"`
 	AvatarID  uint      `json:"avatarId"`
+	AvatarName string   `json:"avatarName,omitempty"`
 	Content   string    `json:"content"`
 	Status    string    `json:"status"`
 	Filename  string    `json:"filename,omitempty"`
@@ -51,6 +55,98 @@ func toKnowledgeResponse(k models.AvatarKnowledge) knowledgeResponse {
 		Filename:  k.Filename,
 		CreatedAt: k.CreatedAt,
 	}
+}
+
+// ListAll handles GET /api/knowledge — every avatar's knowledge with optional
+// filters: ?avatarId=<id> and/or ?q=<keyword> (matches filename or content).
+func (h *KnowledgeHandler) ListAll(c *gin.Context) {
+	type row struct {
+		models.AvatarKnowledge
+		AvatarName string `json:"avatarName"`
+	}
+	q := h.db.Model(&models.AvatarKnowledge{}).
+		Select("avatar_knowledge.*, avatars.name AS avatar_name").
+		Joins("LEFT JOIN avatars ON avatars.id = avatar_knowledge.avatar_id")
+	if avatarID := c.Query("avatarId"); avatarID != "" {
+		if id, err := strconv.ParseUint(avatarID, 10, 64); err == nil && id > 0 {
+			q = q.Where("avatar_knowledge.avatar_id = ?", id)
+		}
+	}
+	if kw := strings.TrimSpace(c.Query("q")); kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where(
+			"(avatar_knowledge.content LIKE ? OR avatar_knowledge.filename LIKE ?)",
+			like, like,
+		)
+	}
+	var rows []row
+	if err := q.Order("avatar_knowledge.created_at desc").Find(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	items := make([]knowledgeResponse, 0, len(rows))
+	for _, r := range rows {
+		resp := toKnowledgeResponse(r.AvatarKnowledge)
+		resp.AvatarName = r.AvatarName
+		items = append(items, resp)
+	}
+	c.JSON(http.StatusOK, gin.H{"data": items})
+}
+
+// SearchTest handles POST /api/knowledge/search — a live retrieval test that
+// proxies to the local RAG worker's /search (embed + per-avatar KNN).
+func (h *KnowledgeHandler) SearchTest(c *gin.Context) {
+	var req struct {
+		AvatarID uint   `json:"avatarId"`
+		Text     string `json:"text"`
+		TopK     int    `json:"topK"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_body", err.Error())})
+		return
+	}
+	if req.AvatarID == 0 || strings.TrimSpace(req.Text) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.knowledge.search_required")})
+		return
+	}
+	if strings.TrimSpace(h.embedURL) == "" {
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.Tc(c, "err.knowledge.embed_unavailable")})
+		return
+	}
+	body, err := json.Marshal(map[string]any{
+		"avatarId": req.AvatarID,
+		"text":     req.Text,
+		"topK":     max(1, req.TopK),
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	resp, err := http.Post(
+		strings.TrimRight(h.embedURL, "/")+"/search",
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.Tc(c, "err.knowledge.embed_unavailable")})
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.Tc(c, "err.knowledge.search_failed")})
+		return
+	}
+	var out struct {
+		Chunks []struct {
+			Content string `json:"content"`
+			Score   string `json:"score"`
+		} `json:"chunks"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.Tc(c, "err.knowledge.search_failed")})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": out.Chunks})
 }
 
 // Create handles POST /api/avatars/:id/knowledge — multipart/form-data with
