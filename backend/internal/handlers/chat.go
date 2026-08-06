@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -184,6 +185,19 @@ type userListItem struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
+type chatLogItem struct {
+	ID         uint      `json:"id"`
+	AvatarID   uint      `json:"avatarId"`
+	AvatarName string    `json:"avatarName,omitempty"`
+	UserID     uint      `json:"userId"`
+	Username   string    `json:"username"`
+	Role       string    `json:"role"`
+	Content    string    `json:"content"`
+	RAGHit     bool      `json:"ragHit"`
+	RAGSources []string  `json:"ragSources,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
 // ListUsers handles GET /api/users — the persisted chat users (guests and
 // registered accounts) with their message counts, newest first.
 func (h *ChatHandler) ListUsers(c *gin.Context) {
@@ -220,6 +234,70 @@ func (h *ChatHandler) ListUsers(c *gin.Context) {
 			MessageCount: msgCount[u.ID],
 			CreatedAt:    u.CreatedAt,
 		})
+	}
+	c.JSON(http.StatusOK, gin.H{"data": items})
+}
+
+// Logs handles GET /api/chat/logs — admin chat log with filters:
+// ?avatarId=<id> &userId=<id> &date=YYYY-MM-DD &q=<keyword>.
+// Bot replies carry ragHit + the exact knowledge chunks that were retrieved.
+func (h *ChatHandler) Logs(c *gin.Context) {
+	type row struct {
+		models.ChatMessage
+		AvatarName string `json:"avatarName"`
+	}
+	q := h.db.Model(&models.ChatMessage{}).
+		Select("chat_messages.*, avatars.name AS avatar_name").
+		Joins("LEFT JOIN avatars ON avatars.id = chat_messages.avatar_id")
+
+	if avatarID := c.Query("avatarId"); avatarID != "" {
+		if id, err := strconv.ParseUint(avatarID, 10, 64); err == nil && id > 0 {
+			q = q.Where("chat_messages.avatar_id = ?", id)
+		}
+	}
+	if userID := c.Query("userId"); userID != "" {
+		if id, err := strconv.ParseUint(userID, 10, 64); err == nil && id > 0 {
+			q = q.Where("chat_messages.user_id = ?", id)
+		}
+	}
+	if date := strings.TrimSpace(c.Query("date")); date != "" {
+		if t, err := time.Parse("2006-01-02", date); err == nil {
+			q = q.Where(
+				"chat_messages.created_at >= ? AND chat_messages.created_at < ?",
+				t, t.Add(24*time.Hour),
+			)
+		}
+	}
+	if kw := strings.TrimSpace(c.Query("q")); kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where("chat_messages.content LIKE ?", like)
+	}
+
+	var rows []row
+	if err := q.Order("chat_messages.id desc").Limit(200).Find(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	items := make([]chatLogItem, 0, len(rows))
+	for _, r := range rows {
+		item := chatLogItem{
+			ID:         r.ID,
+			AvatarID:   r.AvatarID,
+			AvatarName: r.AvatarName,
+			UserID:     r.UserID,
+			Username:   r.Username,
+			Role:       r.Role,
+			Content:    r.Content,
+			RAGHit:     r.RAGHit,
+			CreatedAt:  r.CreatedAt,
+		}
+		if r.RAGSources != "" {
+			var sources []string
+			if err := json.Unmarshal([]byte(r.RAGSources), &sources); err == nil {
+				item.RAGSources = sources
+			}
+		}
+		items = append(items, item)
 	}
 	c.JSON(http.StatusOK, gin.H{"data": items})
 }

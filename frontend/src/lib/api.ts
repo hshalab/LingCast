@@ -130,6 +130,19 @@ export type KnowledgeSearchResult = {
   score: string
 }
 
+export type ChatLogItem = {
+  id: number
+  avatarId: number
+  avatarName?: string
+  userId: number
+  username: string
+  role: 'user' | 'bot'
+  content: string
+  ragHit: boolean
+  ragSources?: string[]
+  createdAt: string
+}
+
 export async function listAllKnowledge(params?: {
   avatarId?: number
   q?: string
@@ -149,6 +162,18 @@ export async function searchKnowledge(
     '/knowledge/search',
     { avatarId, text, topK },
   )
+  return data.data
+}
+
+export async function fetchChatLogs(params?: {
+  avatarId?: number
+  userId?: number
+  date?: string
+  q?: string
+}): Promise<ChatLogItem[]> {
+  const { data } = await api.get<{ data: ChatLogItem[] }>('/chat/logs', {
+    params,
+  })
   return data.data
 }
 

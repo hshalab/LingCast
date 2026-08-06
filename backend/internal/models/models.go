@@ -116,13 +116,15 @@ type ChatUser struct {
 // ChatMessage is one persisted line of a room chat: a viewer message or the
 // bot's reply (role = user | bot, username snapshot at send time).
 type ChatMessage struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	AvatarID  uint      `gorm:"not null;index" json:"avatarId"`
-	UserID    uint      `gorm:"not null;index" json:"userId"`
-	Username  string    `gorm:"size:64;not null" json:"username"`
-	Role      string    `gorm:"size:16;not null;index" json:"role"` // user | bot
-	Content   string    `gorm:"type:text;not null" json:"content"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	AvatarID   uint      `gorm:"not null;index" json:"avatarId"`
+	UserID     uint      `gorm:"not null;index" json:"userId"`
+	Username   string    `gorm:"size:64;not null" json:"username"`
+	Role       string    `gorm:"size:16;not null;index" json:"role"` // user | bot
+	Content    string    `gorm:"type:text;not null" json:"content"`
+	RAGHit     bool      `gorm:"not null;default:false;index" json:"ragHit"` // bot reply used knowledge base facts
+	RAGSources string    `gorm:"type:text" json:"ragSources"`                // JSON array of the retrieved fact chunks
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 // AdminUser is the management-backend account. The row is seeded from

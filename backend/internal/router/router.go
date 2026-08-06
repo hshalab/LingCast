@@ -106,6 +106,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 			protected.POST("/live/:avatarID/stop", liveHandler.Stop)
 			protected.POST("/live/:avatarID/push", liveHandler.Push)
 			protected.GET("/users", chatHandler.ListUsers)
+			protected.GET("/chat/logs", chatHandler.Logs)
 			protected.POST("/admin/change-name", adminHandler.ChangeName)
 			protected.POST("/admin/change-password", adminHandler.ChangePassword)
 		}

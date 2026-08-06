@@ -313,7 +313,7 @@ func (h *LiveHandler) Message(c *gin.Context) {
 		Content:  strings.TrimSpace(req.Text),
 	})
 
-	reply := h.llmChat(c, req.Text, avatar)
+	reply, ragFacts := h.llmChat(c, req.Text, avatar)
 	chunks := splitSentences(reply)
 	if len(chunks) == 0 {
 		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.Tc(c, "err.live.llm_empty_reply")})
@@ -322,11 +322,20 @@ func (h *LiveHandler) Message(c *gin.Context) {
 
 	// Persist the bot's full reply as one message (monitor shows the whole
 	// reply; the worker speaks it sentence by sentence).
+	ragJSON := ""
+	if len(ragFacts) > 0 {
+		if b, err := json.Marshal(ragFacts); err == nil {
+			ragJSON = string(b)
+		}
+	}
 	_ = h.db.Create(&models.ChatMessage{
 		AvatarID: avatar.ID,
+		UserID:   req.UserID,
 		Username: avatar.Name,
 		Role:     "bot",
 		Content:  reply,
+		RAGHit:   len(ragFacts) > 0,
+		RAGSources: ragJSON,
 	})
 
 	key := liveQueueKey(avatar.ID)
@@ -343,10 +352,10 @@ func (h *LiveHandler) Message(c *gin.Context) {
 // llmChat sends the user text to the LLM through the OpenAI SDK pointed at the
 // configured base URL (DeepSeek by default, Responses API) and returns the
 // assistant's reply. Without an API key the input is spoken verbatim (test).
-func (h *LiveHandler) llmChat(c *gin.Context, userText string, avatar models.Avatar) string {
+func (h *LiveHandler) llmChat(c *gin.Context, userText string, avatar models.Avatar) (string, []string) {
 	if strings.TrimSpace(h.openAIAPIKey) == "" {
 		log.Printf("[llm] OPENAI_API_KEY not set, speaking the input verbatim")
-		return userText
+		return userText, nil
 	}
 
 	client := openai.NewClient(
@@ -368,14 +377,14 @@ func (h *LiveHandler) llmChat(c *gin.Context, userText string, avatar models.Ava
 	})
 	if err != nil {
 		log.Printf("[llm] request failed: %v", err)
-		return userText
+		return userText, ragFacts
 	}
 	reply := strings.TrimSpace(resp.OutputText())
 	if reply == "" {
-		return userText
+		return userText, ragFacts
 	}
 	log.Printf("[llm] %s -> %s", userText, reply)
-	return reply
+	return reply, ragFacts
 }
 
 // recentMessages returns the last `limit` persisted room messages (viewer

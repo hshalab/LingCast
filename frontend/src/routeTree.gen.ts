@@ -17,6 +17,7 @@ import { Route as AuthenticatedTaskCenterRouteImport } from './routes/_authentic
 import { Route as AuthenticatedLiveStudioRouteImport } from './routes/_authenticated/live-studio'
 import { Route as AuthenticatedKnowledgeListRouteImport } from './routes/_authenticated/knowledge-list'
 import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
+import { Route as AuthenticatedChatLogsRouteImport } from './routes/_authenticated/chat-logs'
 import { Route as AuthenticatedBroadcastRouteImport } from './routes/_authenticated/broadcast'
 import { Route as AuthenticatedAvatarStudioRouteImport } from './routes/_authenticated/avatar-studio'
 import { Route as AuthenticatedAvatarLibraryRouteImport } from './routes/_authenticated/avatar-library'
@@ -82,6 +83,11 @@ const AuthenticatedKnowledgeListRoute =
 const AuthenticatedKnowledgeRoute = AuthenticatedKnowledgeRouteImport.update({
   id: '/knowledge',
   path: '/knowledge',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedChatLogsRoute = AuthenticatedChatLogsRouteImport.update({
+  id: '/chat-logs',
+  path: '/chat-logs',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedBroadcastRoute = AuthenticatedBroadcastRouteImport.update({
@@ -238,6 +244,7 @@ export interface FileRoutesByFullPath {
   '/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/broadcast': typeof AuthenticatedBroadcastRoute
+  '/chat-logs': typeof AuthenticatedChatLogsRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/knowledge-list': typeof AuthenticatedKnowledgeListRoute
   '/live-studio': typeof AuthenticatedLiveStudioRoute
@@ -270,6 +277,7 @@ export interface FileRoutesByTo {
   '/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/broadcast': typeof AuthenticatedBroadcastRoute
+  '/chat-logs': typeof AuthenticatedChatLogsRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/knowledge-list': typeof AuthenticatedKnowledgeListRoute
   '/live-studio': typeof AuthenticatedLiveStudioRoute
@@ -307,6 +315,7 @@ export interface FileRoutesById {
   '/_authenticated/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/_authenticated/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/_authenticated/broadcast': typeof AuthenticatedBroadcastRoute
+  '/_authenticated/chat-logs': typeof AuthenticatedChatLogsRoute
   '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRoute
   '/_authenticated/knowledge-list': typeof AuthenticatedKnowledgeListRoute
   '/_authenticated/live-studio': typeof AuthenticatedLiveStudioRoute
@@ -343,6 +352,7 @@ export interface FileRouteTypes {
     | '/avatar-library'
     | '/avatar-studio'
     | '/broadcast'
+    | '/chat-logs'
     | '/knowledge'
     | '/knowledge-list'
     | '/live-studio'
@@ -375,6 +385,7 @@ export interface FileRouteTypes {
     | '/avatar-library'
     | '/avatar-studio'
     | '/broadcast'
+    | '/chat-logs'
     | '/knowledge'
     | '/knowledge-list'
     | '/live-studio'
@@ -411,6 +422,7 @@ export interface FileRouteTypes {
     | '/_authenticated/avatar-library'
     | '/_authenticated/avatar-studio'
     | '/_authenticated/broadcast'
+    | '/_authenticated/chat-logs'
     | '/_authenticated/knowledge'
     | '/_authenticated/knowledge-list'
     | '/_authenticated/live-studio'
@@ -500,6 +512,13 @@ declare module '@tanstack/react-router' {
       path: '/knowledge'
       fullPath: '/knowledge'
       preLoaderRoute: typeof AuthenticatedKnowledgeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/chat-logs': {
+      id: '/_authenticated/chat-logs'
+      path: '/chat-logs'
+      fullPath: '/chat-logs'
+      preLoaderRoute: typeof AuthenticatedChatLogsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/broadcast': {
@@ -706,6 +725,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAvatarLibraryRoute: typeof AuthenticatedAvatarLibraryRoute
   AuthenticatedAvatarStudioRoute: typeof AuthenticatedAvatarStudioRoute
   AuthenticatedBroadcastRoute: typeof AuthenticatedBroadcastRoute
+  AuthenticatedChatLogsRoute: typeof AuthenticatedChatLogsRoute
   AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRoute
   AuthenticatedKnowledgeListRoute: typeof AuthenticatedKnowledgeListRoute
   AuthenticatedLiveStudioRoute: typeof AuthenticatedLiveStudioRoute
@@ -724,6 +744,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAvatarLibraryRoute: AuthenticatedAvatarLibraryRoute,
   AuthenticatedAvatarStudioRoute: AuthenticatedAvatarStudioRoute,
   AuthenticatedBroadcastRoute: AuthenticatedBroadcastRoute,
+  AuthenticatedChatLogsRoute: AuthenticatedChatLogsRoute,
   AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRoute,
   AuthenticatedKnowledgeListRoute: AuthenticatedKnowledgeListRoute,
   AuthenticatedLiveStudioRoute: AuthenticatedLiveStudioRoute,
