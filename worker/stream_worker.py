@@ -372,6 +372,15 @@ class LiveAvatarSession:
                 break
             try:
                 self.tick(r)
+            except redis.exceptions.ConnectionError:
+                # Redis was restarted (e.g. the RedisStack switch): back off
+                # quietly instead of spamming tracebacks every 0.2s. The pool
+                # reconnects on the next successful tick.
+                logger.warning(
+                    "session %s redis connection lost, retrying in 1s",
+                    self.stream_id,
+                )
+                time.sleep(1.0)
             except FFmpegPipeClosedError as exc:
                 logger.error(
                     "session %s pipe closed: %s — stopping feed loop; "

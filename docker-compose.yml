@@ -26,7 +26,10 @@ services:
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-    command: ["sh", "-c", "exec redis-server --appendonly yes $${REDIS_PASSWORD:+--requirepass $$REDIS_PASSWORD}"]
+    # NOTE: the custom command must load the RediSearch module explicitly —
+    # starting plain `redis-server` bypasses the RedisStack entrypoint and the
+    # knowledge base (FT.*) silently disappears.
+    command: ["sh", "-c", "exec redis-server --appendonly yes --loadmodule /opt/redis-stack/lib/redisearch.so $${REDIS_PASSWORD:+--requirepass $$REDIS_PASSWORD}"]
     # Exposed for the hybrid deployment: the Python AI Worker runs natively on
     # the macOS host (MPS) and must reach Redis via localhost.
     ports:
