@@ -176,6 +176,40 @@ export default function RoomPage() {
     }
   }
 
+  const infoItems = avatar
+    ? (
+        [
+          avatar.age != null
+            ? { label: t('room.ageLabel'), value: t('room.ageValue', { age: avatar.age }) }
+            : null,
+          avatar.heightCm != null
+            ? {
+                label: t('room.heightLabel'),
+                value: t('room.heightValue', { height: avatar.heightCm }),
+              }
+            : null,
+          avatar.weightKg != null
+            ? {
+                label: t('room.weightLabel'),
+                value: t('room.weightValue', { weight: avatar.weightKg }),
+              }
+            : null,
+          avatar.ethnicity
+            ? { label: t('room.ethnicityLabel'), value: avatar.ethnicity }
+            : null,
+          avatar.relationshipStatus
+            ? {
+                label: t('room.relationshipLabel'),
+                value: avatar.relationshipStatus,
+              }
+            : null,
+          avatar.personality
+            ? { label: t('room.personalityLabel'), value: avatar.personality }
+            : null,
+        ].filter(Boolean) as { label: string; value: string }[]
+      )
+    : []
+
   return (
     <main className='flex h-dvh flex-col overflow-hidden bg-background'>
       {/* 桌面端导航（手机端全屏隐藏） */}
@@ -195,7 +229,7 @@ export default function RoomPage() {
             </Link>
             <div className='min-w-0 shrink-0'>
               <h1 className='flex items-center gap-2 text-lg font-bold text-foreground'>
-                {t('room.title')}
+                {avatar?.name || t('room.title')}
                 <span className='rounded-md bg-gradient-to-r from-blue-600 to-violet-600 px-1.5 py-0.5 text-xs font-semibold text-white'>
                   #{id}
                 </span>
@@ -203,46 +237,28 @@ export default function RoomPage() {
             </div>
           </div>
 
-          {/* 数字人详情：靠右的纵向资料卡 */}
+          {/* 数字人详情：分类胶囊 + 标签-值信息条（名字已放到标题） */}
           {avatar && (
-            <div className='ml-auto flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 rounded-2xl border border-border bg-surface/60 px-4 py-2 text-xs backdrop-blur'>
-              <span className='whitespace-nowrap font-semibold text-white'>
-                {avatar.name} <span className='text-muted'>#{avatar.id}</span>
-              </span>
+            <div className='ml-auto flex shrink-0 items-center gap-3 rounded-2xl border border-border bg-surface/60 py-1.5 pe-4 ps-4 backdrop-blur'>
               {avatar.category && (
-                <span className='whitespace-nowrap rounded-md bg-white/5 px-1.5 py-0.5 text-subtle'>
+                <span className='whitespace-nowrap rounded-full bg-gradient-to-r from-blue-600 to-violet-600 px-2.5 py-1 text-xs font-medium text-white'>
                   {avatar.category}
                 </span>
               )}
-              {avatar.age != null && (
-                <span className='whitespace-nowrap text-muted'>
-                  {t('room.age', { age: avatar.age })}
-                </span>
-              )}
-              {avatar.heightCm != null && (
-                <span className='whitespace-nowrap text-muted'>
-                  {t('room.height', { height: avatar.heightCm })}
-                </span>
-              )}
-              {avatar.weightKg != null && (
-                <span className='whitespace-nowrap text-muted'>
-                  {t('room.weight', { weight: avatar.weightKg })}
-                </span>
-              )}
-              {avatar.ethnicity && (
-                <span className='whitespace-nowrap text-muted'>
-                  {t('room.ethnicity', { value: avatar.ethnicity })}
-                </span>
-              )}
-              {avatar.relationshipStatus && (
-                <span className='whitespace-nowrap text-muted'>
-                  {t('room.relationship', { value: avatar.relationshipStatus })}
-                </span>
-              )}
-              {avatar.personality && (
-                <span className='whitespace-nowrap text-muted'>
-                  {t('room.personality', { value: avatar.personality })}
-                </span>
+              {infoItems.length > 0 && (
+                <div className='flex flex-wrap items-center gap-x-3.5 gap-y-1 border-s border-border/70 ps-3'>
+                  {infoItems.map((item) => (
+                    <span
+                      key={item.label}
+                      className='flex items-baseline gap-1 whitespace-nowrap'
+                    >
+                      <span className='text-xs text-muted'>{item.label}</span>
+                      <span className='text-xs font-medium text-foreground'>
+                        {item.value}
+                      </span>
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
           )}

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { LogOut, MessageCircle, Sparkles, UserRound } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import AuthModal from '@/components/auth-modal'
+import ConfirmDialog from '@/components/confirm-dialog'
 import NavHeader from '@/components/nav-header'
 import { fetchMyHistory, type ChatMessage } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
@@ -30,6 +31,7 @@ export default function AccountPage() {
   const { t, locale } = useI18n()
   const { identity, loading, logout } = useIdentity()
   const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null)
+  const [confirmLogout, setConfirmLogout] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [msgLoading, setMsgLoading] = useState(false)
 
@@ -132,7 +134,7 @@ export default function AccountPage() {
                 </>
               ) : (
                 <button
-                  onClick={() => void logout()}
+                  onClick={() => setConfirmLogout(true)}
                   className='flex items-center gap-1.5 rounded-xl border border-border px-4 py-2 text-sm text-subtle transition hover:border-foreground/50 hover:text-foreground'
                 >
                   <LogOut className='size-4' />
@@ -195,6 +197,16 @@ export default function AccountPage() {
       </main>
 
       {authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} />}
+      <ConfirmDialog
+        open={confirmLogout}
+        title={t('account.logout')}
+        desc={t('nav.logoutConfirm')}
+        onConfirm={() => {
+          setConfirmLogout(false)
+          void logout()
+        }}
+        onClose={() => setConfirmLogout(false)}
+      />
     </div>
   )
 }

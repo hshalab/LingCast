@@ -1,12 +1,22 @@
 'use client'
 
 import Link from 'next/link'
-import { Moon, Sun } from 'lucide-react'
+import { ChevronDown, LogOut, Moon, Sun, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import AuthModal from '@/components/auth-modal'
+import ConfirmDialog from '@/components/confirm-dialog'
 import { useI18n } from '@/lib/i18n'
 import { useIdentity } from '@/lib/identity'
 import { useTheme } from '@/lib/theme'
+
+const AVATAR_COLORS = [
+  'bg-blue-600',
+  'bg-violet-600',
+  'bg-emerald-600',
+  'bg-amber-600',
+  'bg-rose-600',
+  'bg-cyan-600',
+]
 
 /** Shared audience-site navigation bar: brand + chat identity (register/login/logout). */
 export default function NavHeader() {
@@ -14,6 +24,8 @@ export default function NavHeader() {
   const { identity, loading: identityLoading, ensureIdentity, logout } = useIdentity()
   const { theme, toggleTheme } = useTheme()
   const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [confirmLogout, setConfirmLogout] = useState(false)
 
   return (
     <>
@@ -59,21 +71,64 @@ export default function NavHeader() {
 
             {identity ? (
               <>
-                <Link
-                  href='/account'
-                  title={t('nav.accountCenter')}
-                  className={`hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition hover:ring-1 hover:ring-foreground/25 sm:flex ${
-                    identity.isGuest
-                      ? 'bg-muted/80 text-subtle'
-                      : 'bg-blue-600/20 text-blue-300'
-                  }`}
-                >
-                  <span>
-                    {identity.isGuest ? t('nav.guest') : t('nav.account')}
-                  </span>
-                  <span className='font-medium'>{identity.username}</span>
-                  <span className='opacity-60'>#{identity.userId}</span>
-                </Link>
+                {/* 身份入口：头像 + 名字，点击展开 Profile / Logout 下拉 */}
+                <div className='relative hidden sm:block'>
+                  <button
+                    onClick={() => setMenuOpen((o) => !o)}
+                    className={`flex items-center gap-2 rounded-full border border-border px-1.5 py-1.5 pe-3 transition hover:border-foreground/40 ${
+                      identity.isGuest ? 'bg-muted/80' : 'bg-blue-600/15'
+                    }`}
+                  >
+                    <span
+                      className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white ${
+                        AVATAR_COLORS[Math.abs(identity.userId) % AVATAR_COLORS.length]
+                      }`}
+                    >
+                      {identity.username.trim().slice(0, 1).toUpperCase() || '?'}
+                    </span>
+                    <span className='hidden max-w-28 truncate text-sm font-medium text-foreground md:block'>
+                      {identity.username}
+                    </span>
+                    <ChevronDown
+                      className={`size-3.5 text-muted transition-transform ${
+                        menuOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {menuOpen && (
+                    <>
+                      <div
+                        className='fixed inset-0 z-40'
+                        onClick={() => setMenuOpen(false)}
+                      />
+                      <div className='absolute end-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-border bg-surface shadow-2xl'>
+                        <Link
+                          href='/account'
+                          onClick={() => setMenuOpen(false)}
+                          className='flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-foreground transition hover:bg-muted'
+                        >
+                          <UserRound className='size-4 text-muted' />
+                          {t('nav.profile')}
+                          <span className='ml-auto text-[11px] text-muted'>
+                            #{identity.userId}
+                          </span>
+                        </Link>
+                        <div className='h-px bg-border' />
+                        <button
+                          onClick={() => {
+                            setMenuOpen(false)
+                            setConfirmLogout(true)
+                          }}
+                          className='flex w-full items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-400 transition hover:bg-muted'
+                        >
+                          <LogOut className='size-4' />
+                          {t('nav.logout')}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
                 {identity.isGuest ? (
                   <>
                     <button
@@ -89,14 +144,7 @@ export default function NavHeader() {
                       {t('nav.login')}
                     </button>
                   </>
-                ) : (
-                  <button
-                    onClick={() => void logout()}
-                    className='rounded-lg border border-border px-3 py-1.5 text-sm text-subtle transition hover:border-foreground/50'
-                  >
-                    {t('nav.logout')}
-                  </button>
-                )}
+                ) : null}
               </>
             ) : (
               <button
@@ -114,6 +162,16 @@ export default function NavHeader() {
       </header>
 
       {authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} />}
+      <ConfirmDialog
+        open={confirmLogout}
+        title={t('nav.logout')}
+        desc={t('nav.logoutConfirm')}
+        onConfirm={() => {
+          setConfirmLogout(false)
+          void logout()
+        }}
+        onClose={() => setConfirmLogout(false)}
+      />
     </>
   )
 }
