@@ -51,6 +51,7 @@ export const en = {
     broadcast: 'Broadcast',
     liveStudio: 'Live Studio',
     taskCenter: 'Task Center',
+    knowledge: 'Knowledge Base',
     userList: 'User List',
     accountSettings: 'Account Settings',
     signOut: 'Sign out',
@@ -324,6 +325,11 @@ export const en = {
   },
   knowledge: {
     title: 'Private Knowledge Base',
+    pageTitle: 'Private Knowledge Base',
+    pageSubtitle:
+      'Manage the avatar\u2019s exclusive knowledge (strictly isolated per avatar); it is chunked and embedded locally, and live Q&A answers from it.',
+    selectAvatar: 'Select an avatar',
+    noAvatar: 'Select an avatar first',
     subtitle:
       "The avatar's exclusive knowledge (strictly isolated per avatar): paste text or upload .txt/.pdf — it is chunked and embedded locally, and live Q&A answers from it.",
     textPlaceholder: 'Paste knowledge text, e.g. product specs, FAQs…',

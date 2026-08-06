@@ -15,6 +15,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedTaskCenterRouteImport } from './routes/_authenticated/task-center'
 import { Route as AuthenticatedLiveStudioRouteImport } from './routes/_authenticated/live-studio'
+import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
 import { Route as AuthenticatedBroadcastRouteImport } from './routes/_authenticated/broadcast'
 import { Route as AuthenticatedAvatarStudioRouteImport } from './routes/_authenticated/avatar-studio'
 import { Route as AuthenticatedAvatarLibraryRouteImport } from './routes/_authenticated/avatar-library'
@@ -69,6 +70,11 @@ const AuthenticatedTaskCenterRoute = AuthenticatedTaskCenterRouteImport.update({
 const AuthenticatedLiveStudioRoute = AuthenticatedLiveStudioRouteImport.update({
   id: '/live-studio',
   path: '/live-studio',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedKnowledgeRoute = AuthenticatedKnowledgeRouteImport.update({
+  id: '/knowledge',
+  path: '/knowledge',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedBroadcastRoute = AuthenticatedBroadcastRouteImport.update({
@@ -225,6 +231,7 @@ export interface FileRoutesByFullPath {
   '/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/broadcast': typeof AuthenticatedBroadcastRoute
+  '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/live-studio': typeof AuthenticatedLiveStudioRoute
   '/task-center': typeof AuthenticatedTaskCenterRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -255,6 +262,7 @@ export interface FileRoutesByTo {
   '/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/broadcast': typeof AuthenticatedBroadcastRoute
+  '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/live-studio': typeof AuthenticatedLiveStudioRoute
   '/task-center': typeof AuthenticatedTaskCenterRoute
   '/': typeof AuthenticatedIndexRoute
@@ -290,6 +298,7 @@ export interface FileRoutesById {
   '/_authenticated/avatar-library': typeof AuthenticatedAvatarLibraryRoute
   '/_authenticated/avatar-studio': typeof AuthenticatedAvatarStudioRoute
   '/_authenticated/broadcast': typeof AuthenticatedBroadcastRoute
+  '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRoute
   '/_authenticated/live-studio': typeof AuthenticatedLiveStudioRoute
   '/_authenticated/task-center': typeof AuthenticatedTaskCenterRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -324,6 +333,7 @@ export interface FileRouteTypes {
     | '/avatar-library'
     | '/avatar-studio'
     | '/broadcast'
+    | '/knowledge'
     | '/live-studio'
     | '/task-center'
     | '/errors/$error'
@@ -354,6 +364,7 @@ export interface FileRouteTypes {
     | '/avatar-library'
     | '/avatar-studio'
     | '/broadcast'
+    | '/knowledge'
     | '/live-studio'
     | '/task-center'
     | '/'
@@ -388,6 +399,7 @@ export interface FileRouteTypes {
     | '/_authenticated/avatar-library'
     | '/_authenticated/avatar-studio'
     | '/_authenticated/broadcast'
+    | '/_authenticated/knowledge'
     | '/_authenticated/live-studio'
     | '/_authenticated/task-center'
     | '/_authenticated/'
@@ -461,6 +473,13 @@ declare module '@tanstack/react-router' {
       path: '/live-studio'
       fullPath: '/live-studio'
       preLoaderRoute: typeof AuthenticatedLiveStudioRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/knowledge': {
+      id: '/_authenticated/knowledge'
+      path: '/knowledge'
+      fullPath: '/knowledge'
+      preLoaderRoute: typeof AuthenticatedKnowledgeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/broadcast': {
@@ -667,6 +686,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAvatarLibraryRoute: typeof AuthenticatedAvatarLibraryRoute
   AuthenticatedAvatarStudioRoute: typeof AuthenticatedAvatarStudioRoute
   AuthenticatedBroadcastRoute: typeof AuthenticatedBroadcastRoute
+  AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRoute
   AuthenticatedLiveStudioRoute: typeof AuthenticatedLiveStudioRoute
   AuthenticatedTaskCenterRoute: typeof AuthenticatedTaskCenterRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -683,6 +703,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAvatarLibraryRoute: AuthenticatedAvatarLibraryRoute,
   AuthenticatedAvatarStudioRoute: AuthenticatedAvatarStudioRoute,
   AuthenticatedBroadcastRoute: AuthenticatedBroadcastRoute,
+  AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRoute,
   AuthenticatedLiveStudioRoute: AuthenticatedLiveStudioRoute,
   AuthenticatedTaskCenterRoute: AuthenticatedTaskCenterRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,

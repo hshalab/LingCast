@@ -51,6 +51,7 @@ export const zh = {
     broadcast: '播报制作',
     liveStudio: '直播台',
     taskCenter: '任务中心',
+    knowledge: '知识库',
     userList: '用户列表',
     accountSettings: '账号设置',
     signOut: '退出登录',
@@ -313,6 +314,10 @@ export const zh = {
   },
   knowledge: {
     title: '私有知识库',
+    pageTitle: '私有知识库',
+    pageSubtitle: '为数字人管理专属知识（严格按数字人隔离），系统会自动分块并本地向量化，直播问答按知识库回答。',
+    selectAvatar: '选择数字人',
+    noAvatar: '请先在左侧选择一个数字人',
     subtitle:
       '数字人的专属知识（按头像严格隔离）：粘贴文本或上传 .txt/.pdf，系统会本地分块并向量化，直播问答时按知识库回答。',
     textPlaceholder: '粘贴知识文本，例如商品参数、FAQ 等…',

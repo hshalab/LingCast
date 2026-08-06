@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/select'
 import { api, type Avatar } from '@/lib/api'
 import { VideoPlayerDialog } from '@/components/video-player-dialog'
-import { KnowledgePanel } from './knowledge-panel'
+import { KnowledgePanel } from '@/features/knowledge/knowledge-panel'
 import {
   cacheVoices,
   DEFAULT_VOICE_ID,
