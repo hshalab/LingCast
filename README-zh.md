@@ -89,9 +89,10 @@
   （记住选择并自动跟随浏览器语言）；后端错误消息按请求 `Accept-Language` 返回
   对应语言；直播间 AI 按界面语言回复。
 - [x] **人脸修复（解决 Wav2Lip 口型变形）**：双轨增强器（`worker/ai/enhancer.py`）——
-  直播链路用 GFPGANv1.4 ONNX 只修复人脸 ROI 并以羽化遮罩贴回（省 ~80% 计算量），
-  离线播报用 CodeFormer ONNX（保真度 `w=0.6`）全脸修复。纯 ONNX 推理
-  （CoreML/CUDA/ROCm），`FACE_ENHANCER=auto|gfpgan|codeformer|off`。
+  离线播报用 CodeFormer ONNX（保真度 `w=0.6`）全脸修复（默认开启），直播链路用
+  GFPGANv1.4 ONNX 只修复人脸 ROI + 羽化遮罩（**需显式 `FACE_ENHANCER=gfpgan` 开启**，
+  Apple Silicon CoreML 约 1s/帧会拖死 24fps 推流；GPU 机器配合 `ENHANCER_MAX_FPS`
+  限频）。纯 ONNX 推理（CoreML/CUDA/ROCm）。
 - [ ] **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
 
 ### 规划中（Roadmap）

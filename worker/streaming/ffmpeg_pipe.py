@@ -38,6 +38,10 @@ AUDIO_SAMPLE_RATE = 16000
 _AUDIO_WRITE_CHUNK = 4096
 
 
+class FFmpegPipeClosedError(OSError):
+    """Raised when writing to a pipe whose ffmpeg process has exited."""
+
+
 class FFmpegPipe:
     """A single ffmpeg process encoding BGR24 frames + s16le PCM to an
     RTMP/FLV destination (SRS or a local file for testing)."""
@@ -124,23 +128,51 @@ class FFmpegPipe:
     # ------------------------------------------------------------------ #
     # Writing
     # ------------------------------------------------------------------ #
+    def _check_alive(self) -> None:
+        if self.proc is None:
+            raise FFmpegPipeClosedError(
+                f"ffmpeg pipe for stream {self.stream_id} was never started"
+            )
+        code = self.proc.poll()
+        if code is not None:
+            raise FFmpegPipeClosedError(
+                f"ffmpeg exited with code {code} for stream {self.stream_id} "
+                f"(see {self.log_path})"
+            )
+
     def write_frame(self, bgr_frame) -> None:
         """Write one BGR24 frame (OpenCV ndarray, HxWx3 uint8)."""
-        if self.proc is None:
-            raise RuntimeError("FFmpegPipe.start() must be called before writing")
-        self.proc.stdin.write(bgr_frame.tobytes())  # type: ignore[union-attr]
+        self._check_alive()
+        try:
+            self.proc.stdin.write(bgr_frame.tobytes())  # type: ignore[union-attr]
+        except (BrokenPipeError, OSError) as exc:
+            raise FFmpegPipeClosedError(
+                f"video pipe closed for stream {self.stream_id} "
+                f"(ffmpeg log: {self.log_path})"
+            ) from exc
 
     def write_audio(self, pcm16_bytes: bytes) -> None:
         """Write mono 16kHz s16le PCM in small pieces to avoid pipe deadlocks."""
+        self._check_alive()
         if self._audio_fd is None:
-            raise RuntimeError("FFmpegPipe.start() must be called before writing")
-        view = memoryview(pcm16_bytes)
-        pos = 0
-        while pos < len(view):
-            written = os.write(self._audio_fd, view[pos : pos + _AUDIO_WRITE_CHUNK])
-            if written <= 0:
-                raise OSError("ffmpeg audio pipe closed early")
-            pos += written
+            raise FFmpegPipeClosedError(
+                f"audio pipe for stream {self.stream_id} was never started"
+            )
+        try:
+            view = memoryview(pcm16_bytes)
+            pos = 0
+            while pos < len(view):
+                written = os.write(
+                    self._audio_fd, view[pos : pos + _AUDIO_WRITE_CHUNK]
+                )
+                if written <= 0:
+                    raise OSError("ffmpeg audio pipe closed early")
+                pos += written
+        except (BrokenPipeError, OSError) as exc:
+            raise FFmpegPipeClosedError(
+                f"audio pipe closed for stream {self.stream_id} "
+                f"(ffmpeg log: {self.log_path})"
+            ) from exc
 
     # ------------------------------------------------------------------ #
     # Teardown

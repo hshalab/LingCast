@@ -32,6 +32,7 @@ from pathlib import Path
 import redis
 
 from storage import S3Storage
+from streaming.ffmpeg_pipe import FFmpegPipeClosedError
 from worker import (
     _check_required_env,
     _ensure_nltk_resources,
@@ -82,6 +83,7 @@ class LiveAvatarSession:
         self._tts_thread: threading.Thread | None = None
         self._feed_thread: threading.Thread | None = None
         self._running = False
+        self._dead = False
         self.talking = None  # dict with audio/frames/iter state
         self._subtitle = None
         self._subtitle_text = ""
@@ -222,6 +224,17 @@ class LiveAvatarSession:
         while self._running:
             try:
                 self.tick(r)
+            except FFmpegPipeClosedError as exc:
+                logger.error(
+                    "session %s pipe closed: %s — stopping feed loop; "
+                    "restart the live to rebuild the pipe",
+                    self.stream_id,
+                    exc,
+                )
+                self._dead = True
+                self._running = False
+                self.close()
+                break
             except Exception:
                 logger.exception("session %s feed error, continuing", self.stream_id)
                 time.sleep(0.2)
@@ -363,6 +376,15 @@ def _control_listener(
     """Daemon thread: handle start/stop control messages for avatar sessions."""
     while True:
         try:
+            # Drop sessions whose ffmpeg pipe died so a new start can rebuild.
+            for aid, sess in list(sessions.items()):
+                if getattr(sess, "_dead", False):
+                    logger.warning(
+                        "avatar %s session dead, removing it so a new start can rebuild",
+                        aid,
+                    )
+                    sessions.pop(aid, None)
+
             item = r.blpop(control_key, timeout=1)
             if item is None:
                 continue

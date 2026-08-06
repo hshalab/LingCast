@@ -109,7 +109,9 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
 - [x] **Face restoration (fixes Wav2Lip lip deformation)**: dual-track enhancer
   (`worker/ai/enhancer.py`) — GFPGANv1.4 ONNX restores only the face ROI with a feathered
   mask in the live pipeline, CodeFormer ONNX (fidelity `w=0.6`) restores full-face detail
-  offline. ONNX-only inference (CoreML/CUDA/ROCm), `FACE_ENHANCER=auto|gfpgan|codeformer|off`.
+  offline. ONNX-only inference (CoreML/CUDA/ROCm); offline is on by default, live
+  requires explicit `FACE_ENHANCER=gfpgan` (GFPGAN is ~1s/frame on Apple Silicon CoreML,
+  throttle with `ENHANCER_MAX_FPS` on GPU machines).
 - [ ] **Mock pipeline** (`AI_MODE=mock`): lightweight placeholder for Docker Worker image demos.
 
 ### Planned (roadmap)

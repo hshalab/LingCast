@@ -75,6 +75,7 @@ class BaseEnhancer:
         roi_padding: float = 0.12,
         feather_ratio: float = 0.15,
         min_roi_size: int = 48,
+        max_enhance_fps: float = 0.0,
     ):
         roi_padding = float(
             os.environ.get("ENHANCER_ROI_PADDING", str(roi_padding))
@@ -82,6 +83,10 @@ class BaseEnhancer:
         feather_ratio = float(
             os.environ.get("ENHANCER_FEATHER_RATIO", str(feather_ratio))
         )
+        self.max_enhance_fps = float(
+            os.environ.get("ENHANCER_MAX_FPS", str(max_enhance_fps))
+        )
+        self._enhance_count = 0
         self.model_path = Path(
             model_path or os.environ.get("ENHANCER_MODEL", str(self.default_model_path()))
         )
@@ -128,6 +133,14 @@ class BaseEnhancer:
         """Restore the face ROI and blend it back with a feathered mask."""
         if not self.available or face_box is None:
             return frame
+        # Optional throttling: only enhance every Nth frame so real-time
+        # pipelines (live streaming) can keep up on slow devices.
+        if self.max_enhance_fps > 0:
+            interval = max(1, int(round(24.0 / self.max_enhance_fps)))
+            if self._enhance_count % interval != 0:
+                self._enhance_count += 1
+                return frame
+        self._enhance_count += 1
         x1, y1, x2, y2 = (int(v) for v in face_box)
         if x2 <= x1 or y2 <= y1:
             return frame
@@ -231,11 +244,20 @@ def create_enhancer(kind: str | None = None, pipeline: str = "offline") -> BaseE
     off). `pipeline` picks the recommended default when set to "auto":
     codeformer for offline broadcast, gfpgan for live streaming.
     """
+    explicit = kind is not None or bool(os.environ.get("FACE_ENHANCER"))
     kind = (kind or os.environ.get("FACE_ENHANCER", "auto")).strip().lower()
     if kind in ("off", "none", "0", "false", ""):
         return None
     if kind == "auto":
         kind = "gfpgan" if pipeline == "live" else "codeformer"
+        if pipeline == "live" and not explicit:
+            logger.warning(
+                "live face enhancement disabled by default: GFPGAN is ~1s/frame "
+                "on Apple Silicon CoreML and would stall the 24fps stream. Set "
+                "FACE_ENHANCER=gfpgan explicitly to enable (optionally with "
+                "ENHANCER_MAX_FPS to throttle)."
+            )
+            return None
     if kind in ("gfpgan", "gfpgan_roi"):
         return GFPGANEnhancer()
     if kind in ("codeformer", "codeformer_full"):
