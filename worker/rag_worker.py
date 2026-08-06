@@ -14,7 +14,7 @@ tasks pushed by the Go API, then:
      keys strictly isolated per avatar: `knowledge:{avatar_id}:{chunk_id}`.
   6. Reports back to the API webhook (`status: indexed|failed`).
 
-The worker also serves a tiny FastAPI endpoint used by the Go chat API
+The worker also serves a tiny stdlib HTTP endpoint used by the Go chat API
 (Sub-Task 3) for query embedding + per-avatar KNN retrieval:
 
     POST /embed   {"text": "..."}                         -> {"vector": [...]}
@@ -30,17 +30,14 @@ the FT.* module. Use `redis/redis-stack-server` for the redis service.
 import logging
 import json
 import os
-import queue
 import re
 import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import redis
 import requests
-import uvicorn
-from fastapi import FastAPI
-from pydantic import BaseModel
 
 from storage import S3Storage
 from worker import _load_local_env, load_config
@@ -169,7 +166,7 @@ def ensure_index(r: redis.Redis) -> None:
         existing = r.execute_command("FT._LIST")
     except redis.ResponseError:
         existing = []
-    if INDEX_NAME.encode() in existing:
+    if INDEX_NAME in [str(x) for x in existing]:
         return
     r.execute_command(
         "FT.CREATE", INDEX_NAME, "ON", "HASH", "PREFIX", "1", "knowledge:",
@@ -222,38 +219,20 @@ def store_chunks(r: redis.Redis, avatar_id: int, knowledge_id: int, chunks: list
 
 
 # ------------------------------------------------------------------ #
-# HTTP server for the Go API (Sub-Task 3)
+# HTTP server for the Go API (Sub-Task 3) — stdlib so it can run in a
+# daemon thread (uvicorn refuses to install signal handlers off the main
+# thread and silently dies).
 # ------------------------------------------------------------------ #
-app = FastAPI(title="rag-worker", docs_url=None, redoc_url=None)
-
-
-class EmbedRequest(BaseModel):
-    text: str
-
-
-class SearchRequest(BaseModel):
-    avatarId: int
-    text: str
-    topK: int = 3
-
-
-@app.post("/embed")
-def embed_endpoint(req: EmbedRequest):
-    vec = embed_texts([req.text])[0]
-    return {"vector": vec.tolist()}
-
-
-@app.post("/search")
-def search_endpoint(req: SearchRequest):
+def search_top_k(avatar_id: int, text: str, top_k: int = 3) -> list[dict]:
+    """Embed `text` and KNN-retrieve the Top-K chunks for THIS avatar only."""
     if _redis_client is None:
-        return {"chunks": []}
-    r = _redis_client
-    vec = embed_texts([req.text])[0]
+        return []
+    vec = embed_texts([text])[0]
     query = (
-        f"(@avatar_id:[{req.avatarId} {req.avatarId}])=>"
-        f"[KNN {max(1, req.topK)} @embedding $B AS score]"
+        f"(@avatar_id:[{avatar_id} {avatar_id}])=>"
+        f"[KNN {max(1, top_k)} @embedding $B AS score]"
     )
-    res = r.execute_command(
+    res = _redis_client.execute_command(
         "FT.SEARCH", INDEX_NAME, query,
         "PARAMS", "2", "B", vec.tobytes(),
         "SORTBY", "score", "ASC",
@@ -268,7 +247,45 @@ def search_endpoint(req: SearchRequest):
             for j in range(0, len(fields), 2):
                 item[fields[j]] = fields[j + 1]
             chunks.append({"content": item.get("content", ""), "score": item.get("score", "")})
-    return {"chunks": chunks}
+    return chunks
+
+
+class _HttpHandler(BaseHTTPRequestHandler):
+    def _send(self, obj, code: int = 200) -> None:
+        body = json.dumps(obj, ensure_ascii=False).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            req = json.loads(self.rfile.read(length) or b"{}")
+            if self.path == "/embed":
+                vec = embed_texts([str(req.get("text", ""))])[0]
+                self._send({"vector": vec.tolist()})
+            elif self.path == "/search":
+                chunks = search_top_k(
+                    int(req.get("avatarId", 0)),
+                    str(req.get("text", "")),
+                    int(req.get("topK", 3)),
+                )
+                self._send({"chunks": chunks})
+            else:
+                self._send({"error": "not found"}, 404)
+        except Exception as exc:
+            self._send({"error": str(exc)}, 500)
+
+    def log_message(self, fmt, *args) -> None:
+        logger.debug("embed server: " + fmt % args)
+
+
+def start_http_server(port: int = EMBED_SERVER_PORT) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", port), _HttpHandler)
+    threading.Thread(target=server.serve_forever, daemon=True, name="embed-http").start()
+    logger.info("embed server on 127.0.0.1:%s", port)
 
 
 # ------------------------------------------------------------------ #
@@ -337,12 +354,7 @@ def main() -> None:
             exc,
         )
 
-    threading.Thread(
-        target=lambda: uvicorn.run(app, host="127.0.0.1", port=EMBED_SERVER_PORT, log_level="warning"),
-        daemon=True,
-        name="embed-server",
-    ).start()
-    logger.info("embed server on 127.0.0.1:%s", EMBED_SERVER_PORT)
+    start_http_server(EMBED_SERVER_PORT)
 
     logger.info("rag worker started: queue=%s model=%s", INGEST_QUEUE_KEY, EMBED_MODEL)
     while True:
