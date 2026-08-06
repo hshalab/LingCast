@@ -1,5 +1,6 @@
 import {
   BookOpenCheck,
+  ChevronLeft,
   ChevronDown,
   ChevronRight,
   MessagesSquare,
@@ -51,6 +52,9 @@ export function ChatLogs() {
   const { t } = useTranslation()
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [items, setItems] = useState<ChatLogItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const pageSize = 20
   const [loading, setLoading] = useState(true)
   const [avatarFilter, setAvatarFilter] = useState('all')
   const [userId, setUserId] = useState('')
@@ -70,31 +74,45 @@ export function ChatLogs() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setItems(
-        await fetchChatLogs({
-          avatarId:
-            avatarFilter && avatarFilter !== 'all'
-              ? Number(avatarFilter)
-              : undefined,
-          userId: userId ? Number(userId) : undefined,
-          date: date || undefined,
-          q: keyword.trim() || undefined,
-        }),
-      )
+      const res = await fetchChatLogs({
+        avatarId:
+          avatarFilter && avatarFilter !== 'all'
+            ? Number(avatarFilter)
+            : undefined,
+        userId: userId ? Number(userId) : undefined,
+        date: date || undefined,
+        q: keyword.trim() || undefined,
+        page,
+        pageSize,
+      })
+      setItems(res.data)
+      setTotal(res.total)
     } catch {
       toast.error(t('chatLogs.toastFailed'))
     } finally {
       setLoading(false)
     }
-  }, [avatarFilter, userId, date, keyword, t])
+  }, [avatarFilter, userId, date, keyword, page, t])
+
+  const applyFilters = useCallback(() => {
+    setPage(1)
+    void load()
+  }, [load])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const goPage = (p: number) => {
+    if (p < 1 || p > totalPages) return
+    setPage(p)
+  }
 
   useEffect(() => {
     void loadAvatars()
   }, [loadAvatars])
 
-  useEffect(() => {
-    void load()
-  }, [load])
 
   const toggle = (id: number) =>
     setExpanded((prev) => {
@@ -162,7 +180,7 @@ export function ChatLogs() {
             className='w-56'
             onKeyDown={(e) => e.key === 'Enter' && void load()}
           />
-          <Button size='sm' onClick={() => void load()}>
+          <Button size='sm' onClick={() => void applyFilters()}>
             <Search className='size-4' />
             {t('common.search')}
           </Button>
@@ -172,7 +190,9 @@ export function ChatLogs() {
         <Card>
           <CardHeader className='gap-1'>
             <CardTitle>{t('chatLogs.listTitle')}</CardTitle>
-            <CardDescription>{t('chatLogs.listDesc')}</CardDescription>
+            <CardDescription>
+              {t('chatLogs.listDesc')} · {t('chatLogs.total', { total })}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -184,8 +204,9 @@ export function ChatLogs() {
                 {t('chatLogs.empty')}
               </p>
             ) : (
-              <div className='flex flex-col gap-2'>
-                {items.map((m) => {
+              <>
+                <div className='flex flex-col gap-2'>
+                  {items.map((m) => {
                   const isBot = m.role === 'bot'
                   const open = expanded.has(m.id)
                   return (
@@ -243,8 +264,33 @@ export function ChatLogs() {
                       )}
                     </div>
                   )
-                })}
-              </div>
+                  })}
+                </div>
+                {/* Pagination */}
+                <div className='mt-4 flex items-center justify-center gap-3'>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    disabled={page <= 1}
+                    onClick={() => goPage(page - 1)}
+                  >
+                    <ChevronLeft className='size-4' />
+                    {t('chatLogs.prev')}
+                  </Button>
+                  <span className='text-sm text-muted-foreground'>
+                    {t('chatLogs.pageInfo', { page, totalPages })}
+                  </span>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    disabled={page >= totalPages}
+                    onClick={() => goPage(page + 1)}
+                  >
+                    {t('chatLogs.next')}
+                    <ChevronRight className='size-4' />
+                  </Button>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

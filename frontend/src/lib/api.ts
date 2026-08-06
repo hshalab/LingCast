@@ -143,6 +143,13 @@ export type ChatLogItem = {
   createdAt: string
 }
 
+export type ChatLogPage = {
+  data: ChatLogItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 export async function listAllKnowledge(params?: {
   avatarId?: number
   q?: string
@@ -170,11 +177,13 @@ export async function fetchChatLogs(params?: {
   userId?: number
   date?: string
   q?: string
-}): Promise<ChatLogItem[]> {
-  const { data } = await api.get<{ data: ChatLogItem[] }>('/chat/logs', {
+  page?: number
+  pageSize?: number
+}): Promise<ChatLogPage> {
+  const { data } = await api.get<ChatLogPage>('/chat/logs', {
     params,
   })
-  return data.data
+  return data
 }
 
 export async function createKnowledgeText(

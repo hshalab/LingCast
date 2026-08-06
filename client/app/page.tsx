@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Mic,
   Palette,
+  Play,
   Radio,
   ShoppingCart,
   Sparkles,
@@ -95,6 +96,15 @@ export default function Home() {
                 })}
               </span>
             </div>
+            {filtered.length > 0 && (
+              <Link
+                href={`/rooms/${filtered[0].avatarId}`}
+                className='mt-5 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-2.5 text-sm font-medium text-white shadow-lg shadow-blue-600/30 transition hover:brightness-110'
+              >
+                <Play className='size-4' />
+                {t('home.enterRoom')}
+              </Link>
+            )}
           </div>
         </section>
 
@@ -175,6 +185,13 @@ export default function Home() {
                     </span>
                   </div>
                 </div>
+                {/* 悬停：进入直播间 */}
+                <div className='absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 backdrop-blur-[2px] transition duration-300 group-hover:opacity-100'>
+                  <span className='flex items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white backdrop-blur'>
+                    <Play className='size-4' />
+                    {t('home.enterRoom')}
+                  </span>
+                </div>
                 <span className='absolute right-2 top-2 flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-red-500 px-2 py-0.5 text-xs font-medium text-white shadow-lg shadow-red-600/30'>
                   <span className='size-1.5 animate-pulse rounded-full bg-white' />
                       {t('home.live')}
@@ -189,7 +206,15 @@ export default function Home() {
       </main>
 
       <footer className='border-t border-border/60 py-5 text-center text-xs text-faint'>
-        {t('home.footer')}
+        <div className='mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 px-4 sm:flex-row sm:px-6'>
+          <span>{t('home.footer')}</span>
+          <Link
+            href='/account'
+            className='text-subtle transition hover:text-foreground'
+          >
+            {t('nav.accountCenter')}
+          </Link>
+        </div>
       </footer>
     </div>
   )

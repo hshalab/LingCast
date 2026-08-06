@@ -15,6 +15,9 @@ export const LANG_KEY = 'lingcast-lang'
 export type Lang = 'zh' | 'en'
 
 const zh = {
+  common: {
+    loading: '加载中…',
+  },
   nav: {
     slogan: '数字人直播',
     guest: '游客',
@@ -26,6 +29,7 @@ const zh = {
     gettingIdentity: '获取身份中…',
     switchLight: '切换到亮色',
     switchDark: '切换到暗色',
+    accountCenter: '用户中心',
   },
   home: {
     liveNow: '正在开播',
@@ -38,6 +42,7 @@ const zh = {
     live: '直播中',
     age: '{{age}}岁',
     footer: '灵播 · AI 数字人直播平台',
+    enterRoom: '进入直播间',
   },
   category: {
     all: '全部',
@@ -87,9 +92,25 @@ const zh = {
   identity: {
     notReady: '身份未就绪，请稍后重试',
   },
+  account: {
+    title: '用户中心',
+    guestBadge: '游客',
+    accountBadge: '账号',
+    guestDesc: '当前是游客身份，聊天记录保存在本机；注册后可跨设备保留。',
+    accountDesc: '已登录账号，聊天记录跟随账号。',
+    register: '注册账号',
+    login: '登录',
+    logout: '退出登录',
+    myMessages: '我的消息',
+    noMessages: '还没有聊天记录，去直播间说两句吧',
+    goHome: '去逛逛直播间',
+  },
 }
 
 const en: typeof zh = {
+  common: {
+    loading: 'Loading…',
+  },
   nav: {
     slogan: 'AI Digital Human Live',
     guest: 'Guest',
@@ -101,6 +122,7 @@ const en: typeof zh = {
     gettingIdentity: 'Getting identity…',
     switchLight: 'Switch to light',
     switchDark: 'Switch to dark',
+    accountCenter: 'Account Center',
   },
   home: {
     liveNow: 'Live Now',
@@ -114,6 +136,7 @@ const en: typeof zh = {
     live: 'LIVE',
     age: 'Age {{age}}',
     footer: 'LingCast · AI Digital Human Live Platform',
+    enterRoom: 'Enter live room',
   },
   category: {
     all: 'All',
@@ -164,6 +187,20 @@ const en: typeof zh = {
   },
   identity: {
     notReady: 'Identity not ready, please retry later',
+  },
+  account: {
+    title: 'Account Center',
+    guestBadge: 'Guest',
+    accountBadge: 'Account',
+    guestDesc:
+      'You are browsing as a guest — chat history is stored locally. Register to keep it across devices.',
+    accountDesc: 'Signed in as an account; chat history follows your account.',
+    register: 'Create account',
+    login: 'Sign in',
+    logout: 'Sign out',
+    myMessages: 'My messages',
+    noMessages: 'No chat history yet — say something in a live room!',
+    goHome: 'Browse live rooms',
   },
 }
 

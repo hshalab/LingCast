@@ -163,13 +163,29 @@ func (h *ChatHandler) Login(c *gin.Context) {
 // History handles GET /api/chat/history?avatarId= — the persisted room chat
 // (viewer messages + bot replies), newest 200 rows ordered oldest first.
 func (h *ChatHandler) History(c *gin.Context) {
-	avatarID, err := strconv.ParseUint(c.Query("avatarId"), 10, 64)
-	if err != nil || avatarID == 0 {
+	var avatarID uint64
+	if q := c.Query("avatarId"); q != "" {
+		id, err := strconv.ParseUint(q, 10, 64)
+		if err != nil || id == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.chat.avatar_id_required")})
+			return
+		}
+		avatarID = id
+	}
+	userID, _ := strconv.ParseUint(c.Query("userId"), 10, 64)
+	if avatarID == 0 && userID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.chat.avatar_id_required")})
 		return
 	}
 	var msgs []models.ChatMessage
-	if err := h.db.Where("avatar_id = ?", avatarID).
+	q := h.db.Model(&models.ChatMessage{})
+	if avatarID > 0 {
+		q = q.Where("avatar_id = ?", avatarID)
+	}
+	if userID > 0 {
+		q = q.Where("user_id = ?", userID)
+	}
+	if err := q.
 		Order("id asc").Limit(200).Find(&msgs).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -273,8 +289,25 @@ func (h *ChatHandler) Logs(c *gin.Context) {
 		q = q.Where("chat_messages.content LIKE ?", like)
 	}
 
+	page := 1
+	pageSize := 20
+	if p, err := strconv.Atoi(c.DefaultQuery("page", "1")); err == nil && p > 0 {
+		page = p
+	}
+	if ps, err := strconv.Atoi(c.DefaultQuery("pageSize", "20")); err == nil && ps > 0 {
+		pageSize = min(ps, 100)
+	}
+
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	var rows []row
-	if err := q.Order("chat_messages.id desc").Limit(200).Find(&rows).Error; err != nil {
+	if err := q.Order("chat_messages.id desc").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -299,5 +332,10 @@ func (h *ChatHandler) Logs(c *gin.Context) {
 		}
 		items = append(items, item)
 	}
-	c.JSON(http.StatusOK, gin.H{"data": items})
+	c.JSON(http.StatusOK, gin.H{
+		"data":     items,
+		"total":    total,
+		"page":     page,
+		"pageSize": pageSize,
+	})
 }

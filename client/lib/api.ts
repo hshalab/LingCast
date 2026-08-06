@@ -142,6 +142,12 @@ export function fetchChatHistory(
   return request(`/api/chat/history?avatarId=${avatarId}`)
 }
 
+export function fetchMyHistory(
+  userId: number,
+): Promise<{ data: ChatMessage[] }> {
+  return request(`/api/chat/history?userId=${userId}`)
+}
+
 export function fetchAvatar(avatarId: number): Promise<Avatar> {
   return request(`/api/avatars/${avatarId}`)
 }

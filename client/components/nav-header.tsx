@@ -59,8 +59,10 @@ export default function NavHeader() {
 
             {identity ? (
               <>
-                <span
-                  className={`hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-xs sm:flex ${
+                <Link
+                  href='/account'
+                  title={t('nav.accountCenter')}
+                  className={`hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition hover:ring-1 hover:ring-foreground/25 sm:flex ${
                     identity.isGuest
                       ? 'bg-muted/80 text-subtle'
                       : 'bg-blue-600/20 text-blue-300'
@@ -71,7 +73,7 @@ export default function NavHeader() {
                   </span>
                   <span className='font-medium'>{identity.username}</span>
                   <span className='opacity-60'>#{identity.userId}</span>
-                </span>
+                </Link>
                 {identity.isGuest ? (
                   <>
                     <button
