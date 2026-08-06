@@ -20,11 +20,14 @@
   Python 用 boto3；服务间只传 S3 Key，不用本地路径。
 - 基础设施：Docker Compose；**MariaDB 11** + **Redis 8.2.2-alpine** + MinIO
   + **rag-service**（本地 RAG 微服务：zvec 全文索引 + Jieba 中文分词，
-  Docker 内 `rag-service/`，端口 8001，零模型依赖）。
+  Docker 内 `rag-service/`，端口 8001，零模型依赖）+ **tts-service**
+  （Edge-TTS 微服务：async edge-tts → 16kHz PCM WAV → S3，`tts-service/`，
+  端口 8002，S3 共享存储，媒体不过 HTTP）。
 - 部署模式：Docker 里跑基础设施 + API + 前端 + 轻量 Mock Worker；**真实 AI Worker
   在宿主机原生运行**：macOS Apple Silicon（MPS/CoreML）、Linux NVIDIA CUDA、
-  Linux **AMD ROCm**（RX 6800 XT 等 RDNA2，见 README 对应章节）。Docker 发布
-  6379/9000 端口供宿主机 Worker 连接。
+  Linux **AMD ROCm**（RX 6800 XT 等 RDNA2，见 README 对应章节）。宿主机仅开放
+  必要端口：3000（观众端）/ 8080（管理端）/ 1935（RTMP 推流）/ 6379（Redis）/
+  9000（MinIO）；`api`、`rag-service`、`tts-service` 均在内网，不发布端口。
 - 依赖组（`worker/pyproject.toml`）：`models`（macOS 默认）、`cuda`、
   `rocm`（仅 `onnxruntime-rocm`，torch 用官方 ROCm 镜像或手动装）——cuda/rocm
   互斥，Linux 用 `--no-group` 二选一；ROCm 容器里 `uv sync` 必须加 `--inexact`
@@ -89,7 +92,8 @@
   `POST /api/live/{id}/push` 按句切块入 `live_queue:{id}` → 异步 TTS → Wav2Lip
   内存出帧 → 口型帧 + TTS 音频替换推流，句子结束自动回闲置，管道不关闭。
   `GET /api/live/{id}/status` 供前端轮询队列。SRS v5 已入 docker-compose
-  （1935 RTMP / 1985 API / 8081 HTTP-FLV，Nginx `/live/` 代理到 srs:8080）。
+  （仅发布 1935 RTMP 供宿主机 Worker 推流；1985 API / 8080 HTTP-FLV 只在内网，
+  Nginx `/live/` 代理到 srs:8080）。
 - ✅ `worker/download_models.py --models all`：克隆外部代码、下载权重、导出
   wav2lip ONNX、创建软链接（一键可复现）。
 - ✅ 性能：16 秒视频口型阶段约 10 秒；CPU 线程数受限（`WAV2LIP_THREADS`，默认 4）。
@@ -147,6 +151,7 @@
 ```text
 backend/   Go API（Dockerfile）
 rag-service/  本地 RAG 知识库微服务（FastAPI + uv + zvec FTS/Jieba，端口 8001）
+tts-service/  Edge-TTS 微服务（FastAPI + uv + edge-tts + ffmpeg，端口 8002，内网）
 frontend/  React 管理后台（Dockerfile + nginx.conf）
   src/components/xg-video.tsx   内联 xgplayer 封装（播报预览 720x1080 用）
   src/features/knowledge/      知识库管理（index=Collection 列表 / detail=文档）

@@ -69,8 +69,9 @@ AMD GPUs using ROCm.
 ### Step 3.1: SRS Streaming Gateway — [x]
 
 1. ✅ 在 `docker-compose.yml` 集成 SRS（`ossrs/srs:5`）容器。
-2. ✅ 端口：1935 RTMP 推流、1985 HTTP API、8081 HTTP-FLV（避免与前端 8080 冲突）。
-3. ✅ 拉流经 Nginx `/live/` 代理到 `srs:8081`（内网，仅 1935 供宿主机 Worker）。
+2. ✅ 端口：仅发布 1935 RTMP 供宿主机 Worker 推流；1985 HTTP API 与
+   8080 HTTP-FLV 只在内网（避免向宿主机开放调试端口）。
+3. ✅ 拉流经 Nginx `/live/` 代理到 `srs:8080`（内网）。
 
 ### Step 3.2: Streaming Pipeline Refactor（交互式问答）— [x]
 
@@ -171,6 +172,12 @@ AMD GPUs using ROCm.
   `http://rag-service:8001`；Redis 回退 `redis:8.2.2-alpine`（不再需要
   RediSearch），`worker/rag_worker.py` 与 `start_workers.sh` 中的 rag_worker
   已停用。
+- [x] **TTS 微服务（tts-service）**：async `edge_tts.Communicate` → ffmpeg
+  转 16kHz/16-bit/mono PCM WAV → 上传 S3（MinIO，S3 配置走环境变量）→ 只返回
+  S3 key + 元数据，`finally` 清理临时文件；compose 内网 :8002，不发布宿主端口。
+- [x] **端口收敛**：宿主机不调试，SRS 只发布 1935（RTMP 推流），1985/8081
+  收回内网；`api`/`rag-service`/`tts-service` 均不发布端口；对外仅
+  3000/8080/1935/6379/9000。
 
 ## Strict Rules for Execution
 

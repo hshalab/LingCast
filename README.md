@@ -130,6 +130,10 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   rename / delete) and `/knowledge/$id` manages the documents inside a
   collection (add text / upload .txt/.pdf / delete) with a Top-3 retrieval test
   scoped to that collection.
+- [x] **Edge-TTS microservice** (`tts-service/`, internal :8002): async
+  `edge_tts.Communicate` → ffmpeg → **16 kHz / 16-bit / mono PCM WAV** (the exact
+  format Wav2Lip requires) → upload to S3 (MinIO) → returns only the S3 object
+  key + metadata; temp files are removed in `finally`, S3 config comes from env.
 - [x] **Chat log page**: `/chat-logs` filters by avatar, user ID, date and
   keyword with pagination; bot replies are tagged "knowledge hit" and the exact
   retrieved chunks can be expanded.
@@ -181,6 +185,9 @@ Python AI Worker ──> Redis queue / boto3 downloads assets
 
 rag-service ──> zvec in-process full-text index (Jieba Chinese, zero model)
             ──> Go API calls /v1/knowledge/{ingest,search,delete,chunks} directly
+
+tts-service ──> async edge-tts → 16kHz PCM WAV → S3 (MinIO)
+            ──> POST /v1/tts/synthesize returns the S3 key only (no media over HTTP)
 ```
 
 - Admin frontend: React + TypeScript + Vite + Tailwind + shadcn/ui (brand "LingCast", dark
@@ -194,7 +201,10 @@ rag-service ──> zvec in-process full-text index (Jieba Chinese, zero model)
 - Storage: S3-compatible object storage; MinIO emulates RustFS in dev.
 - Deployment: Docker Compose orchestrates the infrastructure and frontends; **the real AI
   Worker runs natively on the host** (MPS/CoreML on macOS Apple Silicon, NVIDIA CUDA or AMD
-  ROCm on Linux); Docker only publishes Redis 6379 and MinIO 9000 to the host.
+  ROCm on Linux). Host-published ports are limited to what the host worker and
+  the web apps need: **3000** (viewer), **8080** (admin/API), **1935** (RTMP ingest),
+  **6379** (Redis) and **9000** (MinIO). `api`, `rag-service` and `tts-service`
+  stay on the internal network.
 
 ## Quick Start
 
@@ -415,6 +425,7 @@ speed / amplitude) is documented in the `LIVEPORTRAIT_DRIVING*` comments and
 | `DELETE` | `/api/knowledge-collections/:id/documents/:did` | Delete a document (including its indexes) |
 | `POST` | `/api/knowledge-collections/:id/documents/:did/chunks` | Inspect the indexed chunks of a document |
 | `POST` | `/api/knowledge/search` | Retrieval test (`avatarId` or `collectionId`, Top-3) |
+| `POST` | `/v1/tts/synthesize` | `{text, voiceId}` → 16kHz PCM WAV to S3, returns `{s3_key, metadata}` (tts-service, internal) |
 | `POST` | `/api/tasks` | `{avatarId, scriptText}`, enqueues and returns a task |
 | `GET` | `/api/tasks/:id` | Poll task status and output URL |
 | `POST` | `/api/tasks/:id/status` | Worker-internal Webhook (processing/completed/failed) |
@@ -445,6 +456,7 @@ speed / amplitude) is documented in the `LIVEPORTRAIT_DRIVING*` comments and
 LingCast/
 ├── backend/        Go Gin API (models, S3, Redis, handlers, Dockerfile)
 ├── rag-service/    Local RAG microservice (FastAPI + uv + zvec FTS/Jieba, :8001)
+├── tts-service/    Edge-TTS microservice (FastAPI + uv + edge-tts + ffmpeg, :8002)
 ├── frontend/       LingCast admin console (React + shadcn/ui, :8080)
 │   └── public/images/  brand logos (dark/light) + favicon
 ├── client/         Next.js viewer app (standalone project, :3000)

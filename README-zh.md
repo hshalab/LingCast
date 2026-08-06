@@ -106,6 +106,10 @@
 - [x] **知识库管理界面**：`/knowledge` 知识库列表（创建/重命名/删除，知识库
   归属数字人），`/knowledge/$id` 管理知识库内的文档（文本/.txt/.pdf、删除、
   查看分块），支持按知识库做 Top-3 检索测试。
+- [x] **Edge-TTS 微服务**（`tts-service/`，Docker 内网 :8002）：async
+  `edge_tts.Communicate` → ffmpeg → **16kHz / 16-bit / 单声道 PCM WAV**
+  （Wav2Lip 下游要求的确切格式）→ 上传 S3（MinIO）→ 只返回 S3 key + 元数据；
+  `finally` 清理临时文件，S3 配置全部来自环境变量。
 - [x] **聊天日志页**：`/chat-logs` 按数字人/用户 ID/日期/关键字检索 + 分页；
   机器人回复标注「命中知识库」并可展开查看命中的知识片段。
 - [x] **观众端用户中心**：`/account` 展示游客/账号身份，支持注册/登录/退出与
@@ -154,6 +158,9 @@ Python AI Worker ──> Redis 队列 / boto3 下载素材
 
 rag-service ──> zvec 进程内全文索引（Jieba 中文分词，零模型）
              ──> Go API 直连 /v1/knowledge/{ingest,search,delete,chunks}
+
+tts-service ──> async edge-tts → 16kHz PCM WAV → S3（MinIO）
+             ──> POST /v1/tts/synthesize 只返回 S3 key（媒体不过 HTTP）
 ```
 
 - 管理端前端：React + TypeScript + Vite + Tailwind + shadcn/ui（品牌「灵播
@@ -167,7 +174,9 @@ rag-service ──> zvec 进程内全文索引（Jieba 中文分词，零模型�
 - 存储：S3 兼容对象存储，开发环境用 MinIO 模拟 RustFS。
 - 部署：Docker Compose 编排基础设施与前端；**真实 AI Worker 在宿主机原生运行**
   （macOS Apple Silicon 用 MPS/CoreML，Linux 用 NVIDIA CUDA 或 AMD ROCm），
-  Docker 仅向宿主机发布 Redis 6379 与 MinIO 9000 两个端口。
+  宿主机仅开放必要端口：**3000**（观众端）、**8080**（管理端/API）、**1935**
+  （RTMP 推流）、**6379**（Redis）与 **9000**（MinIO）；`api`、`rag-service`、
+  `tts-service` 均在内网，不开放宿主端口。
 
 ## 快速开始
 
@@ -379,6 +388,7 @@ curl http://localhost:8080/api/live/9/status
 | `DELETE` | `/api/knowledge-collections/:id/documents/:did` | 删除文档（含索引） |
 | `POST` | `/api/knowledge-collections/:id/documents/:did/chunks` | 查看文档分块 |
 | `POST` | `/api/knowledge/search` | 在线检索测试（`avatarId` 或 `collectionId`，Top-3） |
+| `POST` | `/v1/tts/synthesize` | `{text, voiceId}` → 16kHz PCM WAV 上传 S3，返回 `{s3_key, metadata}`（tts-service，内网） |
 | `POST` | `/api/tasks` | `{avatarId, scriptText}`，入队并返回任务 |
 | `GET` | `/api/tasks/:id` | 轮询任务状态与输出 URL |
 | `POST` | `/api/tasks/:id/status` | Worker 内部 Webhook（processing/completed/failed） |
@@ -409,6 +419,7 @@ curl http://localhost:8080/api/live/9/status
 LingCast/
 ├── backend/        Go Gin API（模型、S3、Redis、handlers、Dockerfile）
 ├── rag-service/    本地 RAG 微服务（FastAPI + uv + zvec FTS/Jieba，:8001）
+├── tts-service/    Edge-TTS 微服务（FastAPI + uv + edge-tts + ffmpeg，:8002）
 ├── frontend/       灵播管理后台（React + shadcn/ui，:8080）
 │   └── public/images/  品牌 logo（暗/亮）+ favicon
 ├── client/         Next.js 观众端（独立项目，:3000）
