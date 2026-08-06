@@ -407,7 +407,9 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                       to='/live-studio'
                       search={{ avatarId: String(avatar.id) }}
                       className={`flex items-center gap-3 rounded-lg border p-2 transition-colors hover:bg-muted ${
-                        active ? 'border-primary bg-muted ring-1 ring-primary' : ''
+                        active
+                          ? 'border-primary/70 bg-primary/10 ring-1 ring-primary/60'
+                          : ''
                       }`}
                     >
                       {avatar.imageS3Url && (
@@ -418,7 +420,13 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                         />
                       )}
                       <div className='min-w-0 flex-1'>
-                        <p className='truncate text-sm font-medium'>{avatar.name}</p>
+                        <p
+                          className={`truncate text-sm ${
+                            active ? 'font-semibold text-primary' : 'font-medium'
+                          }`}
+                        >
+                          {avatar.name}
+                        </p>
                         <p className='text-xs text-muted-foreground'>#{avatar.id}</p>
                       </div>
                       <Badge variant={live ? 'default' : 'outline'}>
