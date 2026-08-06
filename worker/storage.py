@@ -8,17 +8,55 @@ from botocore.client import Config
 logger = logging.getLogger(__name__)
 
 
+def _first_env(*names: str) -> str:
+    """Return the first non-empty env var among `names` (or "")."""
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return value
+    return ""
+
+
 class S3Storage:
-    """boto3 client pointed at the RustFS (S3-compatible) endpoint."""
+    """boto3 client pointed at the RustFS (S3-compatible) endpoint.
+
+    The credentials/endpoint are resolved with the project's `S3_*` naming
+    (docker-compose / worker/.env.local) and fall back to the AWS-style /
+    RustFS aliases so either convention works:
+
+      S3_ENDPOINT        | RUSTFS_ENDPOINT_URL
+      S3_ACCESS_KEY      | AWS_ACCESS_KEY_ID
+      S3_SECRET_KEY      | AWS_SECRET_ACCESS_KEY
+      S3_BUCKET          | S3_BUCKET_NAME
+    """
 
     def __init__(self):
-        self.bucket = os.environ["S3_BUCKET"]
+        self.endpoint = _first_env("S3_ENDPOINT", "RUSTFS_ENDPOINT_URL")
+        self.access_key = _first_env("S3_ACCESS_KEY", "AWS_ACCESS_KEY_ID")
+        self.secret_key = _first_env("S3_SECRET_KEY", "AWS_SECRET_ACCESS_KEY")
+        self.bucket = _first_env("S3_BUCKET", "S3_BUCKET_NAME")
+        missing = [
+            name
+            for name, value in (
+                ("S3_ENDPOINT/RUSTFS_ENDPOINT_URL", self.endpoint),
+                ("S3_ACCESS_KEY/AWS_ACCESS_KEY_ID", self.access_key),
+                ("S3_SECRET_KEY/AWS_SECRET_ACCESS_KEY", self.secret_key),
+                ("S3_BUCKET/S3_BUCKET_NAME", self.bucket),
+            )
+            if not value
+        ]
+        if missing:
+            raise RuntimeError(
+                "Missing object-storage env vars: "
+                + ", ".join(missing)
+                + " (worker/.env.local is loaded automatically)"
+            )
         self.public_base_url = os.environ.get("S3_PUBLIC_BASE_URL", "").rstrip("/")
         self.client = boto3.client(
             "s3",
-            endpoint_url=os.environ["S3_ENDPOINT"],
-            aws_access_key_id=os.environ["S3_ACCESS_KEY"],
-            aws_secret_access_key=os.environ["S3_SECRET_KEY"],
+            endpoint_url=self.endpoint,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
             region_name=os.environ.get("S3_REGION", "us-east-1"),
             config=Config(
                 signature_version="s3v4",

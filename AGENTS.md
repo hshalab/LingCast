@@ -103,8 +103,8 @@
 - ✅ 基础视频默认去眨眼：`renderer_real.py` 冻结眼部表情通道（`EYE_EXP_DIMS`
   取首帧值，`c_eyes/c_d_eyes_lst` 全帧复制首帧），保留耸肩/身体微晃；
   `.env.local` 设 `LIVEPORTRAIT_DRIVING_SPEED=0.2`（约 3s 一次耸肩）。
-- ✅ 播报成品预览：`broadcast/index.tsx` 状态卡片用内联 `XgVideo`（xgplayer），
-  9:16 竖版最大 720×1080，模态窗播放。
+- ✅ 播报成品预览：`broadcast/index.tsx` 状态卡片用 `VideoPlayerDialog`
+  （xgplayer 封装），9:16 竖版最大 720×1080，模态窗播放。
 - ✅ 人脸修复（Wav2Lip 口型变形）：`worker/ai/enhancer.py` 双轨 ONNX 增强器——
   离线 CodeFormer（`w` 输入保真度，默认 0.6）、直播 GFPGANv1.4（人脸 ROI + 羽化
   遮罩）；接入 `lipsync_onnx._run_batch_frames`（offline `real.py` 默认 codeformer；
@@ -155,7 +155,6 @@ backend/   Go API（Dockerfile）
 rag-service/  本地 RAG 知识库微服务（FastAPI + uv + zvec FTS/Jieba，端口 8001）
 tts-service/  Edge-TTS 微服务（FastAPI + uv + edge-tts + ffmpeg，端口 8002，内网）
 frontend-admin/  React 管理后台（Dockerfile + nginx.conf）
-  src/components/xg-video.tsx   内联 xgplayer 封装（播报预览 720x1080 用）
   src/features/knowledge/      知识库管理（index=Collection 列表 / detail=文档）
 frontend-user/    Next.js 观众端（独立项目）：app/page.tsx 列表 + app/rooms/[avatarId] 直播间
   lib/identity.tsx      全局聊天身份（游客/注册/登录/退出）
@@ -184,6 +183,12 @@ worker/
 
 - 所有 Python 命令一律 `cd worker && uv run python ...`；新增依赖用 `uv add`，
   不写 requirements.txt。
+- S3 环境变量双命名兼容：`S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY/S3_BUCKET`
+  为项目主约定，同时接受 `RUSTFS_ENDPOINT_URL/AWS_ACCESS_KEY_ID/
+  AWS_SECRET_ACCESS_KEY/S3_BUCKET_NAME` 别名（path-style，RustFS/MinIO 通用）。
+- 任务队列双格式：`{type:"render",text,tts_s3_key,base_video_s3_key}`（S3
+  共享存储）与旧 `{taskId,imageS3Key,scriptText,...}` 并存；render 任务按
+  `type` 或按键识别分发，TTS wav 下载后由 `finally` 清理，base 视频走 LRU 缓存。
 - S3 是唯一的跨服务文件通道：上传/下载都走 S3 Key/URL，不在服务间传本地路径。
 - AI 逻辑与 S3/Redis 编排解耦：新模型实现 `InferencePipeline`，在
   `worker/ai/factory.py` 注册，通过 `AI_MODE` 切换。

@@ -23,7 +23,15 @@ logger = logging.getLogger("worker")
 
 WORKER_DIR = Path(__file__).resolve().parent
 
-REQUIRED_ENV = ["S3_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET"]
+# Object-storage env pairs: the project convention (S3_*) with the AWS-style /
+# RustFS aliases as fallback, so either naming works on any deployment.
+ENV_ALIASES = {
+    "S3_ENDPOINT": "RUSTFS_ENDPOINT_URL",
+    "S3_ACCESS_KEY": "AWS_ACCESS_KEY_ID",
+    "S3_SECRET_KEY": "AWS_SECRET_ACCESS_KEY",
+    "S3_BUCKET": "S3_BUCKET_NAME",
+}
+REQUIRED_ENV = list(ENV_ALIASES)
 
 # NLTK 3.10's import-security hook treats the venv (a subdirectory of the
 # project) as "current working directory" and blocks `import regex`, which
@@ -79,7 +87,11 @@ def _load_local_env(env_file: Path | None = None) -> None:
 
 
 def _check_required_env() -> None:
-    missing = [k for k in REQUIRED_ENV if not os.environ.get(k)]
+    missing = [
+        f"{k}/{ENV_ALIASES[k]}"
+        for k in REQUIRED_ENV
+        if not (os.environ.get(k) or os.environ.get(ENV_ALIASES[k]))
+    ]
     if not missing:
         return
     print(
@@ -215,6 +227,18 @@ def process_render(
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+def _is_render(payload: dict) -> bool:
+    """True for S3-shared-storage render tasks.
+
+    Recognized either by an explicit `type == "render"` or, for producers
+    that omit the type, by the render-specific S3-key fields. The legacy
+    taskId pipeline is never reached for these payloads.
+    """
+    return payload.get("type") == "render" or (
+        "tts_s3_key" in payload and "base_video_s3_key" in payload
+    )
+
+
 def process_task(
     payload: dict,
     storage: S3Storage,
@@ -344,7 +368,7 @@ def main() -> None:
                 continue
 
             logger.info("received task payload: %s", payload)
-            if payload.get("type") == "render":
+            if _is_render(payload):
                 try:
                     process_render(
                         payload, storage, pipeline, base_cache, cfg["work_root"]

@@ -57,6 +57,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger("stream_worker")
 
+
+def parse_live_message(raw: str) -> tuple[str, str | None]:
+    """Parse one live_queue entry into (text, tts_s3_key).
+
+    The queue carries plain-text sentences (the legacy/current producer) or
+    JSON messages from the S3-shared-storage architecture:
+        {"text": "...", "tts_s3_key": "tts/xxx.wav", "base_video_s3_key": "..."}
+    The `base_video_s3_key` is ignored here — the live session already owns
+    its base clip; only the TTS key (optional) is acted upon.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return "", None
+    try:
+        obj = json.loads(raw)
+        if isinstance(obj, dict):
+            text = str(obj.get("text") or obj.get("content") or "")
+            tts_key = str(obj.get("tts_s3_key") or "").strip() or None
+            return text, tts_key
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return raw, None
+
+
 class _TalkingSegment:
     """One lip-synced sentence waiting in the ready-frames queue."""
 
@@ -93,6 +117,7 @@ class LiveAvatarSession:
         fps: float,
         queue_key: str,
         subtitle_settings: dict | None = None,
+        storage: S3Storage | None = None,
     ):
         self.avatar_id = avatar_id
         self.stream_id = stream_id
@@ -103,6 +128,7 @@ class LiveAvatarSession:
         self.fps = float(fps)
         self.queue_key = queue_key
         self.subtitle_settings = subtitle_settings or {}
+        self.storage = storage
         self.pipe = None
         self.base_frames: list | None = None
         self.cursor = 0
@@ -175,26 +201,42 @@ class LiveAvatarSession:
     # ------------------------------------------------------------------ #
     # Text intake (async TTS)
     # ------------------------------------------------------------------ #
-    def maybe_start_tts(self, text: str) -> bool:
-        """Kick off TTS for `text` if no TTS job is already running."""
+    def maybe_start_tts(self, text: str, tts_s3_key: str | None = None) -> bool:
+        """Kick off a producer-side TTS job (synthesize or S3 download)."""
         if self._tts_thread is not None and self._tts_thread.is_alive():
             return False
         self._tts_thread = threading.Thread(
             target=self._run_tts,
-            args=(text,),
+            args=(text, tts_s3_key),
             daemon=True,
             name=f"tts-{self.stream_id}",
         )
         self._tts_thread.start()
         return True
 
-    def _run_tts(self, text: str) -> None:
+    def _run_tts(self, text: str, tts_s3_key: str | None = None) -> None:
+        """Synthesize locally or download a shared TTS wav from S3.
+
+        Runs on the TTS thread (producer side) so the network I/O can never
+        block the watchdog writer thread. The resulting wav is handed to the
+        frame producer, which removes it once Wav2Lip has consumed it.
+        """
         try:
-            wav = self._get_tts().synthesize(
-                text,
-                None,
-                self.work_dir / f"chunk_{int(time.time() * 1000)}.wav",
-            )
+            out = self.work_dir / f"chunk_{int(time.time() * 1000)}.wav"
+            if tts_s3_key:
+                if self.storage is None:
+                    raise RuntimeError(
+                        "tts_s3_key provided but session has no S3 storage"
+                    )
+                self.storage.download(tts_s3_key, out)
+                logger.info(
+                    "avatar %s TTS downloaded from S3: %s",
+                    self.avatar_id,
+                    tts_s3_key,
+                )
+            else:
+                self._get_tts().synthesize(text, None, out)
+            wav = out
             logger.info("avatar %s TTS ready (%.1fs): %s", self.avatar_id, _wav_duration(wav), text)
             self._tts_results.put((text, wav))
         except Exception:
@@ -341,9 +383,11 @@ class LiveAvatarSession:
         if (
             self._tts_thread is None or not self._tts_thread.is_alive()
         ) and not self._pending.full():
-            new_text = r.lpop(self.queue_key)
-            if new_text:
-                self.maybe_start_tts(new_text)
+            raw = r.lpop(self.queue_key)
+            if raw:
+                text, tts_s3_key = parse_live_message(raw)
+                if text or tts_s3_key:
+                    self.maybe_start_tts(text, tts_s3_key)
 
         # 2) Move finished TTS results into the producer's pending queue.
         try:
@@ -434,6 +478,14 @@ class LiveAvatarSession:
                 self._talk_queue.put(("seg_end", None))
             except Exception:
                 pass
+        finally:
+            # Zero-leak: the TTS wav (S3-downloaded or locally synthesized)
+            # is removed as soon as Wav2Lip has consumed it.
+            if isinstance(wav, Path):
+                try:
+                    wav.unlink(missing_ok=True)
+                except OSError:
+                    logger.warning("failed to remove temp tts file %s", wav)
 
     def _write_frame(self, frame) -> None:
         """Apply the subtitle overlay then push the frame into the pipe."""
@@ -573,6 +625,7 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> 
             fps=fps,
             queue_key=f"live_queue:{avatar_id}",
             subtitle_settings=payload.get("liveSettings") or {},
+            storage=storage,
         )
         session.setup()
         sessions[avatar_id] = session
