@@ -17,6 +17,13 @@ default), so the frontend player never sees a gap and never buffers ("转圈"):
     queue as fast as possible (faster than real-time), so consecutive chunks
     splice with no idle gap at all.
 
+Audio is written in aligned 0.5s slices (16kHz s16le mono = 16000 bytes), the
+same interleaving pattern the pre-Watchdog pipeline used: the first 0.5s of a
+talking segment is pre-buffered before its first frame, then one 0.5s slice is
+written every `fps/2` frames. This gives the AAC encoder enough runway that
+writer-thread jitter cannot cause underruns/clicks, while per-frame slices
+could. Idle silence uses the same 0.5s slice cadence.
+
 Face restoration (GFPGAN/CodeFormer) is intentionally OFF in the live pipeline:
 it is ~1s/frame on Apple Silicon CoreML and cannot sustain 24fps.
 """
@@ -50,58 +57,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger("stream_worker")
 
-
-class _AudioPacer:
-    """Writes mono 16kHz s16le audio in per-frame slices.
-
-    Each video frame at `fps` represents `sample_rate * 2 / fps` bytes of audio;
-    writing exactly that many bytes per frame keeps the audio input flowing at
-    real time and A/V aligned, without the half-second burst bookkeeping.
-    """
-
-    def __init__(self, fps: float, sample_rate: int = AUDIO_SAMPLE_RATE):
-        self.bytes_per_frame = sample_rate * 2 / fps
-        self._acc = 0.0
-        self._last = 0
-        self._audio: bytes | None = None
-        self._written = 0
-
-    def start(self, audio: bytes | None) -> None:
-        self._audio = audio
-        self._acc = 0.0
-        self._last = 0
-        self._written = 0
-
-    def slice(self) -> bytes:
-        """Bytes to write for the next frame (talking audio or silence)."""
-        self._acc += self.bytes_per_frame
-        target = int(round(self._acc))
-        delta = target - self._last
-        self._last = target
-        if self._audio is not None:
-            seg = self._audio[self._written : self._written + delta]
-            self._written += len(seg)
-            if len(seg) < delta:  # audio ended: pad silence, keep the stream alive
-                seg += b"\x00" * (delta - len(seg))
-            return seg
-        return bytes(delta)
-
-    def remaining(self) -> bytes:
-        return self._audio[self._written :] if self._audio is not None else b""
-
-
 class _TalkingSegment:
     """One lip-synced sentence waiting in the ready-frames queue."""
 
-    __slots__ = ("text", "audio", "total_frames", "frames_written", "pacer")
+    __slots__ = ("text", "audio", "total_frames", "frames_written", "pos")
 
-    def __init__(self, text: str, audio: bytes, total_frames: int, fps: float):
+    def __init__(self, text: str, audio: bytes, total_frames: int):
         self.text = text
         self.audio = audio
         self.total_frames = total_frames
         self.frames_written = 0
-        self.pacer = _AudioPacer(fps)
-        self.pacer.start(audio)
+        self.pos = 0
+
+    def next_slice(self, bytes_per_slice: int) -> bytes:
+        """Next sequential audio slice (0.5s chunks), empty when exhausted."""
+        end = min(self.pos + bytes_per_slice, len(self.audio))
+        if self.pos >= len(self.audio):
+            return b""
+        seg = self.audio[self.pos : end]
+        self.pos = end
+        return seg
 
 
 class LiveAvatarSession:
@@ -269,8 +244,10 @@ class LiveAvatarSession:
         keeps the player from buffering while Wav2Lip works.
         """
         interval = 1.0 / self.fps
-        idle_pacer = _AudioPacer(self.fps)
-        idle_pacer.start(None)
+        half_sec_bytes = AUDIO_SAMPLE_RATE * 2 // 2
+        half_sec_frames = max(1, int(round(self.fps / 2)))
+        silence_slice = b"\x00\x00" * (half_sec_bytes // 2)
+        idle_count = 0
         cur_seg: _TalkingSegment | None = None
         logger.info("avatar %s watchdog writer started @ %.3fs/frame", self.avatar_id, interval)
         try:
@@ -295,22 +272,38 @@ class LiveAvatarSession:
                     kind = None
 
                 if kind == "frame" and cur_seg is not None:
-                    audio = cur_seg.pacer.slice()
-                    if audio:
-                        self.pipe.write_audio(audio)
+                    # Pre-buffer the first 0.5s of audio before the first frame
+                    # (ffmpeg waits for every input's first packet; this also
+                    # gives the AAC encoder runway against writer jitter).
+                    if cur_seg.frames_written == 0:
+                        pre = cur_seg.next_slice(half_sec_bytes)
+                        if pre:
+                            self.pipe.write_audio(pre)
+                    # Write the periodic audio slice BEFORE this frame: video
+                    # frames are ~2.7MB at 720x1280 and the pipe write can
+                    # block on ffmpeg backpressure for tens of ms. Writing
+                    # audio first means encoder starvation can never be caused
+                    # by a slow video write.
+                    if (
+                        cur_seg.frames_written > 0
+                        and cur_seg.frames_written % half_sec_frames == 0
+                        and cur_seg.pos < len(cur_seg.audio)
+                    ):
+                        audio = cur_seg.next_slice(half_sec_bytes)
+                        if audio:
+                            self.pipe.write_audio(audio)
                     self._write_frame(payload)
                     cur_seg.frames_written += 1
                     if cur_seg.frames_written >= cur_seg.total_frames:
-                        rest = cur_seg.pacer.remaining()
-                        if rest:
-                            self.pipe.write_audio(rest)
+                        if cur_seg.pos < len(cur_seg.audio):
+                            self.pipe.write_audio(cur_seg.audio[cur_seg.pos :])
                         cur_seg = None
                         self._subtitle_text = ""
                 else:
                     # Idle fallback: base animation + silence, never blocking.
-                    audio = idle_pacer.slice()
-                    if audio:
-                        self.pipe.write_audio(audio)
+                    idle_count += 1
+                    if idle_count % half_sec_frames == 1:
+                        self.pipe.write_audio(silence_slice)
                     self._write_frame(self._idle_frame())
 
                 delay = interval - (time.perf_counter() - t0)
