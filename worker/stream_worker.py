@@ -92,11 +92,18 @@ class LiveAvatarSession:
     def setup(self) -> None:
         """Load the pre-processed base clip from S3 and open the ffmpeg pipe."""
         from ai.lipsync_onnx import Wav2LipOnnxLipSync
+        from ai.enhancer import create_enhancer
         from streaming.ffmpeg_pipe import FFmpegPipe
 
         if not self.base_video_path.exists():
             raise RuntimeError(f"base video not found: {self.base_video_path}")
         self.lipsync = Wav2LipOnnxLipSync()
+        # Live streaming prefers GFPGAN ROI restoration (low latency); missing
+        # models degrade to a no-op with a warning (FACE_ENHANCER=off to disable).
+        enhancer = create_enhancer(pipeline="live")
+        if enhancer is not None:
+            self.lipsync.enhancer = enhancer
+            logger.info("avatar %s face enhancer: %s", self.avatar_id, enhancer.kind)
         self.base_frames, base_fps = Wav2LipOnnxLipSync._read_frames(self.base_video_path)
 
         h, w = self.base_frames[0].shape[:2]

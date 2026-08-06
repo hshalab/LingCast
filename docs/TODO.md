@@ -99,14 +99,20 @@ AMD GPUs using ROCm.
 **Goal:** 从「能用」走向「好用」：修复口型变形、消除直播卡顿，并让数字人
 具备长期记忆与私有知识库（RAG），减少多轮对话降智与专业问答幻觉。
 
-### Task 4.1 口型变形修复（Lip-sync Deformation）— [ ]
+### Task 4.1 口型变形修复（Lip-sync Deformation）— [x]
 
-- **不重训 Wav2Lip**（通病：为强行匹配口型会过度扭曲下半张脸、下巴变形、
-  边缘模糊）。标准解法是引入 **GFPGAN 或 CodeFormer** 做局部面部修复。
-- 只在 Wav2Lip 输出的**嘴部边界框（Bounding Box）区域**应用超分修复，
-  通过**羽化遮罩（Feathered Mask）**把高清嘴部贴回原帧，比全帧修复省约
-  80% 计算量。
-- 直播管线仅对说话段启用；离线播报成品复用同一后处理模块。
+- ✅ 已实现双轨人脸修复引擎（`worker/ai/enhancer.py`，纯 ONNX）：
+  - **直播（GFPGANEnhancer）**：GFPGANv1.4.onnx 只修复人脸 ROI（Bounding Box），
+    羽化遮罩（Feathered Mask）贴回原帧，省约 80% 计算量。
+  - **离线（CodeFormerEnhancer）**：codeformer.onnx 全脸修复，
+    `fidelity_weight`（w=0.6，ONNX 的 `w` 输入）可调。
+- ✅ 模型下载：`uv run python download_models.py --models restoration` →
+  `worker/models/restoration/{gfpgan,codeformer}/*.onnx`（已实测跑通）。
+- ✅ 管线接入：`lipsync_onnx._run_batch_frames` 增强后帧；`real.py`（离线）默认
+  codeformer、`stream_worker.py`（直播）默认 gfpgan，`FACE_ENHANCER=off` 可关，
+  缺模型自动降级 no-op。
+- [ ] 实机画质验收：不同形象/语速下微调 `roi_padding`/`feather_ratio`/
+  `CODEFORMER_FIDELITY_WEIGHT`。
 
 ### Task 4.2 口型性能与推流卡顿（Latency / Streaming Stutter）— [ ]
 

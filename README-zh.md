@@ -88,12 +88,14 @@
 - [x] **国际化（中/英）**：管理后台与观众端均内置中/英界面，导航栏可一键切换
   （记住选择并自动跟随浏览器语言）；后端错误消息按请求 `Accept-Language` 返回
   对应语言；直播间 AI 按界面语言回复。
+- [x] **人脸修复（解决 Wav2Lip 口型变形）**：双轨增强器（`worker/ai/enhancer.py`）——
+  直播链路用 GFPGANv1.4 ONNX 只修复人脸 ROI 并以羽化遮罩贴回（省 ~80% 计算量），
+  离线播报用 CodeFormer ONNX（保真度 `w=0.6`）全脸修复。纯 ONNX 推理
+  （CoreML/CUDA/ROCm），`FACE_ENHANCER=auto|gfpgan|codeformer|off`。
 - [ ] **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
 
 ### 规划中（Roadmap）
 
-- [ ] **口型变形修复**：不重训 Wav2Lip，在嘴部边界框区域用 GFPGAN/CodeFormer
-  局部超分 + 羽化遮罩贴回原帧（比全帧修复省约 80% 计算量）。
 - [ ] **直播卡顿优化**：异步双缓冲管线（生产线程 → 帧队列 → 消费推流线程），
   队列为空时无缝回退 base 动画 + 静音，保证推流不中断。
 - [ ] **长期记忆**：Go API 侧滑动窗口上下文（每人最近 N 条聊天记录）注入 LLM，

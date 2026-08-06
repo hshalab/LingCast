@@ -32,6 +32,15 @@ class RealPipeline(InferencePipeline):
             logger.warning("WAV2LIP_BACKEND=torch is slow on Apple Silicon; ONNX is the default")
         else:
             self.lipsync = lipsync or Wav2LipOnnxLipSync()
+            # Optional face restoration fixes Wav2Lip lip deformation. Offline
+            # broadcast prefers CodeFormer (quality); missing models degrade
+            # to a no-op with a warning (FACE_ENHANCER=off to disable).
+            from .enhancer import create_enhancer
+
+            self.enhancer = create_enhancer(pipeline="offline")
+            if self.enhancer is not None:
+                self.lipsync.enhancer = self.enhancer
+                logger.info("offline pipeline face enhancer: %s", self.enhancer.kind)
 
     def run(self, inputs: TaskInputs):
         if inputs.base_video_path is None or not inputs.base_video_path.exists():

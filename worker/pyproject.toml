@@ -37,6 +37,10 @@ models = [
     "scipy>=1.11,<1.15",
     "soundfile>=0.12",
     "opencv-python>=4.9",
+    # Face restoration (worker/ai/enhancer.py) — GFPGANv1.4 + CodeFormer.
+    # ONNX checkpoints run through onnxruntime (already above); the optional
+    # PyTorch path (official .pth checkpoints) needs torch, which is also
+    # already part of this group. No extra packages required.
     "imageio>=2.34",
     "imageio-ffmpeg>=0.5",
     "tyro>=0.8",

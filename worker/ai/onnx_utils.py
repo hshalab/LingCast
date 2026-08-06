@@ -17,18 +17,25 @@ logger = logging.getLogger(__name__)
 DEFAULT_THREADS = 4
 
 
-def build_session(model_path: Path, allow_coreml: bool = True) -> onnxruntime.InferenceSession:
+def build_session(
+    model_path: Path,
+    allow_coreml: bool = True,
+    threads_env: str = "WAV2LIP_THREADS",
+    provider_env: str = "WAV2LIP_PROVIDER",
+) -> onnxruntime.InferenceSession:
     """Create an ONNX Runtime session with bounded CPU threads.
 
     Provider order: CoreML (macOS) -> CPU. Threads are capped so a single task
     never saturates every CPU core (the worker may run other stages/agents).
+    `threads_env` / `provider_env` allow other stages (e.g. face restoration)
+    to use their own knobs instead of sharing the Wav2Lip ones.
     """
-    threads = int(os.environ.get("WAV2LIP_THREADS", str(DEFAULT_THREADS)))
+    threads = int(os.environ.get(threads_env, str(DEFAULT_THREADS)))
     options = onnxruntime.SessionOptions()
     options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
     options.intra_op_num_threads = max(1, threads)
 
-    override = os.environ.get("WAV2LIP_PROVIDER", "").strip().lower()
+    override = os.environ.get(provider_env, "").strip().lower()
     if override:
         providers = {
             "coreml": ["CoreMLExecutionProvider", "CPUExecutionProvider"],
@@ -37,7 +44,7 @@ def build_session(model_path: Path, allow_coreml: bool = True) -> onnxruntime.In
             "rocm": ["ROCMExecutionProvider", "CPUExecutionProvider"],
         }.get(override)
         if providers is None:
-            logger.warning("unknown WAV2LIP_PROVIDER=%r, falling back to auto", override)
+            logger.warning("unknown %s=%r, falling back to auto", provider_env, override)
 
     if not override or providers is None:
         available = onnxruntime.get_available_providers()

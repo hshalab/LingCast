@@ -98,6 +98,12 @@
   `.env.local` 设 `LIVEPORTRAIT_DRIVING_SPEED=0.2`（约 3s 一次耸肩）。
 - ✅ 播报成品预览：`broadcast/index.tsx` 状态卡片用内联 `XgVideo`（xgplayer），
   9:16 竖版最大 720×1080，模态窗播放。
+- ✅ 人脸修复（Wav2Lip 口型变形）：`worker/ai/enhancer.py` 双轨 ONNX 增强器——
+  直播 GFPGANv1.4（人脸 ROI + 羽化遮罩，`FACE_ENHANCER=auto` 时直播选 gfpgan）、
+  离线 CodeFormer（`w` 输入保真度，默认 0.6）；接入 `lipsync_onnx._run_batch_frames`
+  （offline `real.py` / 直播 `stream_worker.py` 各按 pipeline 选引擎）；模型放
+  `worker/models/restoration/`，`uv run python download_models.py --models restoration`
+  下载；缺模型自动降级为 no-op 不中断管线。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
 - ⬜ 待实现（详见 [docs/TODO.md](docs/TODO.md) Phase 4）：口型变形修复
   （GFPGAN/CodeFormer 嘴部局部超分 + 羽化遮罩）、口型性能与直播卡顿

@@ -51,6 +51,7 @@ class Wav2LipOnnxLipSync:
         models_dir: Path | None = None,
         checkpoint: Path | None = None,
         scrfd_path: Path | None = None,
+        enhancer=None,
         wav2lip_batch_size: int = 8,
         pads: tuple = (0, 10, 0, 0),
         fps: float | None = None,
@@ -70,6 +71,7 @@ class Wav2LipOnnxLipSync:
             or os.environ.get("WAV2LIP_SCRFD")
             or self.models_dir / "scrfd" / "scrfd_2.5g_bnkps.onnx"
         )
+        self.enhancer = enhancer
         self.wav2lip_batch_size = wav2lip_batch_size
         self.pads = tuple(pads)
         self.fps = fps
@@ -189,6 +191,8 @@ class Wav2LipOnnxLipSync:
             y1, y2, x1, x2 = c
             p = cv2.resize(p.astype(np.uint8), (x2 - x1, y2 - y1))
             f[y1:y2, x1:x2] = p
+            if self.enhancer is not None:
+                f = self.enhancer.enhance_frame(f, (x1, y1, x2, y2))
             out_frames.append(f)
         return out_frames
 

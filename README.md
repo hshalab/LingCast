@@ -106,13 +106,14 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   English UI with a language switcher (choice is persisted and the browser language is
   auto-detected); API error messages follow the request `Accept-Language` header; the
   live-room AI replies in the UI language.
+- [x] **Face restoration (fixes Wav2Lip lip deformation)**: dual-track enhancer
+  (`worker/ai/enhancer.py`) — GFPGANv1.4 ONNX restores only the face ROI with a feathered
+  mask in the live pipeline, CodeFormer ONNX (fidelity `w=0.6`) restores full-face detail
+  offline. ONNX-only inference (CoreML/CUDA/ROCm), `FACE_ENHANCER=auto|gfpgan|codeformer|off`.
 - [ ] **Mock pipeline** (`AI_MODE=mock`): lightweight placeholder for Docker Worker image demos.
 
 ### Planned (roadmap)
 
-- [ ] **Lip-sync deformation fix**: instead of retraining Wav2Lip, patch only the mouth
-  bounding box with GFPGAN/CodeFormer super-resolution via a feathered mask (~80% less
-  compute than full-frame restoration).
 - [ ] **Live latency / stutter fix**: async double-buffered pipeline (producer thread →
   frame queue → consumer FFmpeg pipe), seamlessly falling back to the base animation +
   silence when the queue is empty so the stream never stalls.

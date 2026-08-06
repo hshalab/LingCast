@@ -6,6 +6,8 @@ Fetches:
   - LivePortrait (code: KwaiVGI/LivePortrait, weights: KwaiVGI/LivePortrait HF)
   - Wav2Lip ONNX (weights: camenduru/Wav2Lip .pth, then exported to .onnx
     locally; face detector: scrfd_2.5g from zhangziliang04/wav2lip-onnx)
+  - Face restoration (fixes Wav2Lip lip deformation):
+    GFPGANv1.4.onnx + CodeFormer codeformer.onnx -> worker/models/restoration/
 
 Layout (both are gitignored):
   worker/external/            cloned inference code
@@ -156,6 +158,9 @@ Layout:
       checkpoints/s3fd-619a316812.pth # face detector
       checkpoints/wav2lip_gan.onnx    # exported from the .pth (fast ONNX path)
       scrfd/scrfd_2.5g_bnkps.onnx     # ONNX face detector (no torch needed)
+    restoration/
+      gfpgan/GFPGANv1.4.onnx          # GFPGANv1.4 (live ROI face restoration)
+      codeformer/codeformer.onnx      # CodeFormer (offline full-face restoration)
 
 Optional (Chinese TTS polyphone quality): download G2PWModel.zip from the
 GPT-SoVITS docs and unpack it to
@@ -308,12 +313,73 @@ def download_scrfd() -> None:
     print(f"[wav2lip] scrfd ready at {dest} ({dest.stat().st_size / 1e6:.1f} MB)")
 
 
+RESTORATION_MODELS = {
+    "gfpgan": {
+        "repo_id": "DeepFakeApp/model",
+        "filename": "GFPGANv1.4.onnx",
+        "dest": MODELS_DIR / "restoration" / "gfpgan" / "GFPGANv1.4.onnx",
+        "url_env": "GFPGAN_URL",
+        "size_mb": 340,
+    },
+    "codeformer": {
+        "repo_id": "bluefoxcreation/Codeformer-ONNX",
+        "filename": "codeformer.onnx",
+        "dest": MODELS_DIR / "restoration" / "codeformer" / "codeformer.onnx",
+        "url_env": "CODEFORMER_URL",
+        "size_mb": 377,
+    },
+}
+
+
+def download_restoration(dry_run: bool = False) -> None:
+    """Fetch the ONNX face-restoration checkpoints used by ai/enhancer.py.
+
+    GFPGANv1.4 powers the live ROI restoration; CodeFormer powers the offline
+    broadcast restoration. Both are ONNX so inference needs no torch.
+    """
+    if dry_run:
+        for name, spec in RESTORATION_MODELS.items():
+            print(
+                f"[{name}] dry-run: {spec['filename']} (~{spec['size_mb']} MB) "
+                f"from {spec['repo_id']} -> {spec['dest']}"
+            )
+        return
+
+    from huggingface_hub import hf_hub_download
+
+    for name, spec in RESTORATION_MODELS.items():
+        dest = spec["dest"]
+        if dest.exists():
+            print(f"[{name}] already present at {dest}")
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        override = os.environ.get(spec["url_env"])
+        if override:
+            import requests
+
+            print(f"[{name}] downloading {override} -> {dest}")
+            resp = requests.get(override, timeout=600)
+            resp.raise_for_status()
+            dest.write_bytes(resp.content)
+        else:
+            print(
+                f"[{name}] downloading {spec['filename']} from "
+                f"{spec['repo_id']} -> {dest}"
+            )
+            hf_hub_download(
+                repo_id=spec["repo_id"],
+                filename=spec["filename"],
+                local_dir=dest.parent,
+            )
+        print(f"[{name}] ready at {dest} ({dest.stat().st_size / 1e6:.0f} MB)")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--models",
         nargs="+",
-        choices=["gpt-sovits", "liveportrait", "wav2lip", "all"],
+        choices=["gpt-sovits", "liveportrait", "wav2lip", "restoration", "all"],
         default=["all"],
         help="which model weights to download",
     )
@@ -330,6 +396,8 @@ def main() -> None:
     args = parser.parse_args()
 
     names = [m for m in args.models if m != "all"] or list(HF_WEIGHTS)
+    want_restoration = "restoration" in names or "all" in args.models
+    names = [n for n in names if n in HF_WEIGHTS]
 
     if not args.no_code and not args.dry_run:
         for name in names:
@@ -340,6 +408,9 @@ def main() -> None:
     for name in names:
         download_weights(name, dry_run=args.dry_run)
 
+    if want_restoration:
+        download_restoration(dry_run=args.dry_run)
+
     if not args.dry_run:
         if "gpt-sovits" in names:
             setup_gpt_sovits_links()
@@ -348,6 +419,7 @@ def main() -> None:
         setup_wav2lip_links()
         export_wav2lip_onnx()
         download_scrfd()
+    if "wav2lip" in names or want_restoration:
         write_models_readme()
         print(
             "\nDone. Install the real-model dependencies (see README Phase 2), then run\n"
