@@ -256,13 +256,13 @@ uv run python -u stream_worker.py    # 实时直播（与 worker.py 并存）
 
 ```bash
 # 管理端（Vite，端口 5173）
-cd frontend
+cd frontend-admin
 cp .env.example .env.local   # VITE_API_BASE_URL=http://localhost:8080
 pnpm install
 pnpm dev
 
 # 观众端（Next.js，端口 3000）
-cd client
+cd frontend-user
 pnpm install
 pnpm dev
 ```

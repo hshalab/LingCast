@@ -284,13 +284,13 @@ error message.
 
 ```bash
 # Admin console (Vite, port 5173)
-cd frontend
+cd frontend-admin
 cp .env.example .env.local   # VITE_API_BASE_URL=http://localhost:8080
 pnpm install
 pnpm dev
 
 # Viewer app (Next.js, port 3000)
-cd client
+cd frontend-user
 pnpm install
 pnpm dev
 ```
