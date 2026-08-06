@@ -41,6 +41,7 @@ func New(cfg config.Config, db *gorm.DB, s3 *storage.Client, q *queue.Queue) *gi
 	liveHandler := handlers.NewLiveHandler(
 		db, q, s3, cfg.LiveControlQueueKey,
 		cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel,
+		cfg.EmbedServerURL,
 	)
 	adminHandler := handlers.NewAdminHandler(
 		db,

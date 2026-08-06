@@ -19,7 +19,10 @@ services:
       retries: 20
 
   redis:
-    image: redis:8.2.2-alpine
+    # RedisStack (includes RediSearch FT.*) is required by the private
+    # knowledge base (RAG worker). Plain redis:8.2.2-alpine works for the
+    # rest of the platform but has no vector-search module.
+    image: ${REDIS_IMAGE:-redis/redis-stack-server:latest}
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
@@ -94,6 +97,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.deepseek.com}
       OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-flash}
+      EMBED_SERVER_URL: ${EMBED_SERVER_URL:-http://host.docker.internal:8090}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       S3_ENDPOINT: http://minio:9000

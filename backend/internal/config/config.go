@@ -23,6 +23,7 @@ type Config struct {
 	OpenAIAPIKey        string
 	OpenAIBaseURL       string
 	OpenAIModel         string
+	EmbedServerURL      string
 	AdminUsername       string
 	AdminPassword       string
 
@@ -89,6 +90,7 @@ func Load() Config {
 		OpenAIAPIKey:        os.Getenv("OPENAI_API_KEY"),
 		OpenAIBaseURL:       env("OPENAI_BASE_URL", "https://api.deepseek.com"),
 		OpenAIModel:         env("OPENAI_MODEL", "deepseek-v4-flash"),
+		EmbedServerURL:      env("EMBED_SERVER_URL", "http://host.docker.internal:8090"),
 		AdminUsername:       env("ADMIN_USERNAME", "admin"),
 		AdminPassword:       env("ADMIN_PASSWORD", "admin123"),
 

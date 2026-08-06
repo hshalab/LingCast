@@ -96,16 +96,14 @@
 - [x] **Watchdog 直播架构（不再转圈）**：独立写帧线程以恒定 24fps 推给 ffmpeg，
   消费 Ready 帧队列；Wav2Lip 还在产帧时立即回退 base 动画 + 静音，播放器
   永不掉线/缓冲。推理异步小批量（8 帧）产帧，连续句子无缝拼接。
+- [x] **私有知识库 + 长期记忆（本地 RAG）**：数字人专属知识（文本或
+  .txt/.pdf）按句切块（~300 字 / 50 字重叠），用本地
+  `BAAI/bge-small-zh-v1.5` 向量化（无付费 API），存 RediSearch
+  `knowledge:{avatar_id}:{chunk_id}`（严格按数字人隔离）。直播问答会注入
+  最近 10 条房间消息与 Top-3 知识，严格按知识库回答、未知即说不知道。
+  **需要 RedisStack**（RediSearch）——compose 已切换
+  `redis/redis-stack-server`（`REDIS_IMAGE` 可覆盖）。
 - [ ] **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
-
-### 规划中（Roadmap）
-
-- [ ] **直播卡顿优化**：异步双缓冲管线（生产线程 → 帧队列 → 消费推流线程），
-  队列为空时无缝回退 base 动画 + 静音，保证推流不中断。
-- [ ] **长期记忆**：Go API 侧滑动窗口上下文（每人最近 N 条聊天记录）注入 LLM，
-  窗口外旧对话摘要或丢弃以控制 Token。
-- [ ] **私有知识库（RAG）**：RedisStack 向量检索 + 轻量 Embedding（如
-  bge-small），Top-K 知识注入 System Prompt，强制按知识库回答。
 
 ## 界面截图
 

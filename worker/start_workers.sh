@@ -23,5 +23,6 @@ start_one() {
 
 start_one worker worker.py
 start_one stream_worker stream_worker.py
+start_one rag_worker rag_worker.py
 
 echo "workers starting; logs under $(pwd)/logs/"

@@ -126,21 +126,24 @@ AMD GPUs using ROCm.
   - ffmpeg 去掉 `-re`，改由 Watchdog 在 Python 侧精确节流（避免 lag→EOF 断流）。
 - [ ] 实机长播压测：多轮连续弹幕 + 长文本，观察推流/播放器是否持续无卡顿。
 
-### Task 4.3 长期记忆（Long-term Memory）— [ ]
+### Task 4.3 长期记忆（Long-term Memory）— [x]
 
-- 聊天记录已入库（`chat_messages`），由 **Go API 侧实现滑动窗口上下文**：
-  收到观众弹幕时，查询该观众最近 N 条（如 5 条）记录，按时间顺序组装
-  `messages` 数组传给 DeepSeek。
-- Token 控制：窗口外的旧对话丢弃，或由轻量模型做摘要（Summarization）后
-  保留进上下文。
+- ✅ 已实现：Go `llmChat` 每次回复前取该数字人最近 10 条房间消息
+  （`chat_messages`，按 avatar_id 作为会话）注入 System Prompt
+  （user/assistant 格式），支持多轮连续对话；窗口外旧消息直接丢弃控 Token。
 
-### Task 4.4 私有知识库（RAG）— [ ]
+### Task 4.4 私有知识库（RAG）— [x]
 
 - [~] Part 1（已提交）：`AvatarKnowledge` GORM 模型（按 avatar_id 索引隔离）、
   `POST/GET/DELETE /api/avatars/:id/knowledge`（text 或 .txt/.pdf，源文件入 S3 +
   `talking_avatar:knowledge_ingest` 队列）、worker 回写 webhook
   `POST /api/avatars/:id/knowledge/:kid/status`；管理端 Avatar Studio 编辑模式
   新增「私有知识库」面板（粘贴文本/上传文件/列表/删除，中英双语）。
+- [x] Part 2 + 3（已提交）：`worker/rag_worker.py` 摄入 Worker —— PyMuPDF/TXT
+  提取 → 按句切块（~300 字 / 50 字重叠）→ 本地 `BAAI/bge-small-zh-v1.5`
+  向量化（无付费 API）→ RediSearch `FT.CREATE idx:knowledge`（键
+  `knowledge:{avatar_id}:{chunk_id}`，严格隔离）；同进程 FastAPI `/embed` +
+  `/search`（KNN Top-3 按 avatar_id 过滤）。Go 聊天端点已接记忆 + 检索注入。
 - **轻量向量检索**：不引入 Milvus/Pinecone，直接在现有 Redis 8.2 上启用
   RedisStack（RediSearch）做 KNN。
 - **Embedding**：上传私有知识（TXT/PDF）→ 切段 → 轻量 Embedding API

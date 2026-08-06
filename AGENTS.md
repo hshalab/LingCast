@@ -112,6 +112,20 @@
   （8 帧）产帧入队，首批即切换说话，连续多句无缝拼接。ffmpeg 不再用 `-re`
   （由 Watchdog 节流，避免 lag→EOF）。管道断裂（`FFmpegPipeClosedError`）会让
   session 标记 dead 并停止喂帧，控制监听器自动清理后可重新开播。
+- ✅ 私有知识库 + 长期记忆（RAG）：
+  - Go：`AvatarKnowledge` 表（按 avatar_id 索引隔离）+ `POST/GET/DELETE
+    /api/avatars/:id/knowledge`（text 或 .txt/.pdf，源文件入 S3）+
+    Worker 回写 webhook `POST /api/avatars/:id/knowledge/:kid/status`。
+  - Python：`worker/rag_worker.py` 监听 `talking_avatar:knowledge_ingest`，
+    PyMuPDF/TXT 提取 → 按句切块（~300 字、50 字重叠）→ 本地
+    `BAAI/bge-small-zh-v1.5` 向量化（无付费 API）→ RediSearch
+    `FT.CREATE idx:knowledge`，键 `knowledge:{avatar_id}:{chunk_id}`；
+    同进程跑 FastAPI `/embed` + `/search`（KNN 按 avatar_id 过滤）。
+  - Go 聊天端点：`llmChat` 取最近 10 条房间消息（长期记忆）+ 调 embed
+    server 检索 Top-3 知识注入 System Prompt（严格按知识库回答，未知即说不知道）。
+  - ⚠️ 需要 RedisStack：`redis:8.2.2-alpine` 无 RediSearch 模块，
+    compose 已改 `redis/redis-stack-server`（`REDIS_IMAGE` 可覆盖）；
+    Go 侧 `EMBED_SERVER_URL` 默认 `http://host.docker.internal:8090`。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
 - ⬜ 待实现（详见 [docs/TODO.md](docs/TODO.md) Phase 4）：口型变形修复
   （GFPGAN/CodeFormer 嘴部局部超分 + 羽化遮罩）、口型性能与直播卡顿

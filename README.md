@@ -118,18 +118,14 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   still producing, it instantly falls back to the base animation + silent audio,
   so the player never drops or buffers ("转圈"). Inference runs async in small
   Wav2Lip batches, splicing consecutive sentences seamlessly.
+- [x] **Private knowledge base + long-term memory (local RAG)**: per-avatar
+  knowledge (text or .txt/.pdf) is chunked (~300 chars / 50 overlap) and embedded
+  locally with `BAAI/bge-small-zh-v1.5` (no paid embedding APIs), stored in
+  RediSearch as `knowledge:{avatar_id}:{chunk_id}` (strictly isolated). The live
+  chat endpoint injects the last 10 room messages and the Top-3 matching chunks
+  into the LLM prompt, answering strictly from the knowledge base.
+  **Requires RedisStack** (RediSearch) — set `REDIS_IMAGE=redis/redis-stack-server`.
 - [ ] **Mock pipeline** (`AI_MODE=mock`): lightweight placeholder for Docker Worker image demos.
-
-### Planned (roadmap)
-
-- [ ] **Live latency / stutter fix**: async double-buffered pipeline (producer thread →
-  frame queue → consumer FFmpeg pipe), seamlessly falling back to the base animation +
-  silence when the queue is empty so the stream never stalls.
-- [ ] **Long-term memory**: sliding-window chat context (last N messages per viewer)
-  assembled by the Go API and injected into the LLM.
-- [ ] **Private knowledge base (RAG)**: RedisStack vector search + lightweight embeddings
-  (e.g. bge-small); top-k knowledge injected into the system prompt so the avatar answers
-  strictly from the knowledge base.
 
 ## Screenshots
 

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,6 +40,7 @@ type LiveHandler struct {
 	openAIAPIKey        string
 	openAIBaseURL       string
 	openAIModel         string
+	embedServerURL      string
 }
 
 type startLiveRequest struct {
@@ -96,10 +98,11 @@ type liveSessionItem struct {
 	LiveSettings       models.LiveSettings `json:"liveSettings"`
 }
 
-func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey, openAIAPIKey, openAIBaseURL, openAIModel string) *LiveHandler {
+func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey, openAIAPIKey, openAIBaseURL, openAIModel, embedServerURL string) *LiveHandler {
 	return &LiveHandler{
 		db: db, q: q, s3: s3, liveControlQueueKey: liveControlQueueKey,
 		openAIAPIKey: openAIAPIKey, openAIBaseURL: openAIBaseURL, openAIModel: openAIModel,
+		embedServerURL: embedServerURL,
 	}
 }
 
@@ -351,9 +354,14 @@ func (h *LiveHandler) llmChat(c *gin.Context, userText string, avatar models.Ava
 		option.WithAPIKey(h.openAIAPIKey),
 	)
 	lang := i18n.Lang(c)
+	memory := h.recentMessages(avatar.ID, 10)
+	ragFacts := h.retrieveKnowledge(avatar.ID, userText)
+	if len(ragFacts) > 0 {
+		log.Printf("[rag] avatar %d retrieved %d fact(s)", avatar.ID, len(ragFacts))
+	}
 	resp, err := client.Responses.New(c.Request.Context(), responses.ResponseNewParams{
 		Model:           h.openAIModel,
-		Instructions:    openai.String(chatSystemPrompt(avatar, lang)),
+		Instructions:    openai.String(chatSystemPrompt(avatar, lang, memory, ragFacts)),
 		Input:           responses.ResponseNewParamsInputUnion{OfString: openai.String(userText)},
 		Temperature:     openai.Float(0.8),
 		MaxOutputTokens: openai.Int(300),
@@ -370,10 +378,76 @@ func (h *LiveHandler) llmChat(c *gin.Context, userText string, avatar models.Ava
 	return reply
 }
 
+// recentMessages returns the last `limit` persisted room messages (viewer
+// messages + bot replies) for one avatar, oldest first — the avatar's
+// long-term memory across viewers in this live session.
+func (h *LiveHandler) recentMessages(avatarID uint, limit int) []models.ChatMessage {
+	var msgs []models.ChatMessage
+	if err := h.db.Where("avatar_id = ?", avatarID).
+		Order("id desc").Limit(limit).Find(&msgs).Error; err != nil {
+		log.Printf("[memory] failed to load history: %v", err)
+		return nil
+	}
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
+	return msgs
+}
+
+// retrieveKnowledge embeds the user message via the local RAG worker's HTTP
+// endpoint and returns the Top-K chunks for THIS avatar only (the query is
+// filtered by avatar_id in Redis). Any failure degrades gracefully: the chat
+// simply continues without knowledge context.
+func (h *LiveHandler) retrieveKnowledge(avatarID uint, text string) []string {
+	if strings.TrimSpace(h.embedServerURL) == "" {
+		return nil
+	}
+	body, err := json.Marshal(map[string]any{
+		"avatarId": avatarID,
+		"text":     text,
+		"topK":     3,
+	})
+	if err != nil {
+		return nil
+	}
+	resp, err := http.Post(
+		strings.TrimRight(h.embedServerURL, "/")+"/search",
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		log.Printf("[rag] embed server unreachable (%v); continuing without knowledge", err)
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[rag] embed server returned %d; continuing without knowledge", resp.StatusCode)
+		return nil
+	}
+	var out struct {
+		Chunks []struct {
+			Content string `json:"content"`
+		} `json:"chunks"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		log.Printf("[rag] bad embed response: %v", err)
+		return nil
+	}
+	facts := make([]string, 0, len(out.Chunks))
+	for _, c := range out.Chunks {
+		if s := strings.TrimSpace(c.Content); s != "" {
+			facts = append(facts, s)
+		}
+	}
+	return facts
+}
+
 // chatSystemPrompt builds the LLM persona prompt for one avatar. The
 // avatar's creation-time profile (age/height/weight/ethnicity/relationship/
-// personality) is baked in so viewers can ask about it naturally.
-func chatSystemPrompt(a models.Avatar, lang string) string {
+// personality) is baked in so viewers can ask about it naturally. Optional
+// RAG facts (private knowledge base, isolated per avatar) and the last N room
+// messages (long-term memory) are injected so the bot answers from them.
+func chatSystemPrompt(a models.Avatar, lang string, memory []models.ChatMessage, ragFacts []string) string {
 	zh := lang == "" || lang == "zh"
 	profile := []string{}
 	if a.Age != nil {
@@ -439,6 +513,41 @@ func chatSystemPrompt(a models.Avatar, lang string) string {
 		persona += "Reply to viewers in short, conversational English, at most 3 sentences per reply. " +
 			"When asked about your age, height, weight, ethnicity, relationship status or personality, " +
 			"answer strictly according to the profile above."
+	}
+
+	// Private knowledge base (strictly per-avatar): answer ONLY from these
+	// facts; admit ignorance instead of making things up.
+	if len(ragFacts) > 0 {
+		if zh {
+			persona += "\n以下是该数字人的私有知识库内容（必须严格依据这些事实回答）："
+			for i, f := range ragFacts {
+				persona += fmt.Sprintf("\n%d. %s", i+1, f)
+			}
+			persona += "\n如果问题在上述事实中没有提到，必须如实说“这个我不太清楚”。"
+		} else {
+			persona += "\nThe private knowledge base for this avatar (answer strictly based on these facts):"
+			for i, f := range ragFacts {
+				persona += fmt.Sprintf("\n%d. %s", i+1, f)
+			}
+			persona += "\nIf the question is not mentioned in the facts above, say you don't know."
+		}
+	}
+
+	// Long-term memory: the last few room messages, so the bot follows up
+	// naturally instead of starting every reply from scratch.
+	if len(memory) > 0 {
+		if zh {
+			persona += "\n最近的对话记录："
+		} else {
+			persona += "\nRecent conversation:"
+		}
+		for _, m := range memory {
+			role := "user"
+			if m.Role == "bot" {
+				role = "assistant"
+			}
+			persona += fmt.Sprintf("\n%s: %s", role, m.Content)
+		}
 	}
 	return persona
 }

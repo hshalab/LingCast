@@ -95,6 +95,10 @@ models = [
     "pydantic<=2.10.6",
     "ctranslate2>=4.0,<5",
     "av>=11",
+    # Private knowledge base (RAG): local PDF text extraction + local
+    # embeddings (BAAI/bge-small-zh-v1.5). No paid embedding APIs.
+    "pymupdf>=1.24",
+    "sentence-transformers>=3.0",
 ]
 
 # NVIDIA GPU runtime (Linux x86_64). Keep separate from `rocm`: the two groups
