@@ -167,7 +167,8 @@ disable with `FACE_ENHANCER=off`):
 
 | Without CodeFormer | With CodeFormer |
 | --- | --- |
-| <video src="docs/videos/noCodeFormer.mp4" controls width="240"></video> | <video src="docs/videos/CodeFormer.mp4" controls width="240"></video> |
+| <img src="docs/videos/noCodeFormer.gif" width="240" alt="Without CodeFormer"> | <img src="docs/videos/CodeFormer.gif" width="240" alt="With CodeFormer"> |
+| [▶ Download MP4](docs/videos/noCodeFormer.mp4) | [▶ Download MP4](docs/videos/CodeFormer.mp4) |
 
 ## Architecture
 

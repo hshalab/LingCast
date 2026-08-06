@@ -140,7 +140,8 @@
 
 | 未开启 CodeFormer | 开启 CodeFormer |
 | --- | --- |
-| <video src="docs/videos/noCodeFormer.mp4" controls width="240"></video> | <video src="docs/videos/CodeFormer.mp4" controls width="240"></video> |
+| <img src="docs/videos/noCodeFormer.gif" width="240" alt="未开启 CodeFormer"> | <img src="docs/videos/CodeFormer.gif" width="240" alt="开启 CodeFormer"> |
+| [▶ 下载 MP4](docs/videos/noCodeFormer.mp4) | [▶ 下载 MP4](docs/videos/CodeFormer.mp4) |
 
 ## 架构
 
