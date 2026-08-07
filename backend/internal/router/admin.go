@@ -7,7 +7,6 @@ import (
 	"talkingavatar/backend/internal/config"
 		"talkingavatar/backend/internal/handlers/admin"
 	"talkingavatar/backend/internal/handlers/live"
-	"talkingavatar/backend/internal/handlers/web"
 )
 
 // RegisterAdmin wires the management-console API (api-admin service).
@@ -17,7 +16,7 @@ func RegisterAdmin(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 	avatarHandler := admin.NewAvatarHandler(deps.DB, deps.S3, deps.Queue, cfg.AvatarInitQueueKey)
 	knowledgeHandler := admin.NewKnowledgeHandler(deps.DB, deps.S3, cfg.EmbedServerURL)
 	taskHandler := admin.NewTaskHandler(deps.DB, deps.Queue, deps.S3)
-	chatHandler := web.NewChatHandler(deps.DB)
+	chatHandler := live.NewChatHandler(deps.DB)
 	liveHandler := live.NewLiveHandler(
 		deps.DB, deps.Queue, deps.S3,
 		cfg.LiveControlQueueKey, cfg.TaskQueueKey,

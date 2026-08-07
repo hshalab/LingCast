@@ -14,7 +14,8 @@ import (
 // orchestrator live.
 func RegisterLive(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 	avatarHandler := admin.NewAvatarHandler(deps.DB, deps.S3, deps.Queue, cfg.AvatarInitQueueKey)
-		liveHandler := live.NewLiveHandler(
+	chatHandler := live.NewChatHandler(deps.DB)
+	liveHandler := live.NewLiveHandler(
 		deps.DB, deps.Queue, deps.S3,
 		cfg.LiveControlQueueKey, cfg.TaskQueueKey,
 		cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel,
@@ -33,5 +34,11 @@ func RegisterLive(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 		api.POST("/live/chat", liveHandler.Chat)
 		api.PUT("/live/session/:avatarID/scene", liveHandler.SwitchScene)
 		api.GET("/live/:avatarID/status", liveHandler.Status)
+
+		// Audience chat identity & history
+		api.POST("/chat/guest", chatHandler.Guest)
+		api.POST("/chat/register", chatHandler.Register)
+		api.POST("/chat/login", chatHandler.Login)
+		api.GET("/chat/history", chatHandler.History)
 	}
 }
