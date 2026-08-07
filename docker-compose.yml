@@ -326,6 +326,8 @@ services:
       S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
       AI_MODE: real
       LIVEPORTRAIT_HALF: "false"
+      LIVEPORTRAIT_DRIVING_SPEED: "0.2"
+      LIVEPORTRAIT_DRIVING_MULTIPLIER: "0.7"
       WAV2LIP_PROVIDER: rocm
       FACE_ENHANCER: "off"
       TTS_ENGINE: edge
