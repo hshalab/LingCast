@@ -50,6 +50,18 @@
 - 管理员登录（Redis 会话 + HttpOnly cookie）、改用户名/密码、用户列表
 - 任务中心：批量选择/删除/跳过/重试；中英双语 i18n
 
+## Telegram Mini App
+
+- `frontend/telegram`（React + Vite + Tailwind + `@twa-dev/sdk`，:3002）：
+  `WebApp.ready()` 后把 `WebApp.initData` POST 到 `POST /api/auth/telegram`
+- 后端 `TG_BOT_TOKEN` HMAC-SHA-256 校验（24h 时效）→ 按 `telegram_id` upsert
+  身份（非游客，HttpOnly cookie）
+- 启动自动注册：`setWebhook`（更新接收）+ `setChatMenuButton`（Mini App 入口），
+  地址优先 `TG_WEBHOOK_URL`/`TG_MINIAPP_URL`（生产固定域名），缺失时轮询
+  ngrok 隧道（api-gateway / tg-app）；两者都有则跳过 ngrok
+- 本地联调：`ngrok.yml` 双隧道 + compose `ngrok` 服务，`NGROK_AUTHTOKEN`/
+  `TG_BOT_TOKEN`/`VITE_API_ORIGIN` 见 `.env.example`
+
 ## 工程与性能
 
 - 一键模型下载脚本；口型阶段约 10s/16s 视频；ONNX 线程数可调

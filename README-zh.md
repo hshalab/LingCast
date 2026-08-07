@@ -137,6 +137,10 @@
   （api-user）；后端用 `TG_BOT_TOKEN` 做 HMAC-SHA-256 签名校验（24h 时效），
   通过后按 `telegram_id` 自动注册/登录（HttpOnly cookie）。本地联调用根目录
   `ngrok.yml` 双隧道（TMA + API 网关），`docker compose up ngrok` 即可。
+  启动时 api-user 会自动注册 Telegram：`setWebhook` + `setChatMenuButton`
+  （Mini App 入口），地址优先取 `TG_WEBHOOK_URL`/`TG_MINIAPP_URL`（生产固定
+  域名），缺失时回退 ngrok 隧道发现（`api-gateway`/`tg-app`）；两者都设置时
+  不再查询 ngrok。
 - [ ] **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
 
 ## 界面截图
@@ -393,6 +397,9 @@ curl http://localhost:8080/api/live/9/status
 | `OPENAI_API_KEY` | `.env` | DeepSeek API Key；不设则消息原样回读 |
 | `OPENAI_MODEL` | `.env` | Responses 模型（默认 `deepseek-v4-flash`） |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `.env` | 管理后台登录账号（默认 admin/admin123） |
+| `TG_BOT_TOKEN` | `.env` | Telegram 机器人 token（initData 校验 + webhook 注册） |
+| `TG_WEBHOOK_URL` / `TG_MINIAPP_URL` | `.env` | 生产固定地址（可选）；留空 = ngrok 发现 |
+| `NGROK_AUTHTOKEN` / `NGROK_API_URL` | `.env` | ngrok 认证 + agent API（默认 `http://ngrok:4040`） |
 | `STREAM_SUBTITLE_FONT` | `worker/.env.local` | 字幕回退字体（未配或字体缺失时用） |
 
 完整清单见 `worker/.env.local.example`。动画节奏调整（驱动模板/速度/幅度）见

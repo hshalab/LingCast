@@ -168,7 +168,12 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   `@twa-dev/sdk`, :3002) sends `WebApp.initData` to `POST /api/auth/telegram`
   (api-user); the backend validates the HMAC-SHA-256 signature against
   `TG_BOT_TOKEN` (24h freshness) and upserts a chat identity (HttpOnly cookie).
-  Local testing: `ngrok.yml` exposes the TMA and API gateway, `docker compose up ngrok`.
+  At startup api-user auto-registers with Telegram: `setWebhook` +
+  `setChatMenuButton` (Mini App entry), resolved environment-first from
+  `TG_WEBHOOK_URL` / `TG_MINIAPP_URL` (production fixed domains) and falling
+  back to ngrok tunnel discovery (`api-gateway` / `tg-app`); when both env
+  URLs are set, ngrok is never polled. Local testing: `ngrok.yml` exposes the
+  TMA and API gateway, `docker compose up ngrok`.
 - [ ] **Mock pipeline** (`AI_MODE=mock`): lightweight placeholder for Docker Worker image demos.
 
 ## Screenshots
@@ -434,6 +439,9 @@ send messages directly; after registering/logging in, chat history follows the a
 | `OPENAI_API_KEY` | `.env` | DeepSeek API key; unset means the input is echoed back |
 | `OPENAI_MODEL` | `.env` | Responses model (default `deepseek-v4-flash`) |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `.env` | Admin console credentials (default admin/admin123) |
+| `TG_BOT_TOKEN` | `.env` | Telegram bot token (initData HMAC + webhook registration) |
+| `TG_WEBHOOK_URL` / `TG_MINIAPP_URL` | `.env` | Production fixed URLs (optional); empty = ngrok discovery |
+| `NGROK_AUTHTOKEN` / `NGROK_API_URL` | `.env` | ngrok auth + agent API (default `http://ngrok:4040`) |
 | `STREAM_SUBTITLE_FONT` | `worker/.env.local` | Fallback subtitle font (used when unset/missing) |
 
 See `worker/.env.local.example` for the full list. Animation tempo (driving template /
