@@ -186,12 +186,7 @@ type liveSessionItem struct {
 	AvatarID           uint                `json:"avatarId"`
 	AvatarName         string              `json:"avatarName"`
 	Category           string              `json:"category"`
-	Age                *int                `json:"age,omitempty"`
-	HeightCm           *int                `json:"heightCm,omitempty"`
-	WeightKg           *int                `json:"weightKg,omitempty"`
-	Ethnicity          string              `json:"ethnicity,omitempty"`
-	RelationshipStatus string              `json:"relationshipStatus,omitempty"`
-	Personality        string              `json:"personality,omitempty"`
+	Persona            models.PersonaProfile `json:"persona"`
 	ImageS3URL         string              `json:"imageS3Url"`
 	ImageS3Key         string              `json:"imageS3Key"`
 	BaseVideoS3Key     string              `json:"baseVideoS3Key"`
@@ -208,6 +203,22 @@ func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControl
 		embedServerURL: embedServerURL, ttsServiceURL: ttsServiceURL,
 		taskQueueKey: taskQueueKey,
 	}
+}
+
+// defaultVideoKey returns the avatar's default scene default video S3 key
+// (the live fallback while scene switching is not implemented yet).
+func (h *LiveHandler) defaultVideoKey(avatarID uint) (string, error) {
+	var scene models.Scene
+	if err := h.db.Where("avatar_id = ? AND is_default = ?", avatarID, true).
+		First(&scene).Error; err != nil {
+		return "", errors.New("avatar default scene is not ready")
+	}
+	var v models.SceneVideo
+	if err := h.db.Where("scene_id = ? AND is_default = ?", scene.ID, true).
+		First(&v).Error; err != nil {
+		return "", errors.New("avatar default video is not ready (base video still generating)")
+	}
+	return v.S3Key, nil
 }
 
 func liveQueueKey(avatarID uint) string {
@@ -250,10 +261,15 @@ func (h *LiveHandler) Start(c *gin.Context) {
 		}
 		return
 	}
-	if avatar.Status != models.AvatarStatusReady || avatar.BaseVideoS3Key == nil {
+	if avatar.Status != models.AvatarStatusReady {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "avatar is not ready yet (base video still generating), please try again later",
 		})
+		return
+	}
+	videoKey, err := h.defaultVideoKey(avatar.ID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -281,7 +297,7 @@ func (h *LiveHandler) Start(c *gin.Context) {
 		AvatarID:       avatar.ID,
 		StreamID:       streamID,
 		ImageS3Key:     avatar.ImageS3Key,
-		BaseVideoS3Key: *avatar.BaseVideoS3Key,
+		BaseVideoS3Key: videoKey,
 		VoiceID:        avatar.VoiceID,
 	}
 	liveSettings := strings.TrimSpace(avatar.LiveSettings)
@@ -551,7 +567,7 @@ func (h *LiveHandler) Chat(c *gin.Context) {
 		}
 		return
 	}
-	if strings.TrimSpace(strPtrOrEmpty(avatar.BaseVideoS3Key)) == "" {
+	if _, err := h.defaultVideoKey(avatar.ID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.base_video_missing")})
 		return
 	}
@@ -723,11 +739,15 @@ func (h *LiveHandler) synthesizeAndEnqueue(ctx context.Context, avatar models.Av
 		return fmt.Errorf("tts-service returned an empty s3_key")
 	}
 
+	videoKey, err := h.defaultVideoKey(avatar.ID)
+	if err != nil {
+		return err
+	}
 	payload := renderTaskPayload{
 		Type:           "render",
 		Text:           sentence,
 		TTSS3Key:       out.S3Key,
-		BaseVideoS3Key: strPtrOrEmpty(avatar.BaseVideoS3Key),
+		BaseVideoS3Key: videoKey,
 	}
 	return h.q.PushTo(ctx, h.taskQueueKey, payload)
 }
@@ -804,9 +824,22 @@ func (h *LiveHandler) retrieveKnowledge(ctx context.Context, avatarID uint, text
 	if strings.TrimSpace(h.embedServerURL) == "" {
 		return nil
 	}
+	// Only search the collections the avatar has bound & enabled (multi-select
+	// on the edit page); when none, skip knowledge entirely. Collections are
+	// global, so scope by collection_ids only (chunks no longer carry a
+	// meaningful avatar_id).
+	var collectionIDs []uint
+	if err := h.db.Model(&models.AvatarKnowledge{}).
+		Where("avatar_id = ? AND enabled = ?", avatarID, true).
+		Pluck("collection_id", &collectionIDs).Error; err != nil {
+		return nil
+	}
+	if len(collectionIDs) == 0 {
+		return nil
+	}
 	body, err := json.Marshal(map[string]any{
-		"avatar_id": avatarID,
-		"query":     text,
+		"collection_ids": collectionIDs,
+		"query":           text,
 	})
 	if err != nil {
 		return nil
@@ -850,43 +883,44 @@ func (h *LiveHandler) retrieveKnowledge(ctx context.Context, avatarID uint, text
 // messages (long-term memory) are injected so the bot answers from them.
 func chatSystemPrompt(a models.Avatar, lang string, memory []models.ChatMessage, ragFacts []string) string {
 	zh := lang == "" || lang == "zh"
+	p := parsePersona(a.Persona)
 	profile := []string{}
-	if a.Age != nil {
+	if p.Age != nil {
 		if zh {
-			profile = append(profile, fmt.Sprintf("年龄 %d 岁", *a.Age))
+			profile = append(profile, fmt.Sprintf("年龄 %d 岁", *p.Age))
 		} else {
-			profile = append(profile, fmt.Sprintf("Age %d", *a.Age))
+			profile = append(profile, fmt.Sprintf("Age %d", *p.Age))
 		}
 	}
-	if a.HeightCm != nil {
+	if p.HeightCm != nil {
 		if zh {
-			profile = append(profile, fmt.Sprintf("身高 %d 厘米", *a.HeightCm))
+			profile = append(profile, fmt.Sprintf("身高 %d 厘米", *p.HeightCm))
 		} else {
-			profile = append(profile, fmt.Sprintf("Height %d cm", *a.HeightCm))
+			profile = append(profile, fmt.Sprintf("Height %d cm", *p.HeightCm))
 		}
 	}
-	if a.WeightKg != nil {
+	if p.WeightKg != nil {
 		if zh {
-			profile = append(profile, fmt.Sprintf("体重 %d 公斤", *a.WeightKg))
+			profile = append(profile, fmt.Sprintf("体重 %d 公斤", *p.WeightKg))
 		} else {
-			profile = append(profile, fmt.Sprintf("Weight %d kg", *a.WeightKg))
+			profile = append(profile, fmt.Sprintf("Weight %d kg", *p.WeightKg))
 		}
 	}
-	if s := strings.TrimSpace(a.Ethnicity); s != "" {
+	if s := strings.TrimSpace(p.Ethnicity); s != "" {
 		if zh {
 			profile = append(profile, "族裔 "+s)
 		} else {
 			profile = append(profile, "Ethnicity "+s)
 		}
 	}
-	if s := strings.TrimSpace(a.RelationshipStatus); s != "" {
+	if s := strings.TrimSpace(p.RelationshipStatus); s != "" {
 		if zh {
 			profile = append(profile, "感情状态 "+s)
 		} else {
 			profile = append(profile, "Relationship "+s)
 		}
 	}
-	if s := strings.TrimSpace(a.Personality); s != "" {
+	if s := strings.TrimSpace(p.Personality); s != "" {
 		if zh {
 			profile = append(profile, "性格 "+s)
 		} else {
@@ -1034,17 +1068,12 @@ func (h *LiveHandler) ListSessions(c *gin.Context) {
 		if err := h.db.First(&avatar, s.AvatarID).Error; err == nil {
 			item.AvatarName = avatar.Name
 			item.Category = normalizeCategory(avatar.Category)
-			item.Age = avatar.Age
-			item.HeightCm = avatar.HeightCm
-			item.WeightKg = avatar.WeightKg
-			item.Ethnicity = avatar.Ethnicity
-			item.RelationshipStatus = avatar.RelationshipStatus
-			item.Personality = avatar.Personality
+			item.Persona = parsePersona(avatar.Persona)
 			item.ImageS3URL = h.s3.PublicURL(avatar.ImageS3Key)
 			item.ImageS3Key = avatar.ImageS3Key
 			item.VoiceID = avatar.VoiceID
-			if avatar.BaseVideoS3Key != nil {
-				item.BaseVideoS3Key = *avatar.BaseVideoS3Key
+			if key, err := h.defaultVideoKey(avatar.ID); err == nil {
+				item.BaseVideoS3Key = key
 			}
 			item.LiveSettings = parseLiveSettings(avatar.LiveSettings)
 		}

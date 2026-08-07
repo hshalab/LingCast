@@ -26,9 +26,10 @@ type TaskHandler struct {
 type createTaskRequest struct {
 	AvatarID   uint   `json:"avatarId"`
 	ScriptText string `json:"scriptText"`
-	// VideoS3Key optionally selects one of the avatar's driving videos
-	// (uploaded style clip); empty means the avatar's default base video.
-	VideoS3Key string `json:"videoS3Key,omitempty"`
+	// SceneID/VideoID select a scene video; empty means the default scene's
+	// default video.
+	SceneID uint `json:"sceneId,omitempty"`
+	VideoID uint `json:"videoId,omitempty"`
 }
 
 type updateTaskStatusRequest struct {
@@ -48,6 +49,10 @@ type taskResponse struct {
 	Status           string    `json:"status"`
 	Progress         int       `json:"progress"`
 	Stage            string    `json:"stage,omitempty"`
+	SceneID          uint      `json:"sceneId"`
+	SceneVideoID     uint      `json:"sceneVideoId"`
+	SceneName        string    `json:"sceneName,omitempty"`
+	VideoName        string    `json:"videoName,omitempty"`
 	TtsS3Key         *string   `json:"ttsS3Key,omitempty"`
 	OutputVideoS3URL *string   `json:"outputVideoS3Url,omitempty"`
 	ErrorMessage     *string   `json:"errorMessage,omitempty"`
@@ -57,6 +62,40 @@ type taskResponse struct {
 
 func NewTaskHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client) *TaskHandler {
 	return &TaskHandler{db: db, q: q, s3: s3}
+}
+
+// resolveTaskVideo picks the driving video for a broadcast task:
+//   - videoID -> that scene video (must belong to the avatar);
+//   - sceneID -> the scene's default video;
+//   - neither  -> the default scene's default video.
+func (h *TaskHandler) resolveTaskVideo(avatarID uint, sceneID, videoID uint) (string, uint, uint, error) {
+	if videoID > 0 {
+		var v models.SceneVideo
+		if err := h.db.Where("id = ? AND avatar_id = ?", videoID, avatarID).
+			First(&v).Error; err != nil {
+			return "", 0, 0, errors.New("video not found for this avatar")
+		}
+		return v.S3Key, v.SceneID, v.ID, nil
+	}
+	if sceneID > 0 {
+		var v models.SceneVideo
+		if err := h.db.Where("scene_id = ? AND avatar_id = ? AND is_default = ?",
+			sceneID, avatarID, true).First(&v).Error; err != nil {
+			return "", 0, 0, errors.New("scene has no default video")
+		}
+		return v.S3Key, v.SceneID, v.ID, nil
+	}
+	var scene models.Scene
+	if err := h.db.Where("avatar_id = ? AND is_default = ?", avatarID, true).
+		First(&scene).Error; err != nil {
+		return "", 0, 0, errors.New("avatar default scene is not ready")
+	}
+	var v models.SceneVideo
+	if err := h.db.Where("scene_id = ? AND is_default = ?", scene.ID, true).
+		First(&v).Error; err != nil {
+		return "", 0, 0, errors.New("avatar default video is not ready (base video still generating)")
+	}
+	return v.S3Key, v.SceneID, v.ID, nil
 }
 
 // Create handles POST /api/tasks. It persists the task, pushes a JSON payload
@@ -94,7 +133,7 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		}
 		return
 	}
-	if avatar.Status != models.AvatarStatusReady || avatar.BaseVideoS3Key == nil {
+	if avatar.Status != models.AvatarStatusReady {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "avatar is not ready yet (base video still generating), please try again later",
 		})
@@ -111,9 +150,10 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		return
 	}
 
-	baseKey := *avatar.BaseVideoS3Key
-	if v := strings.TrimSpace(req.VideoS3Key); v != "" {
-		baseKey = v
+	baseKey, sceneID, sceneVideoID, err := h.resolveTaskVideo(avatar.ID, req.SceneID, req.VideoID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 	payload := queue.TaskPayload{
 		TaskID:     task.ID,
@@ -123,6 +163,14 @@ func (h *TaskHandler) Create(c *gin.Context) {
 	}
 	payload.BaseVideoS3Key = baseKey
 	payload.VoiceID = avatar.VoiceID
+	if err := h.db.Model(&task).Updates(map[string]any{
+		"video_s3_key":   baseKey,
+		"scene_id":       sceneID,
+		"scene_video_id": sceneVideoID,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	if err := h.q.Push(c.Request.Context(), payload); err != nil {
 		h.db.Model(&task).Update("status", models.TaskStatusFailed)
@@ -130,7 +178,7 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, toTaskResponse(task))
+	c.JSON(http.StatusCreated, toTaskResponse(h.db, task))
 }
 
 // List handles GET /api/tasks — returns all broadcast tasks (newest first)
@@ -149,7 +197,7 @@ func (h *TaskHandler) List(c *gin.Context) {
 	}
 	resp := make([]taskResponse, 0, len(tasks))
 	for _, t := range tasks {
-		item := toTaskResponse(t)
+		item := toTaskResponse(h.db, t)
 		item.AvatarName = t.Avatar.Name
 		resp = append(resp, item)
 	}
@@ -240,12 +288,25 @@ func (h *TaskHandler) Retry(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	videoKey := task.VideoS3Key
+	if strings.TrimSpace(videoKey) == "" {
+		// Legacy task without a stored video key: fall back to the default
+		// scene's default video.
+		videoKey, sceneID, sceneVideoID, err := h.resolveTaskVideo(avatar.ID, 0, 0)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		task.VideoS3Key = videoKey
+		task.SceneID = sceneID
+		task.SceneVideoID = sceneVideoID
+	}
 	payload := queue.TaskPayload{
 		TaskID:         task.ID,
 		AvatarID:       avatar.ID,
 		ScriptText:     task.ScriptText,
 		ImageS3Key:     avatar.ImageS3Key,
-		BaseVideoS3Key: *avatar.BaseVideoS3Key,
+		BaseVideoS3Key: videoKey,
 		VoiceID:        avatar.VoiceID,
 	}
 	if task.TtsS3Key != nil {
@@ -256,7 +317,7 @@ func (h *TaskHandler) Retry(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.task.enqueue_retry_failed", err.Error())})
 		return
 	}
-	c.JSON(http.StatusOK, toTaskResponse(task))
+	c.JSON(http.StatusOK, toTaskResponse(h.db, task))
 }
 
 // Get handles GET /api/tasks/:id, the endpoint the frontend polls.
@@ -284,7 +345,7 @@ func (h *TaskHandler) Get(c *gin.Context) {
 		}
 		return
 	}
-	c.JSON(http.StatusOK, toTaskResponse(task))
+	c.JSON(http.StatusOK, toTaskResponse(h.db, task))
 }
 
 // UpdateStatus handles POST /api/tasks/:id/status, the webhook used by the
@@ -363,18 +424,33 @@ func (h *TaskHandler) UpdateStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
-func toTaskResponse(t models.BroadcastTask) taskResponse {
-	return taskResponse{
+func toTaskResponse(db *gorm.DB, t models.BroadcastTask) taskResponse {
+	resp := taskResponse{
 		ID:               t.ID,
 		AvatarID:         t.AvatarID,
 		ScriptText:       t.ScriptText,
 		Status:           t.Status,
 		Progress:         t.Progress,
 		Stage:            t.Stage,
+		SceneID:          t.SceneID,
+		SceneVideoID:     t.SceneVideoID,
 		TtsS3Key:         t.TtsS3Key,
 		OutputVideoS3URL: t.OutputVideoS3URL,
 		ErrorMessage:     t.ErrorMessage,
 		CreatedAt:        t.CreatedAt,
 		UpdatedAt:        t.UpdatedAt,
 	}
+	if t.SceneID > 0 {
+		var scene models.Scene
+		if err := db.First(&scene, t.SceneID).Error; err == nil {
+			resp.SceneName = scene.Title
+		}
+	}
+	if t.SceneVideoID > 0 {
+		var v models.SceneVideo
+		if err := db.First(&v, t.SceneVideoID).Error; err == nil {
+			resp.VideoName = v.Description
+		}
+	}
+	return resp
 }

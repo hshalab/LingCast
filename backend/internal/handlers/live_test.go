@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -9,14 +10,17 @@ import (
 
 func TestChatSystemPromptIncludesProfile(t *testing.T) {
 	age, height, weight := 25, 165, 50
-	a := models.Avatar{
-		Name:               "翠花",
+	persona, _ := json.Marshal(models.PersonaProfile{
 		Age:                &age,
 		HeightCm:           &height,
 		WeightKg:           &weight,
 		Ethnicity:          "汉族",
 		RelationshipStatus: "单身",
 		Personality:        "活泼开朗",
+	})
+	a := models.Avatar{
+		Name:    "翠花",
+		Persona: string(persona),
 	}
 	prompt := chatSystemPrompt(a, "zh", nil, nil)
 	for _, want := range []string{
@@ -43,9 +47,10 @@ func TestChatSystemPromptEmptyProfile(t *testing.T) {
 
 func TestChatSystemPromptEnglish(t *testing.T) {
 	age := 25
+	persona, _ := json.Marshal(models.PersonaProfile{Age: &age})
 	a := models.Avatar{
-		Name: "Xiaomei",
-		Age:  &age,
+		Name:    "Xiaomei",
+		Persona: string(persona),
 	}
 	prompt := chatSystemPrompt(a, "en", nil, nil)
 	for _, want := range []string{

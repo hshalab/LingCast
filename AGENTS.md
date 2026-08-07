@@ -41,9 +41,12 @@
   默认 zh-CN-XiaoxiaoNeural）+ 人物设定（年龄/身高/体重/族裔/感情状态/性格），提交后
   轮询 `GET /api/avatars/:id` 直到 ready。
 - ✅ Broadcast（离线播报）页面：选数字人 + 脚本 → 任务轮询 → 播放成品。
-- ✅ 多驱动视频：一个数字人可有多个驱动视频（`avatar_videos` 表，含其他 AI
-  生成的风格视频）；播报页「选择数字人 → 选择视频（+上传）」，任务 payload
-  带 `videoS3Key`（缺省用 `avatars.base_video_s3_key` 系统默认）。
+- ✅ 场景（Scene）两级结构：一个数字人可有多个场景（标题/描述/封面），每个
+  场景下 1-N 个驱动视频（视频 + 描述）；创建数字人时的 base 视频成为默认
+  场景的默认视频（直播/播报兜底，不可删）。表：`scenes` + `scene_videos`
+  （均带 avatar_id 索引，支持按数字人筛选）。人物设定（年龄/身高/体重/族裔/
+  感情/性格）收进 `avatars.persona` JSON；`base_video_s3_key` 与旧
+  `avatar_videos` 已彻底移除（启动时一次性迁移）。
 - ✅ 任务进度 + TTS 复用：离线任务上报 `stage`（tts/lipsync/mux）+ `progress`
   （1% 步进），前端任务中心/播报历史显示阶段与进度条；TTS 首次合成后存
   `tts/tasks/{id}.wav`（S3），重试时直接复用、跳过 Edge-TTS。
@@ -91,7 +94,7 @@
   `POST /api/admin/change-name|change-password` 修改并持久化（登录返回
   username + displayName，侧边栏显示 displayName）。
 - ✅ 两段式管线：创建时 `avatar_init` 队列 → LivePortrait 生成静音 24fps base 视频
-  上传 S3 并回写 `base_video_s3_key`/`status`；使用时 **Edge-TTS**（`TTS_ENGINE=edge`，
+  上传 S3 并回写默认场景默认视频/`status`；使用时 **Edge-TTS**（`TTS_ENGINE=edge`，
   零 GPU，默认）→ Wav2Lip ONNX（CoreML 优先）→ mux/推流。GPT-SoVITS 为**遗留可选**
   引擎（代码仍在 `ai/tts_real.py`，权重不入库需自行下载）。LivePortrait 不再出现在
   广播/直播循环里。
@@ -133,22 +136,27 @@
   `-re`（Watchdog 兜底填帧，避免旧版 lag→EOF 复现）。管道断裂
   （`FFmpegPipeClosedError`）会让 session 标记 dead 并停止喂帧，控制监听器
   自动清理后可重新开播；Redis 断连时 1s 静默退避。
-- ✅ 私有知识库（两级模型：机器人 → 知识库 Collection → 文档 Document，RAG）：
-  - 存储：`knowledge_collections`（avatar_id + name，同机器人下唯一）+
-    `knowledge_documents`（collection_id + content + status + source_key）两张表；
+- ✅ 私有知识库（全局 Collection + 机器人 N:N 绑定 → 文档 Document，RAG）：
+  - 存储：`knowledge_collections`（全局命名知识库，不再属于单个机器人）+
+    `avatar_knowledge`（avatar_id + collection_id 复合主键，enabled 开关，
+    多数字人可共用一个知识库）+
+    `knowledge_documents`（collection_id + content + status + source_key）；
     源文件入 S3（text 生成 .txt，支持上传 .txt/.pdf，Go 用
-    `github.com/ledongthuc/pdf` 提取 PDF 文本）。
+    `github.com/ledongthuc/pdf` 提取 PDF 文本）。旧按机器人建库的数据由
+    `migrateGlobalKnowledge` 自动迁成绑定关系。
   - 微服务：`rag-service/`（FastAPI + uv + zvec 全文索引，Jieba 中文分词，
     **零模型/零下载**）。Go 入库时同步 POST `/v1/knowledge/ingest`
     （`avatar_id/collection_id/source_id/text_content`），检索 POST
-    `/v1/knowledge/search`（按 `avatar_id` 或 `collection_id` 标量过滤 +
-    BM25 Top-3），删除走 `/v1/knowledge/delete`；数据持久化在 volume
+    `/v1/knowledge/search`（按 `avatar_id` / `collection_id` /
+    `collection_ids` 标量过滤 + BM25 Top-3），删除走
+    `/v1/knowledge/delete`；数据持久化在 volume
     `rag-zvec-data:/app/zvec_data`。
   - 管理后台：`/knowledge` 知识库列表（创建/重命名/删除，删除级联清文档与索引），
     `/knowledge/$id` 知识库详情（文档增删 + 检索测试）；Avatar Studio 编辑模式
-    显示该数字人的知识库概览；聊天日志页显示「命中知识库」。
+    右侧「知识库」面板勾选绑定（即时保存）；聊天日志页显示「命中知识库」。
   - Go 聊天端点：`llmChat` 取最近 10 条房间消息（长期记忆）+ 按 `avatar_id`
-    检索该数字人全部知识库的 Top-3 注入 System Prompt（严格按知识库回答）。
+    查 `avatar_knowledge` 里 `enabled=true` 的集合，按 `collection_ids` 检索
+    Top-3 注入 System Prompt（严格按知识库回答）。
   - Go 侧 `EMBED_SERVER_URL` 默认 `http://rag-service:8001`（compose 内网）。
   - ⚠️ 旧 `worker/rag_worker.py`（bge 向量 + RediSearch）已删除，相关依赖
     （pymupdf / sentence-transformers）已从 `worker/pyproject.toml` 移除；

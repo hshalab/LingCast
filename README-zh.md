@@ -97,13 +97,14 @@
 - [x] **Watchdog 直播架构（不再转圈）**：独立写帧线程以恒定 24fps 推给 ffmpeg，
   消费 Ready 帧队列；Wav2Lip 还在产帧时立即回退 base 动画 + 静音，播放器
   永不掉线/缓冲。推理异步小批量（8 帧）产帧，连续句子无缝拼接。
-- [x] **私有知识库 + 长期记忆（本地 RAG，零模型）**：两级模型
-  数字人 → 知识库（Collection）→ 文档（Document）。独立的 `rag-service`
-  微服务（FastAPI + uv + [zvec](https://zvec.org) 进程内全文索引）用自带
-  Jieba 中文分词——**不需要 sentence-transformers / torch / 模型下载，
-  也不需要 RediSearch**。文档（粘贴文本或上传 .txt/.pdf）按 ~300 字 /
-  50 字重叠切块并按知识库建索引；直播问答注入最近 10 条房间消息 +
-  按数字人聚合的 Top-3 知识，严格按知识库回答、未知才说不知道。
+- [x] **私有知识库 + 长期记忆（本地 RAG，零模型）**：知识库全局共享，
+  数字人通过关系表 N:N 绑定（多个数字人可共用一个知识库）。独立的
+  `rag-service` 微服务（FastAPI + uv + [zvec](https://zvec.org) 进程内
+  全文索引）用自带 Jieba 中文分词——**不需要 sentence-transformers /
+  torch / 模型下载，也不需要 RediSearch**。文档（粘贴文本或上传
+  .txt/.pdf）按 ~300 字 / 50 字重叠切块并按知识库建索引；直播问答注入
+  最近 10 条房间消息 + 该数字人绑定知识库聚合的 Top-3 知识，严格按
+  知识库回答、未知才说不知道。
 - [x] **知识库管理界面**：`/knowledge` 知识库列表（创建/重命名/删除，知识库
   归属数字人），`/knowledge/$id` 管理知识库内的文档（文本/.txt/.pdf、删除、
   查看分块），支持按知识库做 Top-3 检索测试。

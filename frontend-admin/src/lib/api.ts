@@ -1,5 +1,14 @@
 import axios from 'axios'
 
+export type Persona = {
+  age?: number
+  heightCm?: number
+  weightKg?: number
+  ethnicity?: string
+  relationshipStatus?: string
+  personality?: string
+}
+
 export type Avatar = {
   id: number
   name: string
@@ -7,28 +16,32 @@ export type Avatar = {
   imageS3Url: string
   voiceId: string
   category: string
-  baseVideoS3Key?: string
-  baseVideoS3Url?: string
+  persona?: Persona
   status: 'initializing' | 'ready' | 'failed' | 'skipped'
   liveSettings?: LiveSettings
-  age?: number
-  heightCm?: number
-  weightKg?: number
-  ethnicity?: string
-  relationshipStatus?: string
-  personality?: string
+  defaultVideoS3Url?: string
   initQueuePos?: number
   createdAt: string
 }
 
-export type AvatarVideo = {
+export type SceneVideo = {
   id: number
-  avatarId: number
-  name: string
+  sceneId: number
   s3Key: string
   s3Url: string
-  source: 'system' | 'upload'
-  isDefault?: boolean
+  description?: string
+  isDefault: boolean
+}
+
+export type Scene = {
+  id: number
+  avatarId: number
+  title: string
+  description?: string
+  coverS3Key: string
+  coverS3Url: string
+  isDefault: boolean
+  videos: SceneVideo[]
 }
 
 export type LiveSettings = {
@@ -48,6 +61,10 @@ export type BroadcastTask = {
   status: TaskStatus
   progress?: number
   stage?: string
+  sceneId?: number
+  sceneVideoId?: number
+  sceneName?: string
+  videoName?: string
   outputVideoS3Url?: string
   errorMessage?: string
   avatarName?: string
@@ -76,12 +93,16 @@ export type KnowledgeStatus = 'pending' | 'indexed' | 'failed'
 
 export type KnowledgeCollection = {
   id: number
-  avatarId: number
-  avatarName?: string
   name: string
   documentCount: number
   createdAt: string
   updatedAt: string
+}
+
+export type KnowledgeSelectionItem = {
+  id: number
+  name: string
+  enabled: boolean
 }
 
 export type KnowledgeDocument = {
@@ -169,7 +190,6 @@ export async function adminLogin(username: string, password: string) {
 
 // ---- Knowledge collections (知识库) ----
 export async function listKnowledgeCollections(params?: {
-  avatarId?: number
   q?: string
 }): Promise<KnowledgeCollection[]> {
   const { data } = await api.get<{ data: KnowledgeCollection[] }>(
@@ -180,14 +200,29 @@ export async function listKnowledgeCollections(params?: {
 }
 
 export async function createKnowledgeCollection(
-  avatarId: number,
   name: string,
 ): Promise<KnowledgeCollection> {
   const { data } = await api.post<{ data: KnowledgeCollection }>(
-    `/avatars/${avatarId}/knowledge-collections`,
+    '/knowledge-collections',
     { name },
   )
   return data.data
+}
+
+export async function getKnowledgeSelection(
+  avatarId: number,
+): Promise<KnowledgeSelectionItem[]> {
+  const { data } = await api.get<{ data: KnowledgeSelectionItem[] }>(
+    `/avatars/${avatarId}/knowledge-selection`,
+  )
+  return data.data
+}
+
+export async function setKnowledgeSelection(
+  avatarId: number,
+  collectionIds: number[],
+): Promise<void> {
+  await api.post(`/avatars/${avatarId}/knowledge-selection`, { collectionIds })
 }
 
 export async function renameKnowledgeCollection(

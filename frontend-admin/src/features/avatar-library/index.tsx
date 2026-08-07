@@ -300,7 +300,7 @@ export function AvatarLibrary({ initialAvatarId }: { initialAvatarId?: string })
 
         <VideoPlayerDialog
           open={preview !== null}
-          url={preview?.baseVideoS3Url}
+          url={preview?.defaultVideoS3Url}
           title={`${preview?.name ?? ''} · ${t('library.defaultVideo')}`}
           onClose={() => setPreview(null)}
           actions={

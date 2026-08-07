@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Images,
+  Layers,
   ListChecks,
   MessageSquare,
   RadioTower,
@@ -35,6 +36,11 @@ export const sidebarData: SidebarData = {
           title: 'nav.knowledge',
           url: '/knowledge',
           icon: BookOpen,
+        },
+        {
+          title: 'nav.scenes',
+          url: '/scenes',
+          icon: Layers,
         },
         {
           title: 'nav.broadcast',

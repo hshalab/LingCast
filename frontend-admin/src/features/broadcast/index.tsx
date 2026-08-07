@@ -44,7 +44,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { EDGE_TTS_VOICES } from '@/features/avatar-studio/voices'
-import { api, type Avatar, type AvatarVideo, type BroadcastTask } from '@/lib/api'
+import { api, type Avatar, type BroadcastTask, type Scene } from '@/lib/api'
 
 function showApiError(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
@@ -99,8 +99,9 @@ export function Broadcast({
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [history, setHistory] = useState<BroadcastTask[]>([])
   const [selectedAvatarId, setSelectedAvatarId] = useState('')
-  const [videos, setVideos] = useState<AvatarVideo[]>([])
-  const [selectedVideoKey, setSelectedVideoKey] = useState('')
+  const [scenes, setScenes] = useState<Scene[]>([])
+  const [selectedSceneId, setSelectedSceneId] = useState('')
+  const [selectedVideoId, setSelectedVideoId] = useState('')
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [script, setScript] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -141,45 +142,55 @@ export function Broadcast({
     }
   }, [])
 
-  const loadVideos = useCallback(async (avatarId: string) => {
+  const loadScenes = useCallback(async (avatarId: string) => {
     if (!avatarId) {
-      setVideos([])
-      setSelectedVideoKey('')
+      setScenes([])
+      setSelectedSceneId('')
+      setSelectedVideoId('')
       return
     }
     try {
-      const { data } = await api.get<{ data: AvatarVideo[] }>(
-        `/avatars/${avatarId}/videos`,
+      const { data } = await api.get<{ data: Scene[] }>(
+        `/avatars/${avatarId}/scenes`,
       )
-      setVideos(data.data)
-      // Keep the current selection if it still exists; otherwise default to
-      // the avatar's system base video (first item).
-      setSelectedVideoKey((prev) =>
-        prev && data.data.some((v) => v.s3Key === prev)
+      setScenes(data.data)
+      setSelectedSceneId((prev) =>
+        prev && data.data.some((s) => String(s.id) === prev)
           ? prev
-          : (data.data[0]?.s3Key ?? ''),
+          : (data.data[0] ? String(data.data[0].id) : ''),
       )
     } catch {
-      setVideos([])
-      setSelectedVideoKey('')
+      setScenes([])
+      setSelectedSceneId('')
+      setSelectedVideoId('')
     }
   }, [])
 
+  const selectedScene = scenes.find((s) => String(s.id) === selectedSceneId)
+
+  // When the scene changes, pick its default (or first) video.
   useEffect(() => {
-    void loadVideos(selectedAvatarId)
-  }, [selectedAvatarId, loadVideos])
+    const videos = selectedScene?.videos ?? []
+    const def = videos.find((v) => v.isDefault) ?? videos[0]
+    setSelectedVideoId(def ? String(def.id) : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSceneId])
+
+  useEffect(() => {
+    void loadScenes(selectedAvatarId)
+  }, [selectedAvatarId, loadScenes])
 
   const handleVideoFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
-    if (!file || !selectedAvatarId) return
+    if (!file || !selectedSceneId) return
     setUploadingVideo(true)
     try {
       const form = new FormData()
       form.append('file', file)
-      form.append('name', file.name)
-      await api.post(`/avatars/${selectedAvatarId}/videos`, form)
-      await loadVideos(selectedAvatarId)
+      form.append('description', file.name)
+      await api.post(`/scenes/${selectedSceneId}/videos`, form)
+      await loadScenes(selectedAvatarId)
       toast.success(t('broadcast.videoUploaded'))
     } catch (error) {
       showApiError(error, t('broadcast.videoUploadFailed'))
@@ -227,7 +238,8 @@ export function Broadcast({
       await api.post<BroadcastTask>('/tasks', {
         avatarId: Number(selectedAvatarId),
         scriptText: script.trim(),
-        videoS3Key: selectedVideoKey || undefined,
+        sceneId: selectedSceneId ? Number(selectedSceneId) : undefined,
+        videoId: selectedVideoId ? Number(selectedVideoId) : undefined,
       })
       void loadHistory()
     } catch (error) {
@@ -310,25 +322,47 @@ export function Broadcast({
                         </div>
                       </div>
                     )}
-                    {/* 视频选择：系统默认 + 上传的其他 AI 驱动视频 */}
+                    {/* 场景 -> 视频 两级选择 */}
+                    <Label htmlFor='scene-select' className='mt-2'>
+                      {t('broadcast.selectScene')}
+                    </Label>
+                    <Select
+                      value={selectedSceneId}
+                      onValueChange={setSelectedSceneId}
+                      disabled={scenes.length === 0}
+                    >
+                      <SelectTrigger id='scene-select' className='w-full'>
+                        <SelectValue placeholder={t('broadcast.selectScene')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {scenes.map((scene) => (
+                          <SelectItem key={scene.id} value={String(scene.id)}>
+                            {scene.isDefault
+                              ? t('broadcast.defaultSceneName')
+                              : scene.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Label htmlFor='video-select' className='mt-2'>
                       {t('broadcast.selectVideo')}
                     </Label>
                     <div className='flex items-center gap-2'>
                       <Select
-                        value={selectedVideoKey}
-                        onValueChange={setSelectedVideoKey}
-                        disabled={videos.length === 0}
+                        value={selectedVideoId}
+                        onValueChange={setSelectedVideoId}
+                        disabled={!selectedScene || selectedScene.videos.length === 0}
                       >
                         <SelectTrigger id='video-select' className='w-full'>
                           <SelectValue placeholder={t('broadcast.selectVideo')} />
                         </SelectTrigger>
                         <SelectContent>
-                          {videos.map((video) => (
-                            <SelectItem key={video.s3Key} value={video.s3Key}>
-                              {video.isDefault
-                                ? t('broadcast.defaultVideoName')
-                                : (video.name || video.s3Key.split('/').pop() || '')}
+                          {(selectedScene?.videos ?? []).map((video) => (
+                            <SelectItem key={video.id} value={String(video.id)}>
+                              {video.description ||
+                                (video.isDefault
+                                  ? t('broadcast.defaultVideoName')
+                                  : `#${video.id}`)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -338,7 +372,7 @@ export function Broadcast({
                         variant='outline'
                         size='icon'
                         className='shrink-0'
-                        disabled={uploadingVideo || !selectedAvatarId}
+                        disabled={uploadingVideo || !selectedSceneId}
                         title={t('broadcast.uploadVideo')}
                         onClick={() => videoInputRef.current?.click()}
                       >
@@ -405,6 +439,8 @@ export function Broadcast({
                   <TableRow>
                     <TableHead>ID</TableHead>
                     <TableHead>{t('broadcast.colAvatar')}</TableHead>
+                    <TableHead>{t('broadcast.colScene')}</TableHead>
+                    <TableHead>{t('broadcast.colVideo')}</TableHead>
                     <TableHead>{t('broadcast.colScript')}</TableHead>
                     <TableHead>{t('common.status')}</TableHead>
                     <TableHead>{t('common.createdAt')}</TableHead>
@@ -427,6 +463,8 @@ export function Broadcast({
                       >
                         <TableCell>#{item.id}</TableCell>
                         <TableCell>{item.avatarName ?? `#${item.avatarId}`}</TableCell>
+                        <TableCell>{item.sceneName || '-'}</TableCell>
+                        <TableCell>{item.videoName || '-'}</TableCell>
                         <TableCell className='max-w-[280px] truncate' title={item.scriptText}>
                           {item.scriptText}
                         </TableCell>

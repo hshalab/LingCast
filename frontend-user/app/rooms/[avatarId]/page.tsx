@@ -179,32 +179,32 @@ export default function RoomPage() {
   const infoItems = avatar
     ? (
         [
-          avatar.age != null
-            ? { label: t('room.ageLabel'), value: t('room.ageValue', { age: avatar.age }) }
+          avatar.persona?.age != null
+            ? { label: t('room.ageLabel'), value: t('room.ageValue', { age: avatar.persona.age }) }
             : null,
-          avatar.heightCm != null
+          avatar.persona?.heightCm != null
             ? {
                 label: t('room.heightLabel'),
-                value: t('room.heightValue', { height: avatar.heightCm }),
+                value: t('room.heightValue', { height: avatar.persona.heightCm }),
               }
             : null,
-          avatar.weightKg != null
+          avatar.persona?.weightKg != null
             ? {
                 label: t('room.weightLabel'),
-                value: t('room.weightValue', { weight: avatar.weightKg }),
+                value: t('room.weightValue', { weight: avatar.persona.weightKg }),
               }
             : null,
-          avatar.ethnicity
-            ? { label: t('room.ethnicityLabel'), value: avatar.ethnicity }
+          avatar.persona?.ethnicity
+            ? { label: t('room.ethnicityLabel'), value: avatar.persona.ethnicity }
             : null,
-          avatar.relationshipStatus
+          avatar.persona?.relationshipStatus
             ? {
                 label: t('room.relationshipLabel'),
-                value: avatar.relationshipStatus,
+                value: avatar.persona.relationshipStatus,
               }
             : null,
-          avatar.personality
-            ? { label: t('room.personalityLabel'), value: avatar.personality }
+          avatar.persona?.personality
+            ? { label: t('room.personalityLabel'), value: avatar.persona.personality }
             : null,
         ].filter(Boolean) as { label: string; value: string }[]
       )

@@ -139,15 +139,18 @@ AMD GPUs using ROCm.
 
 ### Task 4.4 私有知识库（RAG）— ✅
 
-- ✅ Part 1 + 2 + 3（已重构）：知识库升级为**两级模型** —— 机器人 →
-  知识库（Collection，`knowledge_collections`，同机器人下名字唯一）→ 文档
-  （Document，`knowledge_documents`：text/.txt/.pdf，源文件入 S3，Go 用
-  `ledongthuc/pdf` 提取 PDF 文本）；`rag-service` 微服务（zvec 全文索引 +
-  Jieba 中文分词，**零模型/零下载**）负责入库 `/v1/knowledge/ingest`、
-  检索 `/v1/knowledge/search`（按 avatar_id 或 collection_id 标量过滤 +
-  BM25 Top-3）、删除 `/v1/knowledge/delete`、分块查看
-  `/v1/knowledge/chunks`。Go 聊天端点按 avatar_id 检索该数字人全部知识库
-  Top-3 注入 System Prompt；观众只发关键词时视为「想了解该主题」主动讲解。
+- ✅ Part 1 + 2 + 3（已重构）：知识库升级为**全局共享 + N:N 绑定** ——
+  知识库（Collection，`knowledge_collections`，全局唯一名称、不再属于某个
+  机器人）→ 文档（Document，`knowledge_documents`：text/.txt/.pdf，源文件
+  入 S3，Go 用 `ledongthuc/pdf` 提取 PDF 文本）；机器人通过
+  `avatar_knowledge`（avatar_id + collection_id 复合主键，enabled 开关）
+  绑定若干知识库，多个数字人可共用一个；`rag-service` 微服务（zvec 全文
+  索引 + Jieba 中文分词，**零模型/零下载**）负责入库 `/v1/knowledge/ingest`、
+  检索 `/v1/knowledge/search`（按 avatar_id / collection_id /
+  collection_ids 标量过滤 + BM25 Top-3）、删除 `/v1/knowledge/delete`、
+  分块查看 `/v1/knowledge/chunks`。Go 聊天端点先查该数字人
+  `enabled=true` 的绑定集合，再按 collection_ids 检索 Top-3 注入
+  System Prompt；观众只发关键词时视为「想了解该主题」主动讲解。
 - ✅ **检索方案演进（已落地）**：原计划「RedisStack（RediSearch）做 KNN +
   BAAI bge-small 向量化」已由 **rag-service（zvec 进程内全文索引 + 自带
   Jieba 中文分词）** 取代——不需要向量模型、不需要 RediSearch、零下载；
@@ -164,6 +167,9 @@ AMD GPUs using ROCm.
 - ✅ **知识库管理后台**：入库页（`/knowledge`，文本/.txt/.pdf）+ 列表页
   （`/knowledge` 知识库列表 + `/knowledge/$id` 文档详情：创建/重命名/删除
   知识库、文档增删、按知识库在线 Top-3 检索测试）。
+- ✅ **知识库全局化**：知识库从「属于单个数字人」改为「全局共享集合」，
+  数字人编辑页右侧「知识库」面板勾选绑定（即时保存）；已入库旧数据自动
+  迁移为绑定关系（`migrateGlobalKnowledge`），检索按绑定集合隔离。
 - ✅ **聊天日志页**：`/chat-logs` 按数字人/用户 ID/日期/关键字检索 + 分页
   （`page/pageSize` + total）；机器人回复持久化 `rag_hit`/`rag_sources`，
   页面标注「命中知识库」并可展开查看命中的知识片段。
@@ -195,10 +201,13 @@ AMD GPUs using ROCm.
   重启后按 DB 恢复直播会话。
 - ✅ **前端容器加固**：frontend-admin nginx 设 Asia/Shanghai 时区；
   frontend-user 改为非 root（node）运行（chown 在 COPY 之后，`/app` 可写）。
-- ✅ **多驱动视频（数字人 → 多视频）**：新增 `avatar_videos` 表 +
-  `GET/POST /api/avatars/:id/videos`、`DELETE /api/videos/:id`（系统默认视频
-  受保护）；播报页在数字人下方增加「选择视频（+上传）」，任务创建支持
-  `videoS3Key` 指定驱动视频，缺省回落系统默认 base。
+- ✅ **场景（数字人 → 场景 → 视频）**：`scenes` + `scene_videos` 两张表；
+  场景有标题/描述/封面，视频有描述；创建数字人的 base 视频成为默认场景的
+  默认视频（直播/播报兜底，默认场景/默认视频不可删）。接口：
+  `GET/POST /api/avatars/:id/scenes`、`PUT/DELETE /api/scenes/:id`、
+  `POST /api/scenes/:id/videos`、`DELETE /api/scenes/:id/videos/:vid`；
+  任务创建支持 `sceneId + videoId`；人物设定收进 `avatars.persona` JSON，
+  `base_video_s3_key` 与旧 `avatar_videos` 彻底移除（启动时一次性迁移）。
 - ✅ **任务进度分阶段 + TTS 复用**：worker 按 `tts/lipsync/mux` 上报 stage、
   每 1% 上报 progress（前端进度条 + 阶段标签）；TTS 首次合成后缓存到 S3
   （`tts/tasks/{id}.wav`），重试直接复用不再合成；删除任务时一并清理。

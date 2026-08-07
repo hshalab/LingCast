@@ -199,9 +199,7 @@ export function KnowledgeDetail({ collectionId }: { collectionId: number }) {
               {collection?.name ?? '…'}
             </h2>
             <p className='text-muted-foreground'>
-              {collection?.avatarName
-                ? `${t('knowledge.belongsTo')} ${collection.avatarName} (#${collection.avatarId})`
-                : ' '}
+              {t('knowledge.documentCount', { count: documents.length })}
             </p>
           </div>
         </div>

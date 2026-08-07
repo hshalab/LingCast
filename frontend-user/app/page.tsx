@@ -173,9 +173,9 @@ export default function Home() {
                 <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/55 to-transparent px-3 pb-3 pt-12'>
                   <p className='truncate text-sm font-semibold text-white'>
                     {session.avatarName}
-                        {session.age != null && (
+                        {session.persona?.age != null && (
                       <span className='ml-1 font-normal text-white/60'>
-                        {t('home.age', { age: session.age })}
+                        {t('home.age', { age: session.persona.age })}
                       </span>
                     )}
                   </p>

@@ -56,18 +56,19 @@ class TaskCallback:
                     time.sleep(2**attempt)
         raise RuntimeError(f"failed to notify API after {self.retries} attempts: {last_exc}")
 
-    def update_avatar_base_video(
-        self, avatar_id: int, base_video_s3_key: str, status: str = "ready"
+    def update_avatar_default_video(
+        self, avatar_id: int, video_s3_key: str, status: str = "ready"
     ) -> None:
-        """Persist the pre-processed base video S3 key on the avatar record."""
-        url = f"{self.api_base_url}/api/avatars/{avatar_id}/base-video"
-        payload = {"baseVideoS3Key": base_video_s3_key, "status": status}
+        """Persist the pre-processed default video into the avatar's default
+        scene (default video)."""
+        url = f"{self.api_base_url}/api/avatars/{avatar_id}/default-video"
+        payload = {"videoS3Key": video_s3_key, "status": status}
         last_exc: Exception | None = None
         for attempt in range(self.retries):
             try:
                 resp = requests.post(url, json=payload, timeout=self.timeout)
                 resp.raise_for_status()
-                logger.info("avatar base-video callback %s -> %s", url, resp.status_code)
+                logger.info("avatar default-video callback %s -> %s", url, resp.status_code)
                 return
             except requests.RequestException as exc:
                 last_exc = exc
@@ -80,5 +81,5 @@ class TaskCallback:
                 if attempt + 1 < self.retries:
                     time.sleep(2**attempt)
         raise RuntimeError(
-            f"failed to notify avatar base-video after {self.retries} attempts: {last_exc}"
+            f"failed to notify avatar default-video after {self.retries} attempts: {last_exc}"
         )

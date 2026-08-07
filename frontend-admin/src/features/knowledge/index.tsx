@@ -31,21 +31,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
-  api,
   createKnowledgeCollection,
   deleteKnowledgeCollection,
   listKnowledgeCollections,
   renameKnowledgeCollection,
-  type Avatar,
   type KnowledgeCollection,
 } from '@/lib/api'
 
@@ -60,21 +51,16 @@ function formatTime(iso: string) {
  * This page lists the collections (zvec "Collection" concept) and lets the
  * admin create/rename/delete them; documents live inside a collection detail.
  */
-export function Knowledge({ initialAvatarId }: { initialAvatarId?: string }) {
+export function Knowledge() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [avatars, setAvatars] = useState<Avatar[]>([])
   const [collections, setCollections] = useState<KnowledgeCollection[]>([])
   const [loading, setLoading] = useState(true)
-  const [avatarFilter, setAvatarFilter] = useState(
-    initialAvatarId ?? 'all',
-  )
   const [keyword, setKeyword] = useState('')
 
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false)
   const [createName, setCreateName] = useState('')
-  const [createAvatar, setCreateAvatar] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   // Rename dialog
@@ -85,48 +71,28 @@ export function Knowledge({ initialAvatarId }: { initialAvatarId?: string }) {
   const [deleteTarget, setDeleteTarget] = useState<KnowledgeCollection | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const loadAvatars = useCallback(async () => {
-    try {
-      const { data } = await api.get<{ data: Avatar[] }>('/avatars')
-      setAvatars(data.data)
-      setCreateAvatar((prev) => prev || String(data.data[0]?.id ?? ''))
-    } catch {
-      // keep previous data
-    }
-  }, [])
-
   const load = useCallback(async () => {
     setLoading(true)
     try {
       setCollections(
-        await listKnowledgeCollections({
-          avatarId:
-            avatarFilter && avatarFilter !== 'all'
-              ? Number(avatarFilter)
-              : undefined,
-          q: keyword.trim() || undefined,
-        }),
+        await listKnowledgeCollections({ q: keyword.trim() || undefined }),
       )
     } catch {
       toast.error(t('knowledge.toastListFailed'))
     } finally {
       setLoading(false)
     }
-  }, [avatarFilter, keyword, t])
-
-  useEffect(() => {
-    void loadAvatars()
-  }, [loadAvatars])
+  }, [keyword, t])
 
   useEffect(() => {
     void load()
   }, [load])
 
   const submitCreate = async () => {
-    if (!createName.trim() || !createAvatar || submitting) return
+    if (!createName.trim() || submitting) return
     setSubmitting(true)
     try {
-      await createKnowledgeCollection(Number(createAvatar), createName.trim())
+      await createKnowledgeCollection(createName.trim())
       toast.success(t('knowledge.toastCreated'))
       setCreateName('')
       setCreateOpen(false)
@@ -202,19 +168,6 @@ export function Knowledge({ initialAvatarId }: { initialAvatarId?: string }) {
           </CardHeader>
           <CardContent className='flex flex-col gap-4'>
             <div className='flex flex-wrap items-center gap-3'>
-              <Select value={avatarFilter} onValueChange={setAvatarFilter}>
-                <SelectTrigger className='w-56'>
-                  <SelectValue placeholder={t('knowledge.filterAllAvatars')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='all'>{t('knowledge.filterAllAvatars')}</SelectItem>
-                  {avatars.map((a) => (
-                    <SelectItem key={a.id} value={String(a.id)}>
-                      {a.name} (#{a.id})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Input
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
@@ -242,7 +195,6 @@ export function Knowledge({ initialAvatarId }: { initialAvatarId?: string }) {
                         <span className='truncate'>{c.name}</span>
                       </CardTitle>
                       <CardDescription>
-                        {c.avatarName && `${c.avatarName} (#${c.avatarId})`} ·{' '}
                         {t('knowledge.documentCount', { count: c.documentCount })}
                       </CardDescription>
                     </CardHeader>
@@ -299,26 +251,11 @@ export function Knowledge({ initialAvatarId }: { initialAvatarId?: string }) {
                 placeholder={t('knowledge.collectionNamePlaceholder')}
               />
             </div>
-            <div className='flex flex-col gap-2'>
-              <label className='text-sm font-medium'>{t('knowledge.belongsTo')}</label>
-              <Select value={createAvatar} onValueChange={setCreateAvatar}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t('knowledge.selectAvatar')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {avatars.map((a) => (
-                    <SelectItem key={a.id} value={String(a.id)}>
-                      {a.name} (#{a.id})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
           <DialogFooter>
             <Button
               onClick={() => void submitCreate()}
-              disabled={!createName.trim() || !createAvatar || submitting}
+              disabled={!createName.trim() || submitting}
             >
               {submitting && <LoaderCircle className='size-4 animate-spin' />}
               {t('common.confirm')}

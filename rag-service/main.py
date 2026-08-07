@@ -180,6 +180,11 @@ class SearchRequest(BaseModel):
         default=None,
         description="Knowledge collection (知识库) ID to restrict the search to.",
     )
+    collection_ids: list[int] | None = Field(
+        default=None,
+        description="Multiple enabled collection IDs to restrict the search to "
+        "(live chat scope when some collections are disabled for an avatar).",
+    )
     query: str = Field(..., description="User question / query text.")
 
     @field_validator("avatar_id")
@@ -205,8 +210,14 @@ class SearchRequest(BaseModel):
 
     @model_validator(mode="after")
     def _scope_required(self) -> "SearchRequest":
-        if self.avatar_id is None and self.collection_id is None:
-            raise ValueError("provide at least one of avatar_id / collection_id")
+        if (
+            self.avatar_id is None
+            and self.collection_id is None
+            and not self.collection_ids
+        ):
+            raise ValueError(
+                "provide at least one of avatar_id / collection_id / collection_ids"
+            )
         return self
 
 
@@ -238,6 +249,7 @@ def _scope_filter(
     avatar_id: int | None = None,
     collection_id: int | None = None,
     source_id: int | None = None,
+    collection_ids: list[int] | None = None,
 ) -> str:
     """Build a zvec scalar filter from the provided scope fields."""
     parts: list[str] = []
@@ -245,6 +257,9 @@ def _scope_filter(
         parts.append(f"avatar_id = {avatar_id}")
     if collection_id is not None:
         parts.append(f"collection_id = {collection_id}")
+    if collection_ids:
+        ids = ",".join(str(int(i)) for i in collection_ids)
+        parts.append(f"collection_id IN ({ids})")
     if source_id is not None:
         parts.append(f"source_id = {source_id}")
     if not parts:
@@ -383,6 +398,7 @@ def search(req: SearchRequest) -> dict:
         filter_expr = _scope_filter(
             avatar_id=req.avatar_id,
             collection_id=req.collection_id,
+            collection_ids=req.collection_ids,
         )
         result = collection.query(
             queries=zvec.Query(

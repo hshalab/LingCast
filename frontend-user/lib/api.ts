@@ -1,13 +1,17 @@
-export type LiveSessionItem = {
-  avatarId: number
-  avatarName: string
-  category: string
+export type Persona = {
   age?: number
   heightCm?: number
   weightKg?: number
   ethnicity?: string
   relationshipStatus?: string
   personality?: string
+}
+
+export type LiveSessionItem = {
+  avatarId: number
+  avatarName: string
+  category: string
+  persona?: Persona
   imageS3Url: string
   streamId: string
   status: string
@@ -39,12 +43,7 @@ export type Avatar = {
   imageS3Url: string
   category: string
   voiceId: string
-  age?: number
-  heightCm?: number
-  weightKg?: number
-  ethnicity?: string
-  relationshipStatus?: string
-  personality?: string
+  persona?: Persona
   status: string
 }
 

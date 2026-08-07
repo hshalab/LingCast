@@ -369,7 +369,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/avatars/{id}/base-video": {
+        "/avatars/{id}/default-video": {
             "post": {
                 "consumes": [
                     "application/json"
@@ -390,7 +390,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "baseVideoS3Key + status (+ coverS3Key)",
+                        "description": "videoS3Key + status",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -410,7 +410,34 @@ const docTemplate = `{
                 }
             }
         },
-        "/avatars/{id}/knowledge-collections": {
+        "/avatars/{id}/knowledge-selection": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "knowledge"
+                ],
+                "summary": "List global collections with this avatar's bind/enabled state",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Avatar ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
             "post": {
                 "consumes": [
                     "application/json"
@@ -421,7 +448,7 @@ const docTemplate = `{
                 "tags": [
                     "knowledge"
                 ],
-                "summary": "Create a knowledge collection for an avatar",
+                "summary": "Set which global collections are bound/enabled for an avatar",
                 "parameters": [
                     {
                         "type": "integer",
@@ -431,7 +458,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "name",
+                        "description": "collectionIds: []uint",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -442,8 +469,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "201": {
-                        "description": "Created",
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -521,44 +548,15 @@ const docTemplate = `{
                 }
             }
         },
-        "/avatars/{id}/skip": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "avatars"
-                ],
-                "summary": "Skip base-video generation for an avatar",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Avatar ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/avatars/{id}/videos": {
+        "/avatars/{id}/scenes": {
             "get": {
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "avatars"
+                    "scenes"
                 ],
-                "summary": "List an avatar's driving videos (system default + uploads)",
+                "summary": "List scenes of an avatar (filtered by avatar, with videos)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -586,9 +584,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "avatars"
+                    "scenes"
                 ],
-                "summary": "Upload a driving video for an avatar (other-AI style clips)",
+                "summary": "Create a scene for an avatar (cover defaults to the avatar image)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -599,27 +597,55 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Display name",
-                        "name": "name",
+                        "description": "Scene title",
+                        "name": "title",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Scene description",
+                        "name": "description",
                         "in": "formData"
                     },
                     {
                         "type": "file",
-                        "description": "Video file (mp4/mov/webm/mkv/avi)",
-                        "name": "file",
-                        "in": "formData",
-                        "required": true
+                        "description": "Cover image (defaults to avatar image)",
+                        "name": "cover",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/handlers.avatarVideoItem"
+                            "$ref": "#/definitions/handlers.sceneItem"
                         }
-                    },
-                    "400": {
-                        "description": "Bad Request",
+                    }
+                }
+            }
+        },
+        "/avatars/{id}/skip": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "avatars"
+                ],
+                "summary": "Skip base-video generation for an avatar",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Avatar ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -830,14 +856,8 @@ const docTemplate = `{
                 "tags": [
                     "knowledge"
                 ],
-                "summary": "List knowledge collections (filter avatarId / q)",
+                "summary": "List global knowledge collections (optional ?q keyword)",
                 "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Filter by avatar",
-                        "name": "avatarId",
-                        "in": "query"
-                    },
                     {
                         "type": "string",
                         "description": "Keyword in collection name",
@@ -848,6 +868,39 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "knowledge"
+                ],
+                "summary": "Create a global knowledge collection",
+                "parameters": [
+                    {
+                        "description": "name",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1336,6 +1389,144 @@ const docTemplate = `{
                 }
             }
         },
+        "/scenes/{id}": {
+            "put": {
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "scenes"
+                ],
+                "summary": "Edit scene title/description/cover",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Scene ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.sceneItem"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "scenes"
+                ],
+                "summary": "Delete a scene (cascades videos; default scene is protected)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Scene ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/scenes/{id}/videos": {
+            "post": {
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "scenes"
+                ],
+                "summary": "Upload a driving video into a scene",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Scene ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Video description (e.g. 趴着/雨伞下)",
+                        "name": "description",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "Video file",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.sceneVideoItem"
+                        }
+                    }
+                }
+            }
+        },
+        "/scenes/{id}/videos/{vid}": {
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "scenes"
+                ],
+                "summary": "Delete a scene video",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Scene ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Video ID",
+                        "name": "vid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/tasks": {
             "get": {
                 "produces": [
@@ -1587,61 +1778,20 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/videos/{id}": {
-            "delete": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "avatars"
-                ],
-                "summary": "Delete an uploaded driving video (system default is protected)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Video ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
         "handlers.avatarResponse": {
             "type": "object",
             "properties": {
-                "age": {
-                    "type": "integer"
-                },
-                "baseVideoS3Key": {
-                    "type": "string"
-                },
-                "baseVideoS3Url": {
-                    "type": "string"
-                },
                 "category": {
                     "type": "string"
                 },
                 "createdAt": {
                     "type": "string"
                 },
-                "ethnicity": {
+                "defaultVideoS3Url": {
                     "type": "string"
-                },
-                "heightCm": {
-                    "type": "integer"
                 },
                 "id": {
                     "type": "integer"
@@ -1661,28 +1811,31 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
-                "personality": {
-                    "type": "string"
-                },
-                "relationshipStatus": {
-                    "type": "string"
+                "persona": {
+                    "$ref": "#/definitions/models.PersonaProfile"
                 },
                 "status": {
                     "type": "string"
                 },
                 "voiceId": {
                     "type": "string"
-                },
-                "weightKg": {
-                    "type": "integer"
                 }
             }
         },
-        "handlers.avatarVideoItem": {
+        "handlers.sceneItem": {
             "type": "object",
             "properties": {
                 "avatarId": {
                     "type": "integer"
+                },
+                "coverS3Key": {
+                    "type": "string"
+                },
+                "coverS3Url": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
                 },
                 "id": {
                     "type": "integer"
@@ -1690,8 +1843,28 @@ const docTemplate = `{
                 "isDefault": {
                     "type": "boolean"
                 },
-                "name": {
+                "title": {
                     "type": "string"
+                },
+                "videos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.sceneVideoItem"
+                    }
+                }
+            }
+        },
+        "handlers.sceneVideoItem": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "isDefault": {
+                    "type": "boolean"
                 },
                 "s3Key": {
                     "type": "string"
@@ -1699,9 +1872,8 @@ const docTemplate = `{
                 "s3Url": {
                     "type": "string"
                 },
-                "source": {
-                    "description": "system | upload",
-                    "type": "string"
+                "sceneId": {
+                    "type": "integer"
                 }
             }
         },
@@ -1729,6 +1901,15 @@ const docTemplate = `{
                 "progress": {
                     "type": "integer"
                 },
+                "sceneId": {
+                    "type": "integer"
+                },
+                "sceneName": {
+                    "type": "string"
+                },
+                "sceneVideoId": {
+                    "type": "integer"
+                },
                 "scriptText": {
                     "type": "string"
                 },
@@ -1742,6 +1923,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updatedAt": {
+                    "type": "string"
+                },
+                "videoName": {
                     "type": "string"
                 }
             }
@@ -1766,6 +1950,29 @@ const docTemplate = `{
                 },
                 "subtitleSize": {
                     "description": "px",
+                    "type": "integer"
+                }
+            }
+        },
+        "models.PersonaProfile": {
+            "type": "object",
+            "properties": {
+                "age": {
+                    "type": "integer"
+                },
+                "ethnicity": {
+                    "type": "string"
+                },
+                "heightCm": {
+                    "type": "integer"
+                },
+                "personality": {
+                    "type": "string"
+                },
+                "relationshipStatus": {
+                    "type": "string"
+                },
+                "weightKg": {
                     "type": "integer"
                 }
             }

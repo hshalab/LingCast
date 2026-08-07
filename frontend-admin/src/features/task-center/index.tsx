@@ -499,6 +499,8 @@ export function TaskCenter() {
                           </TableHead>
                           <TableHead>ID</TableHead>
                           <TableHead>{t('task.colAvatar')}</TableHead>
+                          <TableHead>{t('task.colScene')}</TableHead>
+                          <TableHead>{t('task.colVideo')}</TableHead>
                           <TableHead>{t('task.colScript')}</TableHead>
                           <TableHead>{t('common.status')}</TableHead>
                           <TableHead>{t('common.createdAt')}</TableHead>
@@ -509,7 +511,7 @@ export function TaskCenter() {
                         {tasks.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={7}
+                              colSpan={9}
                               className='py-8 text-center text-sm text-muted-foreground'
                             >
                               {t('task.emptyTasks')}
@@ -528,6 +530,8 @@ export function TaskCenter() {
                               </TableCell>
                               <TableCell>#{task.id}</TableCell>
                             <TableCell>{task.avatarName ?? `#${task.avatarId}`}</TableCell>
+                            <TableCell>{task.sceneName || '-'}</TableCell>
+                            <TableCell>{task.videoName || '-'}</TableCell>
                             <TableCell className='max-w-[260px] truncate' title={task.scriptText}>
                               {task.scriptText}
                             </TableCell>

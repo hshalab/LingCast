@@ -49,6 +49,17 @@ func DefaultLiveSettings() LiveSettings {
 	}
 }
 
+// PersonaProfile is the avatar's persona block, stored as a JSON string on
+// the avatar row (age/height/weight/ethnicity/relationship/personality).
+type PersonaProfile struct {
+	Age                *int   `json:"age,omitempty"`
+	HeightCm           *int   `json:"heightCm,omitempty"`
+	WeightKg           *int   `json:"weightKg,omitempty"`
+	Ethnicity          string `json:"ethnicity,omitempty"`
+	RelationshipStatus string `json:"relationshipStatus,omitempty"`
+	Personality        string `json:"personality,omitempty"`
+}
+
 // Avatar is a digital avatar material record. Files live in object storage;
 // the database only stores their S3 keys.
 type Avatar struct {
@@ -58,36 +69,39 @@ type Avatar struct {
 	// Category groups avatars for the audience home page filter
 	// (闲聊/知识/娱乐/游戏/带货/其他; empty -> 其他).
 	Category string `gorm:"size:32;not null;default:其他" json:"category"`
-	// Persona profile: used both as creation metadata and as the built-in
-	// prompt for LLM chat (age/height/weight/ethnicity/relationship/personality).
-	Age                *int   `gorm:"null" json:"age,omitempty"`
-	HeightCm           *int   `gorm:"null" json:"heightCm,omitempty"`
-	WeightKg           *int   `gorm:"null" json:"weightKg,omitempty"`
-	Ethnicity          string `gorm:"size:32" json:"ethnicity,omitempty"`
-	RelationshipStatus string `gorm:"size:16" json:"relationshipStatus,omitempty"`
-	Personality        string `gorm:"size:255" json:"personality,omitempty"`
+	// Persona is the JSON-serialized PersonaProfile.
+	Persona string `gorm:"type:text;not null;default:'{}'" json:"-"`
 	// VoiceID selects the Edge-TTS voice used for broadcast/live speech.
 	VoiceID string `gorm:"size:64;not null;default:zh-CN-XiaoxiaoNeural" json:"voiceId"`
-	// BaseVideoS3Key points to the pre-processed LivePortrait driving clip
-	// (silent, 24fps) consumed by both the offline and live pipelines.
-	BaseVideoS3Key *string `gorm:"size:512" json:"baseVideoS3Key,omitempty"`
 	Status         string  `gorm:"size:32;not null;default:initializing;index" json:"status"`
 	// LiveSettings holds the JSON-serialized models.LiveSettings.
 	LiveSettings string    `gorm:"type:text;not null;default:'{}'" json:"-"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
-// AvatarVideo is an extra driving video for an avatar (multiple styles).
-// The avatar's default base video (avatars.base_video_s3_key) is exposed as
-// a `system` entry by the API; rows here are user uploads (e.g. clips made
-// with other AI tools) that the broadcast page can pick instead.
-type AvatarVideo struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	AvatarID  uint      `gorm:"not null;index" json:"avatarId"`
-	Name      string    `gorm:"size:128" json:"name"`
-	S3Key     string    `gorm:"size:512;not null" json:"s3Key"`
-	Source    string    `gorm:"size:16;not null;default:upload" json:"source"` // upload
-	CreatedAt time.Time `json:"createdAt"`
+// Scene groups 1-N driving videos of an avatar (e.g. 沙滩场景: 趴着/雨伞下/喝水).
+// The avatar's creation-time base video becomes the default scene's default
+// video; the default scene/video is the live & broadcast fallback.
+type Scene struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	AvatarID    uint      `gorm:"not null;index" json:"avatarId"`
+	Title       string    `gorm:"size:128;not null" json:"title"`
+	Description string    `gorm:"size:512" json:"description,omitempty"`
+	CoverS3Key  string    `gorm:"size:512" json:"coverS3Key"`
+	IsDefault   bool      `gorm:"not null;default:false" json:"isDefault"`
+	SortOrder   int       `gorm:"not null;default:0" json:"sortOrder"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// SceneVideo is one driving video inside a scene.
+type SceneVideo struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	SceneID     uint      `gorm:"not null;index" json:"sceneId"`
+	AvatarID    uint      `gorm:"not null;index" json:"avatarId"`
+	S3Key       string    `gorm:"size:512;not null" json:"s3Key"`
+	Description string    `gorm:"size:255" json:"description,omitempty"`
+	IsDefault   bool      `gorm:"not null;default:false" json:"isDefault"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // BroadcastTask is an async synthesis task queued to the AI worker.
@@ -100,6 +114,12 @@ type BroadcastTask struct {
 	Progress         int       `gorm:"not null;default:0" json:"progress"`
 	// Stage is the worker-reported pipeline step: tts | lipsync | mux.
 	Stage            string    `gorm:"size:16;not null;default:''" json:"stage,omitempty"`
+	// SceneID/SceneVideoID record which scene video the task used, so retries
+	// and the history table can show/show the right parameters.
+	SceneID          uint      `gorm:"not null;default:0" json:"sceneId"`
+	SceneVideoID     uint      `gorm:"not null;default:0" json:"sceneVideoId"`
+	// VideoS3Key is the driving video used for this task (a scene video).
+	VideoS3Key       string    `gorm:"size:512;not null;default:''" json:"videoS3Key,omitempty"`
 	// TtsS3Key caches the synthesized TTS wav (S3) so a retry can reuse it.
 	TtsS3Key         *string   `gorm:"size:512" json:"ttsS3Key,omitempty"`
 	OutputVideoS3URL *string   `gorm:"size:1024" json:"outputVideoS3Url,omitempty"`
@@ -164,14 +184,23 @@ const (
 	KnowledgeStatusFailed  = "failed"  // extraction/ingest failed (see content)
 )
 
-// KnowledgeCollection is a named knowledge base (zvec "collection" concept)
-// that belongs to exactly one avatar. Documents live under a collection.
+// KnowledgeCollection is a GLOBAL named knowledge base (zvec "collection"
+// concept). Avatars bind to collections through AvatarKnowledge (N:N);
+// documents live inside a collection and are shared by bound avatars.
 type KnowledgeCollection struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
-	AvatarID  uint      `gorm:"not null;index;uniqueIndex:idx_collection_avatar_name" json:"avatarId"`
-	Name      string    `gorm:"size:128;not null;uniqueIndex:idx_collection_avatar_name" json:"name"`
+	Name      string    `gorm:"size:128;not null;index" json:"name"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// AvatarKnowledge is the N:N binding between avatars and global knowledge
+// collections. `enabled` means the collection takes part in this avatar's
+// live Q&A retrieval (the edit-page multi-select).
+type AvatarKnowledge struct {
+	AvatarID     uint `gorm:"primaryKey;autoIncrement:false" json:"avatarId"`
+	CollectionID uint `gorm:"primaryKey;autoIncrement:false" json:"collectionId"`
+	Enabled      bool `gorm:"not null;default:true" json:"enabled"`
 }
 
 // KnowledgeDocument is one source document (raw text or uploaded .txt/.pdf)

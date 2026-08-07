@@ -2,20 +2,12 @@ basePath: /api
 definitions:
   handlers.avatarResponse:
     properties:
-      age:
-        type: integer
-      baseVideoS3Key:
-        type: string
-      baseVideoS3Url:
-        type: string
       category:
         type: string
       createdAt:
         type: string
-      ethnicity:
+      defaultVideoS3Url:
         type: string
-      heightCm:
-        type: integer
       id:
         type: integer
       imageS3Key:
@@ -28,34 +20,48 @@ definitions:
         $ref: '#/definitions/models.LiveSettings'
       name:
         type: string
-      personality:
-        type: string
-      relationshipStatus:
-        type: string
+      persona:
+        $ref: '#/definitions/models.PersonaProfile'
       status:
         type: string
       voiceId:
         type: string
-      weightKg:
-        type: integer
     type: object
-  handlers.avatarVideoItem:
+  handlers.sceneItem:
     properties:
       avatarId:
         type: integer
+      coverS3Key:
+        type: string
+      coverS3Url:
+        type: string
+      description:
+        type: string
       id:
         type: integer
       isDefault:
         type: boolean
-      name:
+      title:
         type: string
+      videos:
+        items:
+          $ref: '#/definitions/handlers.sceneVideoItem'
+        type: array
+    type: object
+  handlers.sceneVideoItem:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      isDefault:
+        type: boolean
       s3Key:
         type: string
       s3Url:
         type: string
-      source:
-        description: system | upload
-        type: string
+      sceneId:
+        type: integer
     type: object
   handlers.taskResponse:
     properties:
@@ -73,6 +79,12 @@ definitions:
         type: string
       progress:
         type: integer
+      sceneId:
+        type: integer
+      sceneName:
+        type: string
+      sceneVideoId:
+        type: integer
       scriptText:
         type: string
       stage:
@@ -82,6 +94,8 @@ definitions:
       ttsS3Key:
         type: string
       updatedAt:
+        type: string
+      videoName:
         type: string
     type: object
   models.LiveSettings:
@@ -99,6 +113,21 @@ definitions:
         type: string
       subtitleSize:
         description: px
+        type: integer
+    type: object
+  models.PersonaProfile:
+    properties:
+      age:
+        type: integer
+      ethnicity:
+        type: string
+      heightCm:
+        type: integer
+      personality:
+        type: string
+      relationshipStatus:
+        type: string
+      weightKg:
         type: integer
     type: object
 host: localhost:8080
@@ -343,7 +372,7 @@ paths:
       summary: Edit an avatar (name/category/voice/persona profile)
       tags:
       - avatars
-  /avatars/{id}/base-video:
+  /avatars/{id}/default-video:
     post:
       consumes:
       - application/json
@@ -353,7 +382,7 @@ paths:
         name: id
         required: true
         type: integer
-      - description: baseVideoS3Key + status (+ coverS3Key)
+      - description: videoS3Key + status
         in: body
         name: request
         required: true
@@ -370,7 +399,25 @@ paths:
       summary: 'Worker webhook: persist base video + status'
       tags:
       - worker
-  /avatars/{id}/knowledge-collections:
+  /avatars/{id}/knowledge-selection:
+    get:
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List global collections with this avatar's bind/enabled state
+      tags:
+      - knowledge
     post:
       consumes:
       - application/json
@@ -380,7 +427,7 @@ paths:
         name: id
         required: true
         type: integer
-      - description: name
+      - description: 'collectionIds: []uint'
         in: body
         name: request
         required: true
@@ -390,12 +437,12 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
-          description: Created
+        "200":
+          description: OK
           schema:
             additionalProperties: true
             type: object
-      summary: Create a knowledge collection for an avatar
+      summary: Set which global collections are bound/enabled for an avatar
       tags:
       - knowledge
   /avatars/{id}/live-settings:
@@ -443,6 +490,57 @@ paths:
       summary: Regenerate the base driving video
       tags:
       - avatars
+  /avatars/{id}/scenes:
+    get:
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List scenes of an avatar (filtered by avatar, with videos)
+      tags:
+      - scenes
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Scene title
+        in: formData
+        name: title
+        required: true
+        type: string
+      - description: Scene description
+        in: formData
+        name: description
+        type: string
+      - description: Cover image (defaults to avatar image)
+        in: formData
+        name: cover
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.sceneItem'
+      summary: Create a scene for an avatar (cover defaults to the avatar image)
+      tags:
+      - scenes
   /avatars/{id}/skip:
     post:
       parameters:
@@ -460,58 +558,6 @@ paths:
             additionalProperties: true
             type: object
       summary: Skip base-video generation for an avatar
-      tags:
-      - avatars
-  /avatars/{id}/videos:
-    get:
-      parameters:
-      - description: Avatar ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List an avatar's driving videos (system default + uploads)
-      tags:
-      - avatars
-    post:
-      consumes:
-      - multipart/form-data
-      parameters:
-      - description: Avatar ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Display name
-        in: formData
-        name: name
-        type: string
-      - description: Video file (mp4/mov/webm/mkv/avi)
-        in: formData
-        name: file
-        required: true
-        type: file
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/handlers.avatarVideoItem'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Upload a driving video for an avatar (other-AI style clips)
       tags:
       - avatars
   /chat/guest:
@@ -644,10 +690,6 @@ paths:
   /knowledge-collections:
     get:
       parameters:
-      - description: Filter by avatar
-        in: query
-        name: avatarId
-        type: integer
       - description: Keyword in collection name
         in: query
         name: q
@@ -660,7 +702,29 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: List knowledge collections (filter avatarId / q)
+      summary: List global knowledge collections (optional ?q keyword)
+      tags:
+      - knowledge
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: name
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a global knowledge collection
       tags:
       - knowledge
   /knowledge-collections/{id}:
@@ -981,6 +1045,97 @@ paths:
       summary: Live-chat orchestrator (LLM -> TTS -> queue)
       tags:
       - live
+  /scenes/{id}:
+    delete:
+      parameters:
+      - description: Scene ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a scene (cascades videos; default scene is protected)
+      tags:
+      - scenes
+    put:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Scene ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.sceneItem'
+      summary: Edit scene title/description/cover
+      tags:
+      - scenes
+  /scenes/{id}/videos:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Scene ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Video description (e.g. 趴着/雨伞下)
+        in: formData
+        name: description
+        type: string
+      - description: Video file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.sceneVideoItem'
+      summary: Upload a driving video into a scene
+      tags:
+      - scenes
+  /scenes/{id}/videos/{vid}:
+    delete:
+      parameters:
+      - description: Scene ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Video ID
+        in: path
+        name: vid
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a scene video
+      tags:
+      - scenes
   /tasks:
     get:
       produces:
@@ -1147,23 +1302,4 @@ paths:
       summary: User list (guests/accounts + message counts)
       tags:
       - admin
-  /videos/{id}:
-    delete:
-      parameters:
-      - description: Video ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Delete an uploaded driving video (system default is protected)
-      tags:
-      - avatars
 swagger: "2.0"

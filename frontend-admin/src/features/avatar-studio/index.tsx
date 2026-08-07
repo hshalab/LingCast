@@ -18,6 +18,7 @@ import { Main } from '@/components/layout/main'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Card,
   CardContent,
@@ -34,9 +35,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { api, type Avatar } from '@/lib/api'
+import {
+  api,
+  getKnowledgeSelection,
+  setKnowledgeSelection,
+  type Avatar,
+  type KnowledgeSelectionItem,
+} from '@/lib/api'
 import { VideoPlayerDialog } from '@/components/video-player-dialog'
-import { AvatarCollections } from '@/features/knowledge/avatar-collections'
 import {
   cacheVoices,
   DEFAULT_VOICE_ID,
@@ -99,6 +105,7 @@ export function AvatarStudio() {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [created, setCreated] = useState<Avatar | null>(null)
   const [initFailed, setInitFailed] = useState(false)
+  const [collections, setCollections] = useState<KnowledgeSelectionItem[]>([])
 
   const selectedVoice = useMemo(
     () => voices.find((voice) => voice.id === voiceId) ?? voices[0],
@@ -118,15 +125,41 @@ export function AvatarStudio() {
         setName(data.name ?? '')
         setCategory(data.category ?? '其他')
         setVoiceId(data.voiceId ?? DEFAULT_VOICE_ID)
-        setAge(data.age != null ? String(data.age) : '')
-        setHeightCm(data.heightCm != null ? String(data.heightCm) : '')
-        setWeightKg(data.weightKg != null ? String(data.weightKg) : '')
-        setEthnicity(data.ethnicity ?? '')
-        setRelationshipStatus(data.relationshipStatus ?? '单身')
-        setPersonality(data.personality ?? '')
+        setAge(data.persona?.age != null ? String(data.persona.age) : '')
+        setHeightCm(data.persona?.heightCm != null ? String(data.persona.heightCm) : '')
+        setWeightKg(data.persona?.weightKg != null ? String(data.persona.weightKg) : '')
+        setEthnicity(data.persona?.ethnicity ?? '')
+        setRelationshipStatus(data.persona?.relationshipStatus ?? '单身')
+        setPersonality(data.persona?.personality ?? '')
       })
       .catch(() => toast.error(t('studio.toastLoadFailed')))
   }, [editId])
+
+  // 知识库多选：加载该数字人的知识库集合。
+  useEffect(() => {
+    if (!editId) {
+      setCollections([])
+      return
+    }
+    void getKnowledgeSelection(Number(editId))
+      .then(setCollections)
+      .catch(() => toast.error(t('studio.knowledgeLoadFailed')))
+  }, [editId])
+
+  const toggleCollection = async (col: KnowledgeSelectionItem, checked: boolean) => {
+    const next = collections.map((c) =>
+      c.id === col.id ? { ...c, enabled: checked } : c,
+    )
+    setCollections(next)
+    const ids = next.filter((c) => c.enabled).map((c) => c.id)
+    try {
+      await setKnowledgeSelection(Number(editId), ids)
+      toast.success(t('studio.knowledgeSaved'))
+    } catch (error) {
+      showApiError(error, t('common.requestFailed'))
+      void getKnowledgeSelection(Number(editId)).then(setCollections)
+    }
+  }
 
   // Poll the avatar's initialization status after creation.
   useEffect(() => {
@@ -402,7 +435,8 @@ export function AvatarStudio() {
             </CardContent>
           </Card>
 
-          {/* 右：人物设定 */}
+          {/* 右列：人物设定 + 知识库多选（平级面板） */}
+          <div className='flex flex-col gap-4'>
           <Card>
             <CardHeader>
               <CardTitle>{t('studio.persona')}</CardTitle>
@@ -489,6 +523,37 @@ export function AvatarStudio() {
               </div>
             </CardContent>
           </Card>
+
+          {/* 知识库多选面板（编辑模式） */}
+          {editing && (
+            <Card>
+              <CardHeader>
+                <CardTitle className='text-base'>{t('studio.knowledgeTitle')}</CardTitle>
+                <CardDescription>{t('studio.knowledgeDesc')}</CardDescription>
+              </CardHeader>
+              <CardContent className='flex flex-col gap-2'>
+                {collections.length === 0 ? (
+                  <p className='text-sm text-muted-foreground'>
+                    {t('studio.knowledgeNone')}
+                  </p>
+                ) : (
+                  collections.map((col) => (
+                    <label
+                      key={col.id}
+                      className='flex cursor-pointer items-center gap-2 text-sm'
+                    >
+                      <Checkbox
+                        checked={col.enabled}
+                        onCheckedChange={(v) => void toggleCollection(col, Boolean(v))}
+                      />
+                      <span className='truncate'>{col.name}</span>
+                    </label>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          )}
+          </div>
         </div>
 
         {/* 提交按钮：横跨左右两个设定区域，避免歧义 */}
@@ -505,11 +570,6 @@ export function AvatarStudio() {
               : t('studio.submitCreate')}
         </Button>
         </form>
-
-        {/* 私有知识库：仅在编辑模式显示（按 avatar 严格隔离） */}
-        {editing && editingAvatar && (
-          <AvatarCollections avatarId={Number(editId)} />
-        )}
 
           {isInitializing && (
             <Card>
@@ -541,7 +601,7 @@ export function AvatarStudio() {
                 </CardDescription>
               </CardHeader>
               <CardContent className='flex flex-col gap-3'>
-                {created.baseVideoS3Url && (
+                {created.defaultVideoS3Url && (
                   <Button
                     type='button'
                     variant='outline'
@@ -579,7 +639,7 @@ export function AvatarStudio() {
 
         <VideoPlayerDialog
           open={previewOpen}
-          url={created?.baseVideoS3Url}
+          url={created?.defaultVideoS3Url}
           title={`${created?.name ?? ''} · ${t('studio.defaultVideo')}`}
           onClose={() => setPreviewOpen(false)}
         />

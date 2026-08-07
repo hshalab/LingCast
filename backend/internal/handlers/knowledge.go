@@ -40,8 +40,6 @@ func NewKnowledgeHandler(db *gorm.DB, s3 *storage.Client, ragURL string) *Knowle
 
 type collectionResponse struct {
 	ID            uint      `json:"id"`
-	AvatarID      uint      `json:"avatarId"`
-	AvatarName    string    `json:"avatarName,omitempty"`
 	Name          string    `json:"name"`
 	DocumentCount int64     `json:"documentCount"`
 	CreatedAt     time.Time `json:"createdAt"`
@@ -71,32 +69,23 @@ func toDocumentResponse(d models.KnowledgeDocument) documentResponse {
 // ------------------------------------------------------------------ #
 // Collections
 // ------------------------------------------------------------------ #
-// ListCollections handles GET /api/knowledge-collections — all knowledge
-// bases with optional ?avatarId=<id> and ?q=<name keyword> filters, including
-// the owning avatar name and document count.
-// ListCollections handles GET /api/knowledge-collections.
-// @Summary  List knowledge collections (filter avatarId / q)
+// ListCollections handles GET /api/knowledge-collections — all GLOBAL
+// knowledge bases with an optional ?q=<name keyword> filter and document count.
+// @Summary  List global knowledge collections (optional ?q keyword)
 // @Tags     knowledge
 // @Produce  json
-// @Param    avatarId query int false "Filter by avatar"
 // @Param    q query string false "Keyword in collection name"
 // @Success  200 {object} map[string]any
 // @Router   /knowledge-collections [get]
 func (h *KnowledgeHandler) ListCollections(c *gin.Context) {
 	type row struct {
 		models.KnowledgeCollection
-		AvatarName    string `json:"avatarName"`
 		DocumentCount int64  `json:"documentCount"`
 	}
 	q := h.db.Model(&models.KnowledgeCollection{}).
-		Select("knowledge_collections.*, avatars.name AS avatar_name, " +
+		Select("knowledge_collections.*, " +
 			"(SELECT COUNT(*) FROM knowledge_documents WHERE knowledge_documents.collection_id = knowledge_collections.id) AS document_count").
-		Joins("LEFT JOIN avatars ON avatars.id = knowledge_collections.avatar_id")
-	if avatarID := c.Query("avatarId"); avatarID != "" {
-		if id, err := strconv.ParseUint(avatarID, 10, 64); err == nil && id > 0 {
-			q = q.Where("knowledge_collections.avatar_id = ?", id)
-		}
-	}
+		Where("1 = 1")
 	if kw := strings.TrimSpace(c.Query("q")); kw != "" {
 		q = q.Where("knowledge_collections.name LIKE ?", "%"+kw+"%")
 	}
@@ -109,8 +98,6 @@ func (h *KnowledgeHandler) ListCollections(c *gin.Context) {
 	for _, r := range rows {
 		items = append(items, collectionResponse{
 			ID:            r.ID,
-			AvatarID:      r.AvatarID,
-			AvatarName:    r.AvatarName,
 			Name:          r.Name,
 			DocumentCount: r.DocumentCount,
 			CreatedAt:     r.CreatedAt,
@@ -120,28 +107,115 @@ func (h *KnowledgeHandler) ListCollections(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": items})
 }
 
-// CreateCollection handles POST /api/avatars/:id/knowledge-collections
-// with {"name": "..."} — creates a named knowledge base for one avatar.
-// CreateCollection handles POST /api/avatars/:id/knowledge-collections.
-// @Summary  Create a knowledge collection for an avatar
+// GetKnowledgeSelection handles GET /api/avatars/:id/knowledge-selection.
+// @Summary  List global collections with this avatar's bind/enabled state
 // @Tags     knowledge
-// @Accept   json
 // @Produce  json
 // @Param    id path int true "Avatar ID"
-// @Param    request body map[string]any true "name"
-// @Success  201 {object} map[string]any
-// @Router   /avatars/{id}/knowledge-collections [post]
-func (h *KnowledgeHandler) CreateCollection(c *gin.Context) {
+// @Success  200 {object} map[string]any
+// @Router   /avatars/{id}/knowledge-selection [get]
+func (h *KnowledgeHandler) GetKnowledgeSelection(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || avatarID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
 		return
 	}
-	var avatar models.Avatar
-	if err := h.db.First(&avatar, avatarID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.avatar.not_found")})
+	type item struct {
+		ID      uint   `json:"id"`
+		Name    string `json:"name"`
+		Enabled bool   `json:"enabled"`
+	}
+	var cols []models.KnowledgeCollection
+	if err := h.db.Order("updated_at desc").Find(&cols).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	items := make([]item, 0, len(cols))
+	for _, col := range cols {
+		items = append(items, item{ID: col.ID, Name: col.Name})
+	}
+	var binds []models.AvatarKnowledge
+	if err := h.db.Where("avatar_id = ?", avatarID).Find(&binds).Error; err == nil {
+		byID := map[uint]bool{}
+		for _, b := range binds {
+			byID[b.CollectionID] = b.Enabled
+		}
+		for i := range items {
+			items[i].Enabled = byID[items[i].ID]
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": items})
+}
+
+// SetKnowledgeSelection handles POST /api/avatars/:id/knowledge-selection.
+// @Summary  Set which global collections are bound/enabled for an avatar
+// @Tags     knowledge
+// @Accept   json
+// @Produce  json
+// @Param    id path int true "Avatar ID"
+// @Param    request body map[string]any true "collectionIds: []uint"
+// @Success  200 {object} map[string]any
+// @Router   /avatars/{id}/knowledge-selection [post]
+func (h *KnowledgeHandler) SetKnowledgeSelection(c *gin.Context) {
+	avatarID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || avatarID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
+		return
+	}
+	var req struct {
+		CollectionIds []uint `json:"collectionIds"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_body", err.Error())})
+		return
+	}
+	selected := map[uint]bool{}
+	for _, id := range req.CollectionIds {
+		selected[id] = true
+	}
+	var binds []models.AvatarKnowledge
+	if err := h.db.Where("avatar_id = ?", avatarID).Find(&binds).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	seen := map[uint]bool{}
+	for _, b := range binds {
+		seen[b.CollectionID] = true
+		want := selected[b.CollectionID]
+		if b.Enabled != want {
+			if err := h.db.Model(&models.AvatarKnowledge{}).
+				Where("avatar_id = ? AND collection_id = ?", avatarID, b.CollectionID).
+				Update("enabled", want).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
+	}
+	for _, id := range req.CollectionIds {
+		if !seen[id] {
+			if err := h.db.Create(&models.AvatarKnowledge{
+				AvatarID:     uint(avatarID),
+				CollectionID: id,
+				Enabled:      true,
+			}).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// CreateCollection handles POST /api/knowledge-collections with {"name": ...}
+// — creates a GLOBAL knowledge base that avatars can bind to.
+// @Summary  Create a global knowledge collection
+// @Tags     knowledge
+// @Accept   json
+// @Produce  json
+// @Param    request body map[string]any true "name"
+// @Success  201 {object} map[string]any
+// @Router   /knowledge-collections [post]
+func (h *KnowledgeHandler) CreateCollection(c *gin.Context) {
 	var req struct {
 		Name string `json:"name"`
 	}
@@ -155,23 +229,13 @@ func (h *KnowledgeHandler) CreateCollection(c *gin.Context) {
 		return
 	}
 
-	var dup int64
-	h.db.Model(&models.KnowledgeCollection{}).
-		Where("avatar_id = ? AND name = ?", avatarID, req.Name).
-		Count(&dup)
-	if dup > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": i18n.Tc(c, "err.knowledge.collection_duplicate")})
-		return
-	}
-
-	row := models.KnowledgeCollection{AvatarID: uint(avatarID), Name: req.Name}
+	row := models.KnowledgeCollection{Name: req.Name}
 	if err := h.db.Create(&row).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.knowledge.save_failed", err.Error())})
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": collectionResponse{
-		ID: row.ID, AvatarID: row.AvatarID, AvatarName: avatar.Name,
-		Name: row.Name, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		ID: row.ID, Name: row.Name, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}})
 }
 
@@ -208,21 +272,13 @@ func (h *KnowledgeHandler) RenameCollection(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.knowledge.collection_not_found")})
 		return
 	}
-	var dup int64
-	h.db.Model(&models.KnowledgeCollection{}).
-		Where("avatar_id = ? AND name = ? AND id <> ?", row.AvatarID, req.Name, row.ID).
-		Count(&dup)
-	if dup > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": i18n.Tc(c, "err.knowledge.collection_duplicate")})
-		return
-	}
 	row.Name = req.Name
 	if err := h.db.Save(&row).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": collectionResponse{
-		ID: row.ID, AvatarID: row.AvatarID, Name: row.Name,
+		ID: row.ID, Name: row.Name,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}})
 }
@@ -259,6 +315,7 @@ func (h *KnowledgeHandler) DeleteCollection(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	_ = h.db.Where("collection_id = ?", row.ID).Delete(&models.AvatarKnowledge{}).Error
 	if err := h.db.Delete(&row).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -390,7 +447,7 @@ func (h *KnowledgeHandler) CreateDocument(c *gin.Context) {
 	status := models.KnowledgeStatusIndexed
 	if content == "" || h.ragURL == "" {
 		status = models.KnowledgeStatusFailed
-	} else if err := h.ragIngest(collection.AvatarID, row.CollectionID, row.ID, content); err != nil {
+	} else if err := h.ragIngest(0, row.CollectionID, row.ID, content); err != nil {
 		log.Printf("[rag] rag-service ingest failed for document %d: %v", row.ID, err)
 		status = models.KnowledgeStatusFailed
 	}

@@ -360,7 +360,7 @@ def process_avatar_init(
         base_video = renderer.render_base(image_path, work_dir, seconds=seconds)
         key = f"base_videos/{avatar_id}.mp4"
         storage.upload(key, base_video)
-        callback.update_avatar_base_video(avatar_id, key, status="ready")
+        callback.update_avatar_default_video(avatar_id, key, status="ready")
         logger.info("avatar %s base video ready: %s (%.1fs)", avatar_id, key, seconds)
     except Exception:
         logger.exception("avatar %s base video preprocess failed", avatar_id)

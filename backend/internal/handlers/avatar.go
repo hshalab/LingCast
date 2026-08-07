@@ -32,28 +32,65 @@ type AvatarHandler struct {
 }
 
 type avatarResponse struct {
-	ID                 uint                `json:"id"`
-	Name               string              `json:"name"`
-	ImageS3Key         string              `json:"imageS3Key"`
-	ImageS3URL         string              `json:"imageS3Url"`
-	Category           string              `json:"category"`
-	Age                *int                `json:"age,omitempty"`
-	HeightCm           *int                `json:"heightCm,omitempty"`
-	WeightKg           *int                `json:"weightKg,omitempty"`
-	Ethnicity          string              `json:"ethnicity,omitempty"`
-	RelationshipStatus string              `json:"relationshipStatus,omitempty"`
-	Personality        string              `json:"personality,omitempty"`
-	VoiceID            string              `json:"voiceId"`
-	BaseVideoS3Key     *string             `json:"baseVideoS3Key,omitempty"`
-	BaseVideoS3URL     *string             `json:"baseVideoS3Url,omitempty"`
-	Status             string              `json:"status"`
-	InitQueuePos       *int                `json:"initQueuePos,omitempty"`
-	LiveSettings       models.LiveSettings `json:"liveSettings"`
-	CreatedAt          time.Time           `json:"createdAt"`
+	ID                uint                  `json:"id"`
+	Name              string                `json:"name"`
+	ImageS3Key        string                `json:"imageS3Key"`
+	ImageS3URL        string                `json:"imageS3Url"`
+	Category          string                `json:"category"`
+	Persona           models.PersonaProfile `json:"persona"`
+	VoiceID           string                `json:"voiceId"`
+	Status            string                `json:"status"`
+	InitQueuePos      *int                  `json:"initQueuePos,omitempty"`
+	LiveSettings      models.LiveSettings   `json:"liveSettings"`
+	DefaultVideoS3URL *string               `json:"defaultVideoS3Url,omitempty"`
+	CreatedAt         time.Time             `json:"createdAt"`
 }
 
 func NewAvatarHandler(db *gorm.DB, s3 *storage.Client, q *queue.Queue, avatarInitQueueKey string) *AvatarHandler {
 	return &AvatarHandler{db: db, s3: s3, q: q, avatarInitQueueKey: avatarInitQueueKey}
+}
+
+// personaFromForm reads the persona profile from multipart form fields and
+// returns the JSON string stored on the avatar row.
+func personaFromForm(c *gin.Context) (string, error) {
+	p := models.PersonaProfile{
+		Age:                optionalInt(c.PostForm("age")),
+		HeightCm:           optionalInt(c.PostForm("height_cm")),
+		WeightKg:           optionalInt(c.PostForm("weight_kg")),
+		Ethnicity:          strings.TrimSpace(c.PostForm("ethnicity")),
+		RelationshipStatus: strings.TrimSpace(c.PostForm("relationship_status")),
+		Personality:        strings.TrimSpace(c.PostForm("personality")),
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func parsePersona(raw string) models.PersonaProfile {
+	var p models.PersonaProfile
+	if raw == "" {
+		return p
+	}
+	_ = json.Unmarshal([]byte(raw), &p)
+	return p
+}
+
+// defaultSceneVideo returns the avatar's default scene + its default video
+// (the live/broadcast fallback), or nil when not ready yet.
+func (h *AvatarHandler) defaultSceneVideo(avatarID uint) (*models.SceneVideo, error) {
+	var scene models.Scene
+	if err := h.db.Where("avatar_id = ? AND is_default = ?", avatarID, true).
+		First(&scene).Error; err != nil {
+		return nil, err
+	}
+	var video models.SceneVideo
+	if err := h.db.Where("scene_id = ? AND is_default = ?", scene.ID, true).
+		First(&video).Error; err != nil {
+		return nil, err
+	}
+	return &video, nil
 }
 
 // Create handles POST /api/avatars. It accepts multipart/form-data with
@@ -89,12 +126,11 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 		voiceID = models.DefaultEdgeVoice
 	}
 	category := normalizeCategory(c.PostForm("category"))
-	age := optionalInt(c.PostForm("age"))
-	heightCm := optionalInt(c.PostForm("height_cm"))
-	weightKg := optionalInt(c.PostForm("weight_kg"))
-	ethnicity := strings.TrimSpace(c.PostForm("ethnicity"))
-	relationshipStatus := strings.TrimSpace(c.PostForm("relationship_status"))
-	personality := strings.TrimSpace(c.PostForm("personality"))
+	persona, err := personaFromForm(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	imageHeader, err := c.FormFile("image")
 	if err != nil {
@@ -109,17 +145,12 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 	}
 
 	avatar := models.Avatar{
-		Name:               name,
-		ImageS3Key:         imageKey,
-		Category:           category,
-		Age:                age,
-		HeightCm:           heightCm,
-		WeightKg:           weightKg,
-		Ethnicity:          ethnicity,
-		RelationshipStatus: relationshipStatus,
-		Personality:        personality,
-		VoiceID:            voiceID,
-		Status:             models.AvatarStatusInitializing,
+		Name:       name,
+		ImageS3Key: imageKey,
+		Category:   category,
+		Persona:    persona,
+		VoiceID:    voiceID,
+		Status:     models.AvatarStatusInitializing,
 	}
 	if err := h.db.Create(&avatar).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.avatar.save_failed", err.Error())})
@@ -137,7 +168,7 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, toAvatarResponse(avatar, h.s3))
+	c.JSON(http.StatusCreated, toAvatarResponse(h.db, avatar, h.s3))
 }
 
 // Get handles GET /api/avatars/:id so the frontend can poll the avatar's
@@ -165,19 +196,14 @@ func (h *AvatarHandler) Get(c *gin.Context) {
 		}
 		return
 	}
-	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
+	c.JSON(http.StatusOK, toAvatarResponse(h.db, avatar, h.s3))
 }
 
 type updateAvatarRequest struct {
-	Name               string `json:"name"`
-	Category           string `json:"category"`
-	VoiceID            string `json:"voiceId"`
-	Age                *int   `json:"age"`
-	HeightCm           *int   `json:"heightCm"`
-	WeightKg           *int   `json:"weightKg"`
-	Ethnicity          string `json:"ethnicity"`
-	RelationshipStatus string `json:"relationshipStatus"`
-	Personality        string `json:"personality"`
+	Name     string                `json:"name"`
+	Category string                `json:"category"`
+	VoiceID  string                `json:"voiceId"`
+	Persona  models.PersonaProfile `json:"persona"`
 }
 
 // Update handles PUT /api/avatars/:id — edits an existing avatar's metadata
@@ -225,17 +251,14 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 	avatar.Name = name
 	avatar.Category = normalizeCategory(req.Category)
 	avatar.VoiceID = voiceID
-	avatar.Age = req.Age
-	avatar.HeightCm = req.HeightCm
-	avatar.WeightKg = req.WeightKg
-	avatar.Ethnicity = strings.TrimSpace(req.Ethnicity)
-	avatar.RelationshipStatus = strings.TrimSpace(req.RelationshipStatus)
-	avatar.Personality = strings.TrimSpace(req.Personality)
+	if b, err := json.Marshal(req.Persona); err == nil {
+		avatar.Persona = string(b)
+	}
 	if err := h.db.Save(&avatar).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
+	c.JSON(http.StatusOK, toAvatarResponse(h.db, avatar, h.s3))
 }
 
 // UpdateBaseVideo handles POST /api/avatars/:id/base-video — an internal
@@ -245,20 +268,20 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 // @Accept   json
 // @Produce  json
 // @Param    id path int true "Avatar ID"
-// @Param    request body map[string]any true "baseVideoS3Key + status (+ coverS3Key)"
+// @Param    request body map[string]any true "videoS3Key + status"
 // @Success  200 {object} avatarResponse
-// @Router   /avatars/{id}/base-video [post]
-func (h *AvatarHandler) UpdateBaseVideo(c *gin.Context) {
+// @Router   /avatars/{id}/default-video [post]
+func (h *AvatarHandler) UpdateDefaultVideo(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
 		return
 	}
 	var req struct {
-		BaseVideoS3Key string `json:"baseVideoS3Key"`
-		Status         string `json:"status"`
+		VideoS3Key string `json:"videoS3Key"`
+		Status     string `json:"status"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.BaseVideoS3Key) == "" {
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.VideoS3Key) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.base_video_key_required")})
 		return
 	}
@@ -280,14 +303,61 @@ func (h *AvatarHandler) UpdateBaseVideo(c *gin.Context) {
 		}
 		return
 	}
-	key := strings.TrimSpace(req.BaseVideoS3Key)
-	avatar.BaseVideoS3Key = &key
+	key := strings.TrimSpace(req.VideoS3Key)
+
+	// Upsert the default scene and its default video.
+	var scene models.Scene
+	if err := h.db.Where("avatar_id = ? AND is_default = ?", avatar.ID, true).
+		First(&scene).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			scene = models.Scene{
+				AvatarID:   avatar.ID,
+				Title:      "默认场景",
+				CoverS3Key: avatar.ImageS3Key,
+				IsDefault:  true,
+			}
+			if err := h.db.Create(&scene).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	var video models.SceneVideo
+	if err := h.db.Where("scene_id = ? AND is_default = ?", scene.ID, true).
+		First(&video).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			video = models.SceneVideo{
+				SceneID:     scene.ID,
+				AvatarID:    avatar.ID,
+				S3Key:       key,
+				Description: "默认",
+				IsDefault:   true,
+			}
+			if err := h.db.Create(&video).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	} else {
+		video.S3Key = key
+		if err := h.db.Save(&video).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
 	avatar.Status = status
 	if err := h.db.Save(&avatar).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
+	c.JSON(http.StatusOK, toAvatarResponse(h.db, avatar, h.s3))
 }
 
 // List handles GET /api/avatars and returns all avatars (newest first) so the
@@ -308,7 +378,7 @@ func (h *AvatarHandler) List(c *gin.Context) {
 	queuePos := h.initQueuePositions(c)
 	resp := make([]avatarResponse, 0, len(avatars))
 	for _, a := range avatars {
-		r := toAvatarResponse(a, h.s3)
+		r := toAvatarResponse(h.db, a, h.s3)
 		if pos, ok := queuePos[a.ID]; ok {
 			r.InitQueuePos = &pos
 		}
@@ -364,9 +434,22 @@ func (h *AvatarHandler) Delete(c *gin.Context) {
 	ctx := c.Request.Context()
 	// Best-effort cleanup: S3 objects, pending init payload, live queue.
 	_ = h.s3.Delete(ctx, avatar.ImageS3Key)
-	if avatar.BaseVideoS3Key != nil {
-		_ = h.s3.Delete(ctx, *avatar.BaseVideoS3Key)
+	var scenes []models.Scene
+	if err := h.db.Where("avatar_id = ?", avatar.ID).Find(&scenes).Error; err == nil {
+		for _, s := range scenes {
+			var vids []models.SceneVideo
+			if err := h.db.Where("scene_id = ?", s.ID).Find(&vids).Error; err == nil {
+				for _, v := range vids {
+					_ = h.s3.Delete(ctx, v.S3Key)
+				}
+			}
+			_ = h.db.Where("scene_id = ?", s.ID).Delete(&models.SceneVideo{}).Error
+			if s.CoverS3Key != "" && s.CoverS3Key != avatar.ImageS3Key {
+				_ = h.s3.Delete(ctx, s.CoverS3Key)
+			}
+		}
 	}
+	_ = h.db.Where("avatar_id = ?", avatar.ID).Delete(&models.Scene{}).Error
 	if raw, err := json.Marshal(queue.AvatarInitPayload{
 		AvatarID:   avatar.ID,
 		ImageS3Key: avatar.ImageS3Key,
@@ -395,6 +478,8 @@ func (h *AvatarHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.avatar.delete_session_failed", err.Error())})
 		return
 	}
+	// Clean N:N knowledge bindings (avatar_knowledge) left behind by the avatar.
+	_ = h.db.Where("avatar_id = ?", avatar.ID).Delete(&models.AvatarKnowledge{}).Error
 
 	if err := h.db.Delete(&avatar).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -443,7 +528,7 @@ func (h *AvatarHandler) Retry(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.task.enqueue_retry_failed", err.Error())})
 		return
 	}
-	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
+	c.JSON(http.StatusOK, toAvatarResponse(h.db, avatar, h.s3))
 }
 
 // Skip handles POST /api/avatars/:id/skip — marks an initializing avatar as
@@ -486,7 +571,7 @@ func (h *AvatarHandler) Skip(c *gin.Context) {
 	}); err == nil {
 		_ = h.q.Remove(c.Request.Context(), h.avatarInitQueueKey, string(raw))
 	}
-	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
+	c.JSON(http.StatusOK, toAvatarResponse(h.db, avatar, h.s3))
 }
 
 // UpdateLiveSettings handles PUT /api/avatars/:id/live-settings — persists
@@ -543,7 +628,7 @@ func (h *AvatarHandler) UpdateLiveSettings(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, toAvatarResponse(avatar, h.s3))
+	c.JSON(http.StatusOK, toAvatarResponse(h.db, avatar, h.s3))
 }
 
 func (h *AvatarHandler) uploadFormFile(c *gin.Context, header *multipart.FileHeader, prefix string) (string, error) {
@@ -567,30 +652,29 @@ func (h *AvatarHandler) uploadFormFile(c *gin.Context, header *multipart.FileHea
 	return key, nil
 }
 
-func toAvatarResponse(a models.Avatar, s3 *storage.Client) avatarResponse {
+func toAvatarResponse(db *gorm.DB, a models.Avatar, s3 *storage.Client) avatarResponse {
 	liveSettings := parseLiveSettings(a.LiveSettings)
 	resp := avatarResponse{
-		ID:                 a.ID,
-		Name:               a.Name,
-		ImageS3Key:         a.ImageS3Key,
-		ImageS3URL:         s3.PublicURL(a.ImageS3Key),
-		Category:           normalizeCategory(a.Category),
-		Age:                a.Age,
-		HeightCm:           a.HeightCm,
-		WeightKg:           a.WeightKg,
-		Ethnicity:          a.Ethnicity,
-		RelationshipStatus: a.RelationshipStatus,
-		Personality:        a.Personality,
-		VoiceID:            a.VoiceID,
-		Status:             a.Status,
-		LiveSettings:       liveSettings,
-		CreatedAt:          a.CreatedAt,
+		ID:           a.ID,
+		Name:         a.Name,
+		ImageS3Key:   a.ImageS3Key,
+		ImageS3URL:   s3.PublicURL(a.ImageS3Key),
+		Category:     normalizeCategory(a.Category),
+		Persona:      parsePersona(a.Persona),
+		VoiceID:      a.VoiceID,
+		Status:       a.Status,
+		LiveSettings: liveSettings,
+		CreatedAt:    a.CreatedAt,
 	}
-	if a.BaseVideoS3Key != nil {
-		key := *a.BaseVideoS3Key
-		resp.BaseVideoS3Key = &key
-		if url := s3.PublicURL(key); url != "" {
-			resp.BaseVideoS3URL = &url
+	var scene models.Scene
+	if err := db.Where("avatar_id = ? AND is_default = ?", a.ID, true).
+		First(&scene).Error; err == nil {
+		var video models.SceneVideo
+		if err := db.Where("scene_id = ? AND is_default = ?", scene.ID, true).
+			First(&video).Error; err == nil {
+			if url := s3.PublicURL(video.S3Key); url != "" {
+				resp.DefaultVideoS3URL = &url
+			}
 		}
 	}
 	return resp

@@ -14,6 +14,7 @@ import { Route as ClerkRouteRouteImport } from './routes/clerk/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedTaskCenterRouteImport } from './routes/_authenticated/task-center'
+import { Route as AuthenticatedScenesRouteImport } from './routes/_authenticated/scenes'
 import { Route as AuthenticatedLiveStudioRouteImport } from './routes/_authenticated/live-studio'
 import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
 import { Route as AuthenticatedChatLogsRouteImport } from './routes/_authenticated/chat-logs'
@@ -68,6 +69,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
 const AuthenticatedTaskCenterRoute = AuthenticatedTaskCenterRouteImport.update({
   id: '/task-center',
   path: '/task-center',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedScenesRoute = AuthenticatedScenesRouteImport.update({
+  id: '/scenes',
+  path: '/scenes',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedLiveStudioRoute = AuthenticatedLiveStudioRouteImport.update({
@@ -254,6 +260,7 @@ export interface FileRoutesByFullPath {
   '/chat-logs': typeof AuthenticatedChatLogsRoute
   '/knowledge': typeof AuthenticatedKnowledgeRouteWithChildren
   '/live-studio': typeof AuthenticatedLiveStudioRoute
+  '/scenes': typeof AuthenticatedScenesRoute
   '/task-center': typeof AuthenticatedTaskCenterRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/knowledge/$id': typeof AuthenticatedKnowledgeIdRoute
@@ -287,6 +294,7 @@ export interface FileRoutesByTo {
   '/broadcast': typeof AuthenticatedBroadcastRoute
   '/chat-logs': typeof AuthenticatedChatLogsRoute
   '/live-studio': typeof AuthenticatedLiveStudioRoute
+  '/scenes': typeof AuthenticatedScenesRoute
   '/task-center': typeof AuthenticatedTaskCenterRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -326,6 +334,7 @@ export interface FileRoutesById {
   '/_authenticated/chat-logs': typeof AuthenticatedChatLogsRoute
   '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRouteWithChildren
   '/_authenticated/live-studio': typeof AuthenticatedLiveStudioRoute
+  '/_authenticated/scenes': typeof AuthenticatedScenesRoute
   '/_authenticated/task-center': typeof AuthenticatedTaskCenterRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -364,6 +373,7 @@ export interface FileRouteTypes {
     | '/chat-logs'
     | '/knowledge'
     | '/live-studio'
+    | '/scenes'
     | '/task-center'
     | '/errors/$error'
     | '/knowledge/$id'
@@ -397,6 +407,7 @@ export interface FileRouteTypes {
     | '/broadcast'
     | '/chat-logs'
     | '/live-studio'
+    | '/scenes'
     | '/task-center'
     | '/'
     | '/errors/$error'
@@ -435,6 +446,7 @@ export interface FileRouteTypes {
     | '/_authenticated/chat-logs'
     | '/_authenticated/knowledge'
     | '/_authenticated/live-studio'
+    | '/_authenticated/scenes'
     | '/_authenticated/task-center'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
@@ -502,6 +514,13 @@ declare module '@tanstack/react-router' {
       path: '/task-center'
       fullPath: '/task-center'
       preLoaderRoute: typeof AuthenticatedTaskCenterRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/scenes': {
+      id: '/_authenticated/scenes'
+      path: '/scenes'
+      fullPath: '/scenes'
+      preLoaderRoute: typeof AuthenticatedScenesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/live-studio': {
@@ -762,6 +781,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChatLogsRoute: typeof AuthenticatedChatLogsRoute
   AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRouteWithChildren
   AuthenticatedLiveStudioRoute: typeof AuthenticatedLiveStudioRoute
+  AuthenticatedScenesRoute: typeof AuthenticatedScenesRoute
   AuthenticatedTaskCenterRoute: typeof AuthenticatedTaskCenterRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -780,6 +800,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChatLogsRoute: AuthenticatedChatLogsRoute,
   AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRouteWithChildren,
   AuthenticatedLiveStudioRoute: AuthenticatedLiveStudioRoute,
+  AuthenticatedScenesRoute: AuthenticatedScenesRoute,
   AuthenticatedTaskCenterRoute: AuthenticatedTaskCenterRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,

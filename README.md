@@ -120,13 +120,15 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   so the player never drops or buffers ("转圈"). Inference runs async in small
   Wav2Lip batches, splicing consecutive sentences seamlessly.
 - [x] **Private knowledge base + long-term memory (local RAG, zero model)**:
-  two-level model avatar → knowledge collection → documents. A dedicated
-  `rag-service` microservice (FastAPI + uv + [zvec](https://zvec.org) in-process
-  full-text search) segments Chinese with its bundled Jieba tokenizer — no
+  collections are global and shared; avatars bind to them via an N:N relation
+  table (one collection can serve multiple avatars). A dedicated `rag-service`
+  microservice (FastAPI + uv + [zvec](https://zvec.org) in-process full-text
+  search) segments Chinese with its bundled Jieba tokenizer — no
   sentence-transformers / torch / model downloads, and no RediSearch. Documents
   (paste text or upload .txt/.pdf) are chunked (~300 chars / 50 overlap) and
   indexed per collection; the live chat endpoint injects the last 10 room
-  messages plus Top-3 chunks (strictly scoped by avatar) into the LLM prompt.
+  messages plus Top-3 chunks from the avatar's bound collections into the LLM
+  prompt.
 - [x] **Knowledge management UI**: `/knowledge` lists collections (create /
   rename / delete) and `/knowledge/$id` manages the documents inside a
   collection (add text / upload .txt/.pdf / delete) with a Top-3 retrieval test

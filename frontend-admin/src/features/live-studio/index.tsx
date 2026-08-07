@@ -145,7 +145,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
         setAvatars(avatarResp.data.data)
         setLiveSessions(liveResp.data.data)
         if (!Number.isFinite(id)) {
-          const ready = avatarResp.data.data.find((a) => Boolean(a.baseVideoS3Key))
+          const ready = avatarResp.data.data.find((a) => Boolean(a.defaultVideoS3Url))
           if (ready) {
             void navigate({
               to: '/live-studio',
@@ -397,7 +397,7 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
             </CardHeader>
             <CardContent className='flex flex-col gap-2'>
               {avatars
-                .filter((avatar) => Boolean(avatar.baseVideoS3Key))
+                .filter((avatar) => Boolean(avatar.defaultVideoS3Url))
                 .map((avatar) => {
                   const live = liveSessions.some((s) => s.avatarId === avatar.id)
                   const active = avatar.id === id
