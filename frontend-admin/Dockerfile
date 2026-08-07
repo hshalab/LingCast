@@ -14,6 +14,10 @@ RUN pnpm build
 # ---- runtime stage ----
 FROM nginx:alpine AS runner
 
+# 设置时区（可选，用于 Nginx 日志时间准确）
+ENV TZ=Asia/Shanghai
+RUN apk add --no-cache tzdata
+
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 
