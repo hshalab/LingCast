@@ -22,6 +22,7 @@ func main() {
 	// webhook in the background (retries every 2s) — never blocks startup.
 	tgWebhook := handlers.NewTelegramWebhookHandler(
 		deps.DB, cfg.TgBotToken, cfg.NgrokAPIURL,
+		cfg.TgWebhookURL, cfg.TgMiniAppURL,
 	)
 	go tgWebhook.RegisterWithRetry(context.Background())
 

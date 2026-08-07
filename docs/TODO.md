@@ -236,6 +236,9 @@ AMD GPUs using ROCm.
   `NGROK_API_URL`（`http://ngrok:4040/api/tunnels`，2s × 10 重试）取
   `api-gateway` 公网地址 → `setWebhook` 注册 `/api/telegram/webhook`（占位
   200 OK）；单测覆盖发现/未就绪/注册/重试四类场景。
+- ✅ **TG 注册环境变量优先**：`TG_WEBHOOK_URL`/`TG_MINIAPP_URL` 优先于 ngrok
+  （生产固定域名）；缺失时按隧道发现（api-gateway→webhook、tg-app→菜单按钮），
+  两者都有则跳过 ngrok；`setChatMenuButton` 注册 Mini App 入口，来源日志清晰。
 
 ## Strict Rules for Execution
 

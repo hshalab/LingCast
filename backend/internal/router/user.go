@@ -23,6 +23,7 @@ func RegisterUser(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 	tgAuthHandler := handlers.NewTelegramAuthHandler(deps.DB, cfg.TgBotToken)
 	tgWebhookHandler := handlers.NewTelegramWebhookHandler(
 		deps.DB, cfg.TgBotToken, cfg.NgrokAPIURL,
+		cfg.TgWebhookURL, cfg.TgMiniAppURL,
 	)
 
 	api := r.Group("/api")

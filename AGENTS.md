@@ -93,6 +93,11 @@
   `{public_url}/api/telegram/webhook`（不阻塞 Gin 启动）；占位端点
   `POST /api/telegram/webhook` 返回 200，管理端 nginx 将其与
   `/api/auth/telegram` 一起路由到 api-user。
+- ✅ **Telegram 注册环境变量优先**：`TG_WEBHOOK_URL` / `TG_MINIAPP_URL` 设置后
+  直接使用（生产固定域名），缺失时才轮询 ngrok 对应隧道（webhook→api-gateway，
+  菜单按钮→tg-app）；两者都设置时完全不查询 ngrok；`setWebhook` +
+  `setChatMenuButton`（web_app）分别注册，日志明确标注 URL 来源
+  （Environment / ngrok）。
 - ✅ 国际化（中/英）：管理端（react-i18next，`frontend/admin/src/i18n/`）与观众端
   （`frontend/live/lib/i18n.tsx` 轻量 provider）均有语言切换（localStorage 记忆 +
   浏览器语言自动检测）；后端按 `Accept-Language` 本地化错误消息
