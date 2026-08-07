@@ -18,7 +18,7 @@ Phase 1 is fully tested.
 
 ## 状态图例
 
-- [x] 已完成并提交
+- ✅ 已完成并提交
 - [~] 代码已就绪，待 AMD 机器实机验证
 - [ ] 未开始
 
@@ -39,13 +39,12 @@ AMD GPUs using ROCm.
      (`--all-groups --no-group cuda --inexact`，保留镜像预装 torch).
    - 接入 `docker-compose.yml`（`worker-rocm` 服务，profile: rocm，透传
      `/dev/kfd` + `/dev/dri`）。
-2. **ONNX Runtime Adjustments** — [x]
+2. **ONNX Runtime Adjustments** — ✅
    - 已实现：`onnx_utils.build_session()` 自动检测 `ROCMExecutionProvider`，
      支持 `WAV2LIP_PROVIDER=rocm`，逐节点回退 CPU。
    - 已实现：`real.py` 默认使用 `Wav2LipOnnxLipSync`（ONNX 后端）。
 3. **Environment Parity Check** — [~]
    - 在 Ubuntu ROCm 容器内验证 S3/Redis 连接逻辑（`--network=host`）。
-   - 新增 `worker/rocm_check.py` 环境自检脚本。
    - 跑通一个测试任务，生成时间与 macOS CoreML 基准（约 10 秒）相当或更快。
 
 ## Phase 2: Business Logic Completion（业务闭环）
@@ -54,10 +53,10 @@ AMD GPUs using ROCm.
 
 ### Tasks
 
-1. **Go API (Backend)** — [x]
+1. **Go API (Backend)** — ✅
    - `GET /api/avatars` + `GET /api/avatars/:id`（轮询初始化状态）；创建时
      `voice_id`/`status=initializing`/`avatar_init` 队列；base 视频回写 Webhook。
-2. **Frontend (shadcn-admin)** — [x]
+2. **Frontend (shadcn-admin)** — ✅
    - Avatar Library 响应式卡片 + 状态徽标；Avatar Studio 改为纯创建页
      （名称/图片/Edge-TTS 音色 + 初始化轮询）；Broadcast 播报页；Live Studio。
 
@@ -66,14 +65,14 @@ AMD GPUs using ROCm.
 **Goal:** 引入 RTMP 流媒体网关，将 Worker 推理管线重构为
 **内存 → 网络持续推流**，不再落盘 MP4。
 
-### Step 3.1: SRS Streaming Gateway — [x]
+### Step 3.1: SRS Streaming Gateway — ✅
 
 1. ✅ 在 `docker-compose.yml` 集成 SRS（`ossrs/srs:5`）容器。
 2. ✅ 端口：仅发布 1935 RTMP 供宿主机 Worker 推流；1985 HTTP API 与
    8080 HTTP-FLV 只在内网（避免向宿主机开放调试端口）。
 3. ✅ 拉流经 Nginx `/live/` 代理到 `srs:8080`（内网）。
 
-### Step 3.2: Streaming Pipeline Refactor（交互式问答）— [x]
+### Step 3.2: Streaming Pipeline Refactor（交互式问答）— ✅
 
 1. ✅ 分句处理：`POST /api/live/{id}/push` 按 `。！？!?；;`/换行切句，顺序入队
    `live_queue:{id}`。
@@ -81,11 +80,13 @@ AMD GPUs using ROCm.
    s16le 音频 /dev/fd/3，视频输入 `-re` 实时节流）推流
    `rtmp://localhost:1935/live/avatar_<id>`；闲置态喂静音音频 + base 动画，
    说话态喂口型帧 + TTS 音频，管道全程不关闭。离线 MP4 逻辑保留。
-3. [x] `POST /api/live/{id}/start|push|status` 已落地；LLM 链路由
+3. ✅ `POST /api/live/{id}/start|push|status` 已落地；LLM 链路由
    `POST /api/live/{id}/message` 完成（OpenAI Go SDK → DeepSeek Responses
-   `deepseek-v4-flash` → 回复切句入 `live_queue:{id}`；无 key 时回显原文）。
-   观众端已拆为**独立 Next.js + TailwindCSS 项目**（`frontend-user/`，:3000）：
-   `/` 开播列表 + `/rooms/:avatarId` 直播间（xgplayer + 服务端代理）。
+   `deepseek-v4-flash` → 回复切句入 `live_queue:{id}`；无 key 时回显原文），
+   **已异步化**：接口先 202 立即返回，LLM 生成 + 入库 + 入队在后台 goroutine
+   执行（30s 超时），发送不再阻塞。观众端已拆为**独立 Next.js +
+   TailwindCSS 项目**（`frontend-user/`，:3000）：`/` 开播列表 +
+   `/rooms/:avatarId` 直播间（xgplayer + 服务端代理）。
 
 ### Step 3.3: 7x24 Long-form Broadcast（长时直播）— [~]
 
@@ -100,7 +101,7 @@ AMD GPUs using ROCm.
 **Goal:** 从「能用」走向「好用」：修复口型变形、消除直播卡顿，并让数字人
 具备长期记忆与私有知识库（RAG），减少多轮对话降智与专业问答幻觉。
 
-### Task 4.1 口型变形修复（Lip-sync Deformation）— [x]
+### Task 4.1 口型变形修复（Lip-sync Deformation）— ✅
 
 - ✅ 已实现双轨人脸修复引擎（`worker/ai/enhancer.py`，纯 ONNX）：
   - **直播（GFPGANEnhancer）**：GFPGANv1.4.onnx 只修复人脸 ROI（Bounding Box），
@@ -109,14 +110,14 @@ AMD GPUs using ROCm.
     `fidelity_weight`（w=0.6，ONNX 的 `w` 输入）可调。
 - ✅ 模型下载：`uv run python download_models.py --models restoration` →
   `worker/models/restoration/{gfpgan,codeformer}/*.onnx`（已实测跑通）。
-- ✅ 管线接入：`lipsync_onnx._run_batch_frames` 增强后帧；`real.py`（离线）默认
-  codeformer、`stream_worker.py`（直播）默认 gfpgan，`FACE_ENHANCER=off` 可关，
-  缺模型自动降级 no-op。
-- [x] 实机画质验收：离线成品对比视频已放 `docs/videos/`
+- ✅ 管线接入：`lipsync_onnx` 帧级增强钩子（有 enhancer 才生效）；`real.py`
+  （离线）默认 codeformer（`FACE_ENHANCER=off` 可关）；**直播管线不使用人脸
+  增强**（Watchdog 需恒定 24fps），缺模型自动降级 no-op。
+- ✅ 实机画质验收：离线成品对比视频已放 `docs/videos/`
   （`noCodeFormer.mp4` vs `CodeFormer.mp4`），观感提升明显；后续可在不同
   形象/语速下微调 `roi_padding`/`feather_ratio`/`CODEFORMER_FIDELITY_WEIGHT`。
 
-### Task 4.2 口型性能与推流卡顿（Latency / Streaming Stutter）— [x]
+### Task 4.2 口型性能与推流卡顿（Latency / Streaming Stutter）— ✅
 
 - ✅ **Watchdog 架构已落地**（`stream_worker.py`）：
   - **消费推流线程（Watchdog）**：独立线程以恒定 `fps`（默认 24）向 ffmpeg
@@ -127,15 +128,15 @@ AMD GPUs using ROCm.
   - ffmpeg 去掉 `-re`，改由 Watchdog 在 Python 侧精确节流（避免 lag→EOF 断流）。
 - [ ] 实机长播压测：多轮连续弹幕 + 长文本，观察推流/播放器是否持续无卡顿。
 
-### Task 4.3 长期记忆（Long-term Memory）— [x]
+### Task 4.3 长期记忆（Long-term Memory）— ✅
 
 - ✅ 已实现：Go `llmChat` 每次回复前取该数字人最近 10 条房间消息
   （`chat_messages`，按 avatar_id 作为会话）注入 System Prompt
   （user/assistant 格式），支持多轮连续对话；窗口外旧消息直接丢弃控 Token。
 
-### Task 4.4 私有知识库（RAG）— [x]
+### Task 4.4 私有知识库（RAG）— ✅
 
-- [x] Part 1 + 2 + 3（已重构）：知识库升级为**两级模型** —— 机器人 →
+- ✅ Part 1 + 2 + 3（已重构）：知识库升级为**两级模型** —— 机器人 →
   知识库（Collection，`knowledge_collections`，同机器人下名字唯一）→ 文档
   （Document，`knowledge_documents`：text/.txt/.pdf，源文件入 S3，Go 用
   `ledongthuc/pdf` 提取 PDF 文本）；`rag-service` 微服务（zvec 全文索引 +
@@ -157,31 +158,40 @@ AMD GPUs using ROCm.
 
 ## 近期已完成（Roadmap 之外落地）
 
-- [x] **知识库管理后台**：入库页（`/knowledge`，文本/.txt/.pdf）+ 列表页
+- ✅ **知识库管理后台**：入库页（`/knowledge`，文本/.txt/.pdf）+ 列表页
   （`/knowledge` 知识库列表 + `/knowledge/$id` 文档详情：创建/重命名/删除
   知识库、文档增删、按知识库在线 Top-3 检索测试）。
-- [x] **聊天日志页**：`/chat-logs` 按数字人/用户 ID/日期/关键字检索 + 分页
+- ✅ **聊天日志页**：`/chat-logs` 按数字人/用户 ID/日期/关键字检索 + 分页
   （`page/pageSize` + total）；机器人回复持久化 `rag_hit`/`rag_sources`，
   页面标注「命中知识库」并可展开查看命中的知识片段。
-- [x] **客户端用户中心**：`/account` 身份卡（游客/账号）、注册/登录/退出、
+- ✅ **客户端用户中心**：`/account` 身份卡（游客/账号）、注册/登录/退出、
   「我的消息」（`GET /api/chat/history?userId=`）；导航身份胶囊可点击进入；
   首页美化（Hero CTA、卡片悬停进入直播间、页脚账号中心入口）。
-- [x] **直播链路稳定化**：音频切片先于视频帧写入（防 AAC 欠载）、ffmpeg
+- ✅ **直播链路稳定化**：音频切片先于视频帧写入（防 AAC 欠载）、ffmpeg
   保留 `-re`（Watchdog 兜底填帧）、Redis 断连 1s 静默退避。
-- [x] **RAG 迁移到 rag-service**：compose 新增 `rag-service`（zvec FTS +
+- ✅ **RAG 迁移到 rag-service**：compose 新增 `rag-service`（zvec FTS +
   Jieba，volume `rag-zvec-data`），`EMBED_SERVER_URL` 默认
   `http://rag-service:8001`；Redis 回退 `redis:8.2.2-alpine`（不再需要
   RediSearch），`worker/rag_worker.py` 与脚本中的 rag_worker 已删除。
-- [x] **TTS 微服务（tts-service）**：async `edge_tts.Communicate` → ffmpeg
+- ✅ **TTS 微服务（tts-service）**：async `edge_tts.Communicate` → ffmpeg
   转 16kHz/16-bit/mono PCM WAV → 上传 S3（RustFS，S3 配置走环境变量）→ 只返回
   S3 key + 元数据，`finally` 清理临时文件；compose 内网 :8002，不发布宿主端口。
-- [x] **端口收敛**：宿主机不调试，SRS 只发布 1935（RTMP 推流），1985/8081
+- ✅ **端口收敛**：宿主机不调试，SRS 只发布 1935（RTMP 推流），1985/8081
   收回内网；`api`/`rag-service`/`tts-service` 均不发布端口；对外仅
   3000/8080/1935/6379/9000。
-- [x] **TTS 试听接口重构（后效优化）**：`POST /api/tts/preview` 音色试听已改为
+- ✅ **TTS 试听接口重构（后效优化）**：`POST /api/tts/preview` 音色试听已改为
   直接 HTTP 调用 `tts-service` 微服务的 `/v1/tts/preview`（试听为一次性临时
   数据，直接返回字节、不走 S3）；`backend/Dockerfile` 已移除 `python3` /
   `edge-tts` 依赖，后端镜像不再捆绑 Python。
+- ✅ **存储与任务队列演进**：MinIO → RustFS（SNSD 单盘模式）；S3 环境变量
+  双命名兼容（`S3_*` 主约定 + `RUSTFS_ENDPOINT_URL/AWS_ACCESS_KEY_ID/
+  AWS_SECRET_ACCESS_KEY/S3_BUCKET_NAME` 别名，path-style）；worker 支持
+  `{type:"render",text,tts_s3_key,base_video_s3_key}` 任务（base 视频 LRU
+  缓存、TTS wav 用完即删），旧 taskId 格式向后兼容。
+- ✅ **直播会话恢复修复**：api-scheduler 补 `GET /api/live`，stream_worker
+  重启后按 DB 恢复直播会话。
+- ✅ **前端容器加固**：frontend-admin nginx 设 Asia/Shanghai 时区；
+  frontend-user 改为非 root（node）运行（chown 在 COPY 之后，`/app` 可写）。
 
 ## Strict Rules for Execution
 
