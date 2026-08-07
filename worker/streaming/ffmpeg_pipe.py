@@ -93,7 +93,7 @@ class FFmpegPipe:
             "-f", "s16le",
             "-ar", str(AUDIO_SAMPLE_RATE),
             "-ac", "1",
-            "-i", f"/dev/fd/{audio_r}",
+            "-i", f"/proc/self/fd/{audio_r}",
         ]
         cmd += [
             "-c:v", "libx264",
