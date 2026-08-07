@@ -1,7 +1,7 @@
 # 灵播 LingCast
 
 <p align="center">
-  <img src="frontend-admin/public/images/logo.svg" alt="灵播 LingCast" width="128">
+  <img src="frontend/admin/public/images/logo.svg" alt="灵播 LingCast" width="128">
 </p>
 
 <p align="center"><a href="README.md">English</a> | <a href="README-zh.md">简体中文</a></p>
@@ -55,7 +55,7 @@
 - [x] **Broadcast（离线播报）**：选择已就绪数字人 + 场景/视频（默认取默认场景的默认
   视频）+ 输入脚本 → 提交任务 → 按阶段/进度轮询 → 状态卡片内嵌 **xgplayer** 播放成品
   （9:16 竖版，最大 720×1080，模态窗播放）；制作历史记录场景与视频，重试不会混参数。
-- [x] **客户端直播间（观众端）**：独立 Next.js + TailwindCSS 项目（`frontend-user/`，端口
+- [x] **客户端直播间（观众端）**：独立 Next.js + TailwindCSS 项目（`frontend/live/`，端口
   **3000**，不属于管理后台）：首页有导航头（游客/账号身份、注册/登录/退出）与
   **分类筛选**，列出所有开播机器人（`GET /api/live`）；进入 `/rooms/:avatarId`
   后 xgplayer 拉 HTTP-FLV 观看，聊天面板按用户展示 `用户名 #ID`，可直接向数字人
@@ -185,7 +185,7 @@ tts-service ──> async edge-tts → 16kHz PCM WAV → S3（RustFS）
 
 - 管理端前端：React + TypeScript + Vite + Tailwind + shadcn/ui（品牌「灵播
   LingCast」，默认暗色主题，可切换亮色；需管理员登录）。
-- 观众端前端：独立 Next.js 16 + TailwindCSS 4（`frontend-user/`，亮/暗双主题可切换，
+- 观众端前端：独立 Next.js 16 + TailwindCSS 4（`frontend/live/`，亮/暗双主题可切换，
   无需登录）。
 - 后端：Go + Gin + GORM，拆分为三个微服务（同一 module 共享 internal 包）——
   `api-admin`（管理端，:8081）、`api-user`（观众端/直播聊天，:8082）、
@@ -274,13 +274,13 @@ uv run python -u stream_worker.py    # 实时直播（与 worker.py 并存）
 
 ```bash
 # 管理端（Vite，端口 5173）
-cd frontend-admin
+cd frontend/admin
 cp .env.example .env.local   # VITE_API_BASE_URL=http://localhost:8080
 pnpm install
 pnpm dev
 
 # 观众端（Next.js，端口 3000）
-cd frontend-user
+cd frontend/live
 pnpm install
 pnpm dev
 ```
@@ -412,11 +412,11 @@ LingCast/
 │                   cmd/api-scheduler（共享 internal/ 包）
 ├── rag-service/    本地 RAG 微服务（FastAPI + uv + zvec FTS/Jieba，:8001）
 ├── tts-service/    Edge-TTS 微服务（FastAPI + uv + edge-tts + ffmpeg，:8002）
-├── frontend-admin/ 灵播管理后台（React + shadcn/ui，:8080）
-│   └── public/images/  品牌 logo（暗/亮）+ favicon
-├── frontend-user/  Next.js 观众端（独立项目，:3000）
-│   ├── lib/        聊天身份（identity.tsx）/ 主题（theme.tsx）
-│   └── public/     logo.svg + logo-white.svg
+├── frontend/       BFF 多客户端矩阵（所有前端）
+│   ├── admin/      灵播管理后台（React + shadcn/ui，:8080）
+│   ├── live/       Next.js 观众端（独立项目，:3000）
+│   ├── web/        新增 1v1 网站（Next.js + PayPal + zustand，:3001）
+│   └── telegram/   新增 TG 小程序（React + Vite + @twa-dev/sdk，:3002）
 ├── worker/         Python 3.11 AI Worker（uv、Redis、boto3）
 │   ├── ai/         base/mock/real 管线、TTS、渲染、ONNX 口型
 │   ├── fonts/      字幕字体目录（gitignore，见 fonts/README.md）

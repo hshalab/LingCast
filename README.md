@@ -1,7 +1,7 @@
 # LingCast
 
 <p align="center">
-  <img src="frontend-admin/public/images/logo.svg" alt="LingCast" width="128">
+  <img src="frontend/admin/public/images/logo.svg" alt="LingCast" width="128">
 </p>
 
 <p align="center"><a href="README.md">English</a> | <a href="README-zh.md">简体中文</a></p>
@@ -65,7 +65,7 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   **xgplayer** (9:16 portrait, up to 720×1080, modal playback); history keeps the scene
   and video used so a retry never mixes parameters.
 - [x] **Client live room (viewer app)**: a standalone Next.js + TailwindCSS project
-  (`frontend-user/`, port **3000**, separate from the admin console): the home page has a nav bar
+  (`frontend/live/`, port **3000**, separate from the admin console): the home page has a nav bar
   (guest/account identity, register/login/logout) and **category filtering**, listing all
   live bots (`GET /api/live`); `/rooms/:avatarId` plays HTTP-FLV via xgplayer, the chat panel
   shows `username #ID`, and messages can be sent directly to the digital human
@@ -218,7 +218,7 @@ tts-service ──> async edge-tts → 16kHz PCM WAV → S3 (RustFS)
 
 - Admin frontend: React + TypeScript + Vite + Tailwind + shadcn/ui (brand "LingCast", dark
   theme by default, switchable to light; requires admin login).
-- Viewer frontend: standalone Next.js 16 + TailwindCSS 4 (`frontend-user/`, light/dark themes,
+- Viewer frontend: standalone Next.js 16 + TailwindCSS 4 (`frontend/live/`, light/dark themes,
   no login required).
 - Backend: Go + Gin + GORM split into three microservices sharing one module —
   `api-admin` (management console, :8081), `api-user` (audience/live chat,
@@ -308,13 +308,13 @@ error message.
 
 ```bash
 # Admin console (Vite, port 5173)
-cd frontend-admin
+cd frontend/admin
 cp .env.example .env.local   # VITE_API_BASE_URL=http://localhost:8080
 pnpm install
 pnpm dev
 
 # Viewer app (Next.js, port 3000)
-cd frontend-user
+cd frontend/live
 pnpm install
 pnpm dev
 ```
@@ -454,11 +454,11 @@ LingCast/
 │                   cmd/api-scheduler (shared internal/ packages)
 ├── rag-service/    Local RAG microservice (FastAPI + uv + zvec FTS/Jieba, :8001)
 ├── tts-service/    Edge-TTS microservice (FastAPI + uv + edge-tts + ffmpeg, :8002)
-├── frontend-admin/ LingCast admin console (React + shadcn/ui, :8080)
-│   └── public/images/  brand logos (dark/light) + favicon
-├── frontend-user/  Next.js viewer app (standalone project, :3000)
-│   ├── lib/        chat identity (identity.tsx) / theme (theme.tsx)
-│   └── public/     logo.svg + logo-white.svg
+├── frontend/       BFF client matrix (all frontends)
+│   ├── admin/      LingCast admin console (React + shadcn/ui, :8080)
+│   ├── live/       Next.js viewer app (standalone project, :3000)
+│   ├── web/        NEW 1v1 website (Next.js + PayPal + zustand, :3001)
+│   └── telegram/   NEW TG Mini App (React + Vite + @twa-dev/sdk, :3002)
 ├── worker/         Python 3.11 AI Worker (uv, Redis, boto3)
 │   ├── ai/         base/mock/real pipelines, TTS, rendering, ONNX lip-sync
 │   ├── fonts/      subtitle font directory (gitignored, see fonts/README.md)

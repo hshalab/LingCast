@@ -85,7 +85,7 @@ AMD GPUs using ROCm.
    `deepseek-v4-flash` → 回复切句入 `live_queue:{id}`；无 key 时回显原文），
    **已异步化**：接口先 202 立即返回，LLM 生成 + 入库 + 入队在后台 goroutine
    执行（30s 超时），发送不再阻塞。观众端已拆为**独立 Next.js +
-   TailwindCSS 项目**（`frontend-user/`，:3000）：`/` 开播列表 +
+   TailwindCSS 项目**（`frontend/live/`，:3000）：`/` 开播列表 +
    `/rooms/:avatarId` 直播间（xgplayer + 服务端代理）。
 
 ### Step 3.3: 7x24 Long-form Broadcast（长时直播）— [~]
@@ -200,7 +200,7 @@ AMD GPUs using ROCm.
 - ✅ **直播会话恢复修复**：api-scheduler 补 `GET /api/live`，stream_worker
   重启后按 DB 恢复直播会话。
 - ✅ **前端容器加固**：frontend-admin nginx 设 Asia/Shanghai 时区；
-  frontend-user 改为非 root（node）运行（chown 在 COPY 之后，`/app` 可写）。
+  frontend-live 改为非 root（node）运行（chown 在 COPY 之后，`/app` 可写）。
 - ✅ **场景（数字人 → 场景 → 视频）**：`scenes` + `scene_videos` 两张表；
   场景有标题/描述/封面，视频有描述；创建数字人的 base 视频成为默认场景的
   默认视频（直播/播报兜底，默认场景/默认视频不可删）。接口：

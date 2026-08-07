@@ -12,7 +12,7 @@
 ## 2. 当前技术栈（已落地，勿按旧文档改回）
 
 - 前端：React + TypeScript + Vite + Tailwind + shadcn/ui（基于 satnaing/shadcn-admin），
-  pnpm 10.25.0 管理，`frontend-admin/`。
+  pnpm 10.25.0 管理，`frontend/admin/`（BFF 多客户端矩阵：`admin/live/web/telegram`）。
 - 后端：Go + Gin + GORM，`backend/`（模型、S3、Redis、handlers）。
 - AI Worker：Python **3.11**（`worker/.python-version`），uv 管理依赖（`pyproject.toml`
   + `uv.lock`），**不要使用 requirements.txt**。
@@ -50,7 +50,7 @@
 - ✅ 任务进度 + TTS 复用：离线任务上报 `stage`（tts/lipsync/mux）+ `progress`
   （1% 步进），前端任务中心/播报历史显示阶段与进度条；TTS 首次合成后存
   `tts/tasks/{id}.wav`（S3），重试时直接复用、跳过 Edge-TTS。
-- ✅ 客户端直播间（观众端）：**独立 Next.js + TailwindCSS 项目**（`frontend-user/`，端口
+- ✅ 客户端直播间（观众端）：**独立 Next.js + TailwindCSS 项目**（`frontend/live/`，端口
   **3000**，不属于管理后台）——首页有导航头（身份/注册/登录/退出）与**分类筛选**
   （`GET /api/live` 携带 avatar 的 `category`），`app/rooms/[avatarId]/page.tsx`
   用 xgplayer 拉 HTTP-FLV + 聊天输入 `POST /api/live/:id/message`；`app/api/[...path]`
@@ -72,8 +72,8 @@
   默认）；Live Studio「字幕设置」与「默认推流视频」卡片保存后自动重启直播生效。
 - ✅ 管理端用户列表：`GET /api/users`（游客+账号，含消息数），侧边栏「用户相关 →
   用户列表」（/users）展示真实数据。
-- ✅ 国际化（中/英）：管理端（react-i18next，`frontend-admin/src/i18n/`）与观众端
-  （`frontend-user/lib/i18n.tsx` 轻量 provider）均有语言切换（localStorage 记忆 +
+- ✅ 国际化（中/英）：管理端（react-i18next，`frontend/admin/src/i18n/`）与观众端
+  （`frontend/live/lib/i18n.tsx` 轻量 provider）均有语言切换（localStorage 记忆 +
   浏览器语言自动检测）；后端按 `Accept-Language` 本地化错误消息
   （`backend/internal/i18n`，router 注入中间件）；LLM 人设提示词按请求语言生成
   （`chatSystemPrompt(avatar, lang)`，含 `en` 单测）。
@@ -118,7 +118,7 @@
   `live_control` 推 `{"type":"control","action":"switch_scene","video_pool":[...]}`；
   worker 控制监听线程收到后**线程安全**（`_idle_lock` + 原子替换）下载并替换闲置
   视频池，不打断 Watchdog 写帧；说话句的动作视频按需从 S3 加载（LRU 缓存 4 个）。
-  观众端直播间新增 `SceneSwitcher` 胶囊条（`frontend-user/components/scene-switcher.tsx`）
+  观众端直播间新增 `SceneSwitcher` 胶囊条（`frontend/live/components/scene-switcher.tsx`）
   覆盖在 9:16 画面上，点击切换并带加载/提示反馈。
 - ✅ `worker/download_models.py --models all`：克隆外部代码、下载权重、导出
   wav2lip ONNX、创建软链接（一键可复现）。
@@ -181,7 +181,7 @@
   S3）；`backend/Dockerfile` 不再捆绑 python3 / edge-tts，正式合成仍走
   `/v1/tts/synthesize` → S3 共享存储。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
-- ✅ 客户端用户中心：`frontend-user/app/account/page.tsx`（`/account`）身份卡 +
+- ✅ 客户端用户中心：`frontend/live/app/account/page.tsx`（`/account`）身份卡 +
   注册/登录/退出 + 「我的消息」（`GET /api/chat/history?userId=`）；导航身份
   胶囊点击进入；首页 Hero CTA / 卡片悬停 / 页脚入口。
 - ⬜ 待办（详见 [docs/TODO.md](docs/TODO.md)）：Phase 1 的 AMD ROCm 容器
@@ -196,11 +196,14 @@ rag-service/  本地 RAG 知识库微服务（FastAPI + uv + zvec FTS/Jieba，�
 tts-service/  Edge-TTS 微服务（FastAPI + uv + edge-tts + ffmpeg，端口 8002，内网）
 docs/         API 文档网关 + VitePress 文档站（nginx 聚合各服务 Swagger；
               宿主经 /doc/<prefix> 访问；站点构建后部署 GitHub Pages）
-frontend-admin/  React 管理后台（Dockerfile + nginx.conf）
+frontend/        BFF 多客户端矩阵
+  admin/         React 管理后台（Dockerfile + nginx.conf）
   src/features/knowledge/      知识库管理（index=Collection 列表 / detail=文档）
-frontend-user/    Next.js 观众端（独立项目）：app/page.tsx 列表 + app/rooms/[avatarId] 直播间
+  live/          Next.js 观众端（独立项目）：app/page.tsx 列表 + app/rooms/[avatarId] 直播间
   lib/identity.tsx      全局聊天身份（游客/注册/登录/退出）
   components/auth-modal.tsx  注册/登录弹窗
+  web/           1v1 网站脚手架（Next.js + PayPal + zustand，:3001）
+  telegram/      TG Mini App 脚手架（React + Vite + @twa-dev/sdk，:3002）
 worker/
   worker.py              Worker 入口（Redis 队列、S3、Webhook 回调）
   download_models.py     一键克隆代码 + 下载/导出模型

@@ -288,7 +288,7 @@ services:
   # ---- Public entry point (the only host-published service) ----
   frontend-admin:
     build:
-      context: ./frontend-admin
+      context: ./frontend/admin
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8080}:80"
@@ -296,9 +296,9 @@ services:
       - api-admin
 
   # ---- 观众端（独立 Next.js 客户端，不属于管理后台） ----
-  frontend-user:
+  frontend-live:
     build:
-      context: ./frontend-user
+      context: ./frontend/live
     restart: unless-stopped
     ports:
       - "${CLIENT_PORT:-3000}:3000"
@@ -311,6 +311,22 @@ services:
       LIVE_ORIGIN: http://srs:8080
     depends_on:
       - api-user
+
+  # ---- 1v1 网站（BFF，Next.js + PayPal，容器内 3000） ----
+  frontend-web:
+    build:
+      context: ./frontend/web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3001}:3000"
+
+  # ---- Telegram Mini App（React + Vite + TG SDK，Nginx 80） ----
+  frontend-tg:
+    build:
+      context: ./frontend/telegram
+    restart: unless-stopped
+    ports:
+      - "${TG_PORT:-3002}:80"
 
 volumes:
   srs-data:
