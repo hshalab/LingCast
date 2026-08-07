@@ -43,6 +43,10 @@ type Config struct {
 	S3UseSSL        bool
 	S3PublicBaseURL string
 
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
+
 	CORSOrigins []string
 }
 
@@ -118,6 +122,10 @@ func Load() Config {
 		S3Bucket:        env("S3_BUCKET", "talking-avatar"),
 		S3UseSSL:        envBool("S3_USE_SSL", false),
 		S3PublicBaseURL: env("S3_PUBLIC_BASE_URL", ""),
+
+		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		GoogleRedirectURL:  env("GOOGLE_REDIRECT_URL", "http://localhost:8085/api/auth/google/callback"),
 
 		CORSOrigins: splitCSV(env("CORS_ORIGINS",
 			"http://localhost:5173,http://localhost:3000,http://localhost:8080")),
