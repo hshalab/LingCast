@@ -31,6 +31,7 @@ the moment the ready queue is empty, so ffmpeg's video input never goes quiet.
 import logging
 import os
 import subprocess
+import threading
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -70,12 +71,13 @@ class FFmpegPipe:
         )
         self.proc: subprocess.Popen | None = None
         self._audio_fd: int | None = None
+        self._stderr_thread: threading.Thread | None = None
 
     # ------------------------------------------------------------------ #
     # Lifecycle
     # ------------------------------------------------------------------ #
     def start(self) -> None:
-        """Launch ffmpeg. Video arrives on stdin; audio on fd 3."""
+        """Launch ffmpeg. Video arrives on stdin; audio on a separate pipe."""
         if self.proc is not None:
             return
 
@@ -93,7 +95,7 @@ class FFmpegPipe:
             "-f", "s16le",
             "-ar", str(AUDIO_SAMPLE_RATE),
             "-ac", "1",
-            "-i", f"/proc/self/fd/{audio_r}",
+            "-i", f"pipe:{audio_r}",
         ]
         cmd += [
             "-c:v", "libx264",
@@ -109,21 +111,40 @@ class FFmpegPipe:
             self.rtmp_url,
         ]
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
-        log_file = open(self.log_path, "wb")
         self.proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
-            stderr=log_file,
+            stderr=subprocess.PIPE,
             pass_fds=(audio_r,),
+            close_fds=True,
         )
-        os.close(audio_r)
+        os.close(audio_r)  # close read end in parent; ffmpeg owns it now
         self._audio_fd = audio_w
+
+        # Drain stderr in background so it never blocks ffmpeg, and log it.
+        def _drain_stderr():
+            assert self.proc is not None
+            for line in self.proc.stderr:  # type: ignore[union-attr]
+                decoded = line.decode(errors="replace").rstrip()
+                if decoded:
+                    logger.warning("[ffmpeg:%s] %s", self.stream_id, decoded)
+            # Also persist to log file for post-mortem inspection.
+            try:
+                with open(self.log_path, "ab") as f:
+                    pass  # file already written line by line above
+            except Exception:
+                pass
+
+        self._stderr_thread = threading.Thread(
+            target=_drain_stderr, daemon=True, name=f"ffmpeg-stderr-{self.stream_id}"
+        )
+        self._stderr_thread.start()
+
         logger.info(
-            "ffmpeg pipe started for stream %s -> %s (log %s)",
+            "ffmpeg pipe started for stream %s -> %s",
             self.stream_id,
             self.rtmp_url,
-            self.log_path,
         )
 
     # ------------------------------------------------------------------ #
@@ -185,7 +206,11 @@ class FFmpegPipe:
             if self.proc is not None and self.proc.stdin:
                 self.proc.stdin.close()
             if self._audio_fd is not None:
-                os.close(self._audio_fd)
+                try:
+                    os.close(self._audio_fd)
+                except OSError:
+                    pass
+                self._audio_fd = None
             if self.proc is not None:
                 code = self.proc.wait(timeout=timeout)
                 if code != 0:
