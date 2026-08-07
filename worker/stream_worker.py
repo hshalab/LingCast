@@ -153,7 +153,10 @@ class LiveAvatarSession:
         self._idle_frame_idx = 0
         self._idle_elapsed_frames = 0
         self._idle_switch_frames = max(1, int(self.idle_switch_seconds * self.fps))
-        self.cursor = 0
+        # Clip the current talking segment was lip-synced from (and where it
+        # ended inside that clip), so idle resumes seamlessly on speech end.
+        self._talk_base_clip = 0
+        self._talk_base_end = 0
         self.lipsync = None
         self.tts = None
         self.ready = False
@@ -432,6 +435,12 @@ class LiveAvatarSession:
                             self.pipe.write_audio(cur_seg.audio[cur_seg.pos :])
                         cur_seg = None
                         self._subtitle_text = ""
+                        # Resume idle from the clip that was actually speaking
+                        # (mouth moves on the same video that was on screen),
+                        # continuing where the talking loop left off.
+                        self._idle_clip_idx = self._talk_base_clip
+                        self._idle_frame_idx = self._talk_base_end
+                        self._idle_elapsed_frames = 0
                 else:
                     # Idle fallback: base animation + silence, never blocking.
                     idle_count += 1
@@ -638,7 +647,7 @@ class LiveAvatarSession:
             n_frames = len(self.lipsync._mel_chunks(wav, self.fps))
             seg = _TalkingSegment(text, audio, n_frames)
             self._talk_queue.put(("seg", seg))
-            base_slice = self._slice_base(n_frames)
+            base_slice, _ = self._slice_current_idle(n_frames)
             pre_ms = (time.perf_counter() - t_pre) * 1000.0
             logger.info(
                 "[PRODUCER] avatar %s preprocessing took %.1fms "
@@ -732,12 +741,18 @@ class LiveAvatarSession:
             border_width=int(self.subtitle_settings.get("subtitleBorder") or 2),
         )
 
-    def _slice_base(self, n: int) -> list:
-        if not self.base_frames:
-            raise RuntimeError("base frames not ready")
-        seg = [self.base_frames[(self.cursor + k) % len(self.base_frames)] for k in range(n)]
-        self.cursor += n
-        return seg
+    def _slice_current_idle(self, n: int) -> tuple[list, int]:
+        """Slice the clip that is currently on screen (the idle clip the
+        writer is pushing right now) as the Wav2Lip base, so the mouth moves
+        on the same video the viewer sees — not always the default clip."""
+        clips = self.idle_clips or [self.base_frames]
+        idx = self._idle_clip_idx % len(clips)
+        clip = clips[idx]
+        start = self._idle_frame_idx % len(clip)
+        seg = [clip[(start + k) % len(clip)] for k in range(n)]
+        self._talk_base_clip = idx
+        self._talk_base_end = (start + n) % len(clip)
+        return seg, idx
 
     def close(self) -> None:
         self._running = False

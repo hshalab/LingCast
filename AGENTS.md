@@ -103,7 +103,8 @@
   通知 Worker 打开**常驻 FFmpeg 管道**（闲置态喂所选场景的全部驱动视频 +
   numpy 静音音频，定时 N 秒顺序切换或随机切换；未配置时回退默认视频单循环）；
   `POST /api/live/{id}/push` 按句切块入 `live_queue:{id}` → 异步 TTS → Wav2Lip
-  内存出帧 → 口型帧 + TTS 音频替换推流，句子结束自动回闲置，管道不关闭。
+  内存出帧（口型基于**当前正在显示的那段场景视频**切片，说完从该视频衔接处
+  继续）→ 口型帧 + TTS 音频替换推流，句子结束自动回闲置，管道不关闭。
   `GET /api/live/{id}/status` 供前端轮询队列。SRS v5 已入 docker-compose
   （仅发布 1935 RTMP 供宿主机 Worker 推流；1985 API / 8080 HTTP-FLV 只在内网，
   Nginx `/live/` 代理到 srs:8080）。
