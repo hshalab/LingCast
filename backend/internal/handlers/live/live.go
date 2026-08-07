@@ -1,4 +1,4 @@
-package handlers
+package live
 
 import (
 	"bytes"
@@ -20,6 +20,7 @@ import (
 
 	"talkingavatar/backend/internal/i18n"
 	"talkingavatar/backend/internal/models"
+	"talkingavatar/backend/internal/handlers/admin"
 	"talkingavatar/backend/internal/queue"
 	"talkingavatar/backend/internal/storage"
 
@@ -136,7 +137,7 @@ type pushLiveRequest struct {
 
 type liveMessageRequest struct {
 	Text     string `json:"text"`
-	UserID   uint   `json:"userId"`
+	UserID   uint   `json:"senderId"`
 	Username string `json:"username"`
 }
 
@@ -151,7 +152,7 @@ type liveMessageResponse struct {
 type liveChatRequest struct {
 	SessionID uint   `json:"sessionId"`
 	Text      string `json:"text"`
-	UserID    uint   `json:"userId"`
+	UserID    uint   `json:"senderId"`
 	Username  string `json:"username"`
 }
 
@@ -294,7 +295,7 @@ func activeSceneID(s *models.LiveSession, avatar models.Avatar) uint {
 	if s != nil && s.SceneID > 0 {
 		return s.SceneID
 	}
-	return parseLiveSettings(avatar.LiveSettings).IdleSceneID
+	return admin.ParseLiveSettings(avatar.LiveSettings).IdleSceneID
 }
 
 // chatActionVideos loads the action videos of the avatar's currently active
@@ -371,7 +372,7 @@ func (h *LiveHandler) Start(c *gin.Context) {
 		})
 		return
 	}
-	settings := parseLiveSettings(avatar.LiveSettings)
+	settings := admin.ParseLiveSettings(avatar.LiveSettings)
 	videoKeys, err := h.idleVideoKeys(avatar.ID, settings)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -524,7 +525,7 @@ func (h *LiveHandler) SwitchScene(c *gin.Context) {
 		session.SceneID = req.SceneID
 		_ = h.db.Save(&session).Error
 	}
-	settings := parseLiveSettings(avatar.LiveSettings)
+	settings := admin.ParseLiveSettings(avatar.LiveSettings)
 	settings.IdleSceneID = req.SceneID
 	if b, err := json.Marshal(settings); err == nil {
 		avatar.LiveSettings = string(b)
@@ -613,7 +614,7 @@ func (h *LiveHandler) Push(c *gin.Context) {
 // @Accept   json
 // @Produce  json
 // @Param    avatarID path int true "Avatar ID"
-// @Param    request body map[string]any true "text + userId + username"
+// @Param    request body map[string]any true "text + senderId + username"
 // @Success  202 {object} map[string]any
 // @Failure  400 {object} map[string]any
 // @Router   /live/{avatarID}/message [post]
@@ -645,13 +646,7 @@ func (h *LiveHandler) Message(c *gin.Context) {
 	if sender == "" {
 		sender = "游客"
 	}
-	userMsg := models.ChatMessage{
-		AvatarID: avatar.ID,
-		UserID:   req.UserID,
-		Username: sender,
-		Role:     "user",
-		Content:  strings.TrimSpace(req.Text),
-	}
+	userMsg := models.LiveMessage{AvatarID: avatar.ID, SenderID: req.UserID, SenderType: "web", Username: sender, Role: "user", Content: strings.TrimSpace(req.Text)}
 	if err := h.db.Create(&userMsg).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -692,9 +687,9 @@ func (h *LiveHandler) processChatReply(ctx context.Context, lang, userText strin
 			ragJSON = string(b)
 		}
 	}
-	if err := h.db.Create(&models.ChatMessage{
+	if err := h.db.Create(&models.LiveMessage{
 		AvatarID:   avatar.ID,
-		UserID:     userID,
+		SenderID:     userID,
 		Username:   avatar.Name,
 		Role:       "bot",
 		Content:    cleanReply,
@@ -782,13 +777,7 @@ func (h *LiveHandler) Chat(c *gin.Context) {
 	if sender == "" {
 		sender = "游客"
 	}
-	_ = h.db.Create(&models.ChatMessage{
-		AvatarID: avatar.ID,
-		UserID:   req.UserID,
-		Username: sender,
-		Role:     "user",
-		Content:  userText,
-	})
+	_ = h.db.Create(&models.LiveMessage{AvatarID: avatar.ID, SenderID: req.UserID, SenderType: "web", Username: sender, Role: "user", Content: userText})
 
 	// ---- 1. Long-term memory (GORM -> standard LLM messages) ----
 	msgs := h.recentMessages(avatar.ID, 10)
@@ -881,9 +870,9 @@ func (h *LiveHandler) Chat(c *gin.Context) {
 			ragJSON = string(b)
 		}
 	}
-	_ = h.db.Create(&models.ChatMessage{
+	_ = h.db.Create(&models.LiveMessage{
 		AvatarID:   avatar.ID,
-		UserID:     req.UserID,
+		SenderID:     req.UserID,
 		Username:   avatar.Name,
 		Role:       "bot",
 		Content:    finalReply,
@@ -1011,8 +1000,8 @@ func (h *LiveHandler) llmChat(ctx context.Context, lang, userText string, avatar
 // recentMessages returns the last `limit` persisted room messages (viewer
 // messages + bot replies) for one avatar, oldest first — the avatar's
 // long-term memory across viewers in this live session.
-func (h *LiveHandler) recentMessages(avatarID uint, limit int) []models.ChatMessage {
-	var msgs []models.ChatMessage
+func (h *LiveHandler) recentMessages(avatarID uint, limit int) []models.LiveMessage {
+	var msgs []models.LiveMessage
 	if err := h.db.Where("avatar_id = ?", avatarID).
 		Order("id desc").Limit(limit).Find(&msgs).Error; err != nil {
 		log.Printf("[memory] failed to load history: %v", err)
@@ -1090,9 +1079,9 @@ func (h *LiveHandler) retrieveKnowledge(ctx context.Context, avatarID uint, text
 // personality) is baked in so viewers can ask about it naturally. Optional
 // RAG facts (private knowledge base, isolated per avatar) and the last N room
 // messages (long-term memory) are injected so the bot answers from them.
-func chatSystemPrompt(a models.Avatar, lang string, memory []models.ChatMessage, ragFacts []string, actionVideos ...sceneVideoOption) string {
+func chatSystemPrompt(a models.Avatar, lang string, memory []models.LiveMessage, ragFacts []string, actionVideos ...sceneVideoOption) string {
 	zh := lang == "" || lang == "zh"
-	p := parsePersona(a.Persona)
+	p := admin.ParsePersona(a.Persona)
 	profile := []string{}
 	if p.Age != nil {
 		if zh {
@@ -1300,12 +1289,12 @@ func (h *LiveHandler) ListSessions(c *gin.Context) {
 		}
 		if err := h.db.First(&avatar, s.AvatarID).Error; err == nil {
 			item.AvatarName = avatar.Name
-			item.Category = normalizeCategory(avatar.Category)
-			item.Persona = parsePersona(avatar.Persona)
+			item.Category = admin.NormalizeCategory(avatar.Category)
+			item.Persona = admin.ParsePersona(avatar.Persona)
 			item.ImageS3URL = h.s3.PublicURL(avatar.ImageS3Key)
 			item.ImageS3Key = avatar.ImageS3Key
 			item.VoiceID = avatar.VoiceID
-			item.LiveSettings = parseLiveSettings(avatar.LiveSettings)
+			item.LiveSettings = admin.ParseLiveSettings(avatar.LiveSettings)
 			item.SceneID = activeSceneID(&s, avatar)
 			if opts, err := h.sceneVideoOptions(avatar.ID, item.SceneID); err == nil {
 				keys := make([]string, 0, len(opts))

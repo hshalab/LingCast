@@ -1,4 +1,4 @@
-package handlers
+package live
 
 import (
 	"encoding/json"
@@ -116,7 +116,7 @@ func TestParseActionTag(t *testing.T) {
 
 func TestChatSystemPromptRAGAndMemory(t *testing.T) {
 	a := models.Avatar{Name: "翠花"}
-	memory := []models.ChatMessage{
+	memory := []models.LiveMessage{
 		{Role: "user", Content: "你喜欢什么颜色？"},
 		{Role: "bot", Content: "我喜欢紫色。"},
 	}

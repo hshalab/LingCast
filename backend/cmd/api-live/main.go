@@ -7,7 +7,7 @@ import (
 	_ "talkingavatar/backend/docs"
 	"talkingavatar/backend/internal/app"
 	"talkingavatar/backend/internal/config"
-	"talkingavatar/backend/internal/handlers"
+	"talkingavatar/backend/internal/handlers/telegram"
 	"talkingavatar/backend/internal/router"
 )
 
@@ -20,7 +20,7 @@ func main() {
 
 	// Discover the ngrok api-gateway public URL and register the Telegram
 	// webhook in the background (retries every 2s) — never blocks startup.
-	tgWebhook := handlers.NewTelegramWebhookHandler(
+	tgWebhook := telegram.NewTelegramWebhookHandler(
 		deps.DB, cfg.TgBotToken, cfg.NgrokAPIURL,
 		cfg.TgWebhookURL, cfg.TgMiniAppURL,
 	)

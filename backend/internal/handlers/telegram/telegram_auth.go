@@ -1,4 +1,4 @@
-package handlers
+package telegram
 
 import (
 	"crypto/hmac"
@@ -23,7 +23,7 @@ import (
 )
 
 // TelegramAuthHandler validates Telegram Mini App initData (HMAC-SHA-256)
-// against the bot token and upserts a ChatUser identity (no passwords).
+// against the bot token and upserts a TelegramUser identity (no passwords).
 type TelegramAuthHandler struct {
 	db       *gorm.DB
 	botToken string
@@ -153,10 +153,10 @@ func (h *TelegramAuthHandler) Login(c *gin.Context) {
 	})
 }
 
-// upsertUser finds the ChatUser bound to the Telegram ID or silently creates
+// upsertUser finds the TelegramUser bound to the Telegram ID or silently creates
 // one (preferring the Telegram username, falling back to tg_<id> on collision).
-func (h *TelegramAuthHandler) upsertUser(tgID int64, tgUsername string) (*models.ChatUser, error) {
-	var user models.ChatUser
+func (h *TelegramAuthHandler) upsertUser(tgID int64, tgUsername string) (*models.TelegramUser, error) {
+	var user models.TelegramUser
 	err := h.db.Where("telegram_id = ?", tgID).First(&user).Error
 	if err == nil {
 		if name := sanitizeTelegramUsername(tgUsername); name != "" && name != user.Username {
@@ -175,7 +175,7 @@ func (h *TelegramAuthHandler) upsertUser(tgID int64, tgUsername string) (*models
 	// Map-based create writes the keys verbatim: struct Create would skip the
 	// false IsGuest zero value because of its `default:true` tag.
 	createUser := func(name string) error {
-		return h.db.Model(&models.ChatUser{}).Create(map[string]any{
+		return h.db.Model(&models.TelegramUser{}).Create(map[string]any{
 			"username":    name,
 			"is_guest":    false,
 			"telegram_id": tgID,

@@ -5,24 +5,26 @@ import (
 
 	"talkingavatar/backend/internal/app"
 	"talkingavatar/backend/internal/config"
-	"talkingavatar/backend/internal/handlers"
+		"talkingavatar/backend/internal/handlers/admin"
+	"talkingavatar/backend/internal/handlers/live"
+	"talkingavatar/backend/internal/handlers/web"
 )
 
 // RegisterAdmin wires the management-console API (api-admin service).
 // Everything here requires an admin session except the auth endpoints and a
 // few shared read endpoints the console reuses (live list / status).
 func RegisterAdmin(r *gin.Engine, cfg config.Config, deps *app.Deps) {
-	avatarHandler := handlers.NewAvatarHandler(deps.DB, deps.S3, deps.Queue, cfg.AvatarInitQueueKey)
-	knowledgeHandler := handlers.NewKnowledgeHandler(deps.DB, deps.S3, cfg.EmbedServerURL)
-	taskHandler := handlers.NewTaskHandler(deps.DB, deps.Queue, deps.S3)
-	chatHandler := handlers.NewChatHandler(deps.DB)
-	liveHandler := handlers.NewLiveHandler(
+	avatarHandler := admin.NewAvatarHandler(deps.DB, deps.S3, deps.Queue, cfg.AvatarInitQueueKey)
+	knowledgeHandler := admin.NewKnowledgeHandler(deps.DB, deps.S3, cfg.EmbedServerURL)
+	taskHandler := admin.NewTaskHandler(deps.DB, deps.Queue, deps.S3)
+	chatHandler := web.NewChatHandler(deps.DB)
+	liveHandler := live.NewLiveHandler(
 		deps.DB, deps.Queue, deps.S3,
 		cfg.LiveControlQueueKey, cfg.TaskQueueKey,
 		cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel,
 		cfg.EmbedServerURL, cfg.TTSServiceURL,
 	)
-	adminHandler := handlers.NewAdminHandler(deps.DB, deps.Redis, cfg.AdminUsername, cfg.AdminPassword)
+	adminHandler := admin.NewAdminHandler(deps.DB, deps.Redis, cfg.AdminUsername, cfg.AdminPassword)
 
 	api := r.Group("/api")
 	{
@@ -39,7 +41,7 @@ func RegisterAdmin(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 		// ---- Protected: admin-only operations ----
 		protected := api.Group("", adminHandler.RequireAdmin())
 		{
-			protected.POST("/tts/preview", handlers.PreviewTTS(cfg.TTSServiceURL))
+			protected.POST("/tts/preview", admin.PreviewTTS(cfg.TTSServiceURL))
 			protected.POST("/avatars", avatarHandler.Create)
 			protected.GET("/avatars", avatarHandler.List)
 			protected.PUT("/avatars/:id", avatarHandler.Update)

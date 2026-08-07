@@ -1,4 +1,4 @@
-package handlers
+package web
 
 import (
 	"encoding/json"
@@ -29,7 +29,7 @@ func NewChatHandler(db *gorm.DB) *ChatHandler {
 }
 
 type chatIdentityResponse struct {
-	UserID   uint   `json:"userId"`
+	SenderID   uint   `json:"senderId"`
 	Username string `json:"username"`
 	IsGuest  bool   `json:"isGuest"`
 }
@@ -44,19 +44,19 @@ type chatIdentityResponse struct {
 // @Router   /chat/guest [post]
 func (h *ChatHandler) Guest(c *gin.Context) {
 	for attempt := 0; attempt < 5; attempt++ {
-		u := models.ChatUser{Username: fmt.Sprintf("游客%04d", rand.IntN(10000)), IsGuest: true}
+		u := models.LiveUser{Username: fmt.Sprintf("游客%04d", rand.IntN(10000)), IsGuest: true}
 		if err := h.db.Create(&u).Error; err != nil {
 			// unique-index collision: retry with another suffix
 			continue
 		}
-		c.JSON(http.StatusOK, chatIdentityResponse{UserID: u.ID, Username: u.Username, IsGuest: true})
+		c.JSON(http.StatusOK, chatIdentityResponse{SenderID: u.ID, Username: u.Username, IsGuest: true})
 		return
 	}
 	c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tc(c, "err.chat.guest_alloc_failed")})
 }
 
 type chatRegisterRequest struct {
-	GuestUserID uint   `json:"guestUserId"`
+	GuestSenderID uint   `json:"guestUserId"`
 	Username    string `json:"username"`
 	Password    string `json:"password"`
 }
@@ -87,7 +87,7 @@ func (h *ChatHandler) Register(c *gin.Context) {
 		return
 	}
 
-	var taken models.ChatUser
+	var taken models.LiveUser
 	if err := h.db.Where("username = ?", username).First(&taken).Error; err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": i18n.Tc(c, "err.chat.username_taken")})
 		return
@@ -102,9 +102,9 @@ func (h *ChatHandler) Register(c *gin.Context) {
 		return
 	}
 
-	if req.GuestUserID != 0 {
-		var guest models.ChatUser
-		if err := h.db.First(&guest, req.GuestUserID).Error; err == nil {
+	if req.GuestSenderID != 0 {
+		var guest models.LiveUser
+		if err := h.db.First(&guest, req.GuestSenderID).Error; err == nil {
 			if !guest.IsGuest {
 				c.JSON(http.StatusConflict, gin.H{"error": i18n.Tc(c, "err.chat.already_registered")})
 				return
@@ -116,22 +116,22 @@ func (h *ChatHandler) Register(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			c.JSON(http.StatusOK, chatIdentityResponse{UserID: guest.ID, Username: guest.Username})
+			c.JSON(http.StatusOK, chatIdentityResponse{SenderID: guest.ID, Username: guest.Username})
 			return
 		}
 	}
 
 	// No usable guest row: create a fresh account.
-	u := models.ChatUser{Username: username, PasswordHash: string(hash)}
+	u := models.LiveUser{Username: username, PasswordHash: string(hash)}
 	if err := h.db.Create(&u).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, chatIdentityResponse{UserID: u.ID, Username: u.Username})
+	c.JSON(http.StatusOK, chatIdentityResponse{SenderID: u.ID, Username: u.Username})
 }
 
 type chatLoginRequest struct {
-	GuestUserID uint   `json:"guestUserId"`
+	GuestSenderID uint   `json:"guestUserId"`
 	Username    string `json:"username"`
 	Password    string `json:"password"`
 }
@@ -154,7 +154,7 @@ func (h *ChatHandler) Login(c *gin.Context) {
 		return
 	}
 
-	var user models.ChatUser
+	var user models.LiveUser
 	if err := h.db.Where("username = ?", strings.TrimSpace(req.Username)).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": i18n.Tc(c, "err.chat.bad_credentials")})
@@ -169,17 +169,18 @@ func (h *ChatHandler) Login(c *gin.Context) {
 		return
 	}
 
-	if req.GuestUserID != 0 && req.GuestUserID != user.ID {
-		if err := h.db.Model(&models.ChatMessage{}).
-			Where("user_id = ?", req.GuestUserID).
-			Update("user_id", user.ID).Error; err != nil {
+	if req.GuestSenderID != 0 && req.GuestSenderID != user.ID {
+		if err := h.db.Model(&models.LiveMessage{}).
+			Where("sender_id = ?", req.GuestSenderID).
+			Update("sender_id", user.ID).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		_ = h.db.Delete(&models.ChatUser{}, req.GuestUserID)
+		_ = h.db.Delete(&models.LiveUser{}, req.GuestSenderID)
 	}
 
-	c.JSON(http.StatusOK, chatIdentityResponse{UserID: user.ID, Username: user.Username})
+	c.JSON(http.StatusOK, chatIdentityResponse{SenderID: user.ID,
+		Username: user.Username})
 }
 
 // History handles GET /api/chat/history?avatarId= — the persisted room chat
@@ -189,7 +190,7 @@ func (h *ChatHandler) Login(c *gin.Context) {
 // @Tags     chat
 // @Produce  json
 // @Param    avatarId query int false "Filter by avatar"
-// @Param    userId query int false "Filter by user"
+// @Param    senderId query int false "Filter by user"
 // @Param    page query int false "Page (1-based)"
 // @Param    pageSize query int false "Page size"
 // @Success  200 {object} map[string]any
@@ -204,18 +205,18 @@ func (h *ChatHandler) History(c *gin.Context) {
 		}
 		avatarID = id
 	}
-	userID, _ := strconv.ParseUint(c.Query("userId"), 10, 64)
+	userID, _ := strconv.ParseUint(c.Query("senderId"), 10, 64)
 	if avatarID == 0 && userID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.chat.avatar_id_required")})
 		return
 	}
-	var msgs []models.ChatMessage
-	q := h.db.Model(&models.ChatMessage{})
+	var msgs []models.LiveMessage
+	q := h.db.Model(&models.LiveMessage{})
 	if avatarID > 0 {
 		q = q.Where("avatar_id = ?", avatarID)
 	}
 	if userID > 0 {
-		q = q.Where("user_id = ?", userID)
+		q = q.Where("sender_id = ?", userID)
 	}
 	if err := q.
 		Order("id asc").Limit(200).Find(&msgs).Error; err != nil {
@@ -237,7 +238,7 @@ type chatLogItem struct {
 	ID         uint      `json:"id"`
 	AvatarID   uint      `json:"avatarId"`
 	AvatarName string    `json:"avatarName,omitempty"`
-	UserID     uint      `json:"userId"`
+	SenderID     uint      `json:"senderId"`
 	Username   string    `json:"username"`
 	Role       string    `json:"role"`
 	Content    string    `json:"content"`
@@ -255,28 +256,28 @@ type chatLogItem struct {
 // @Success  200 {object} map[string]any
 // @Router   /users [get]
 func (h *ChatHandler) ListUsers(c *gin.Context) {
-	var users []models.ChatUser
+	var users []models.LiveUser
 	if err := h.db.Order("id desc").Limit(500).Find(&users).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	type countRow struct {
-		UserID uint
+		SenderID uint
 		C      int64
 	}
 	var counts []countRow
-	if err := h.db.Model(&models.ChatMessage{}).
-		Select("user_id, count(*) as c").
+	if err := h.db.Model(&models.LiveMessage{}).
+		Select("sender_id, count(*) as c").
 		Where("role = ?", "user").
-		Group("user_id").
+		Group("sender_id").
 		Scan(&counts).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	msgCount := make(map[uint]int64, len(counts))
 	for _, row := range counts {
-		msgCount[row.UserID] = row.C
+		msgCount[row.SenderID] = row.C
 	}
 
 	items := make([]userListItem, 0, len(users))
@@ -293,14 +294,14 @@ func (h *ChatHandler) ListUsers(c *gin.Context) {
 }
 
 // Logs handles GET /api/chat/logs — admin chat log with filters:
-// ?avatarId=<id> &userId=<id> &date=YYYY-MM-DD &q=<keyword>.
+// ?avatarId=<id> &senderId=<id> &date=YYYY-MM-DD &q=<keyword>.
 // Bot replies carry ragHit + the exact knowledge chunks that were retrieved.
 // Logs handles GET /api/chat/logs.
-// @Summary  Admin chat logs (avatarId/userId/date/q + pagination)
+// @Summary  Admin chat logs (avatarId/senderId/date/q + pagination)
 // @Tags     admin
 // @Produce  json
 // @Param    avatarId query int false "Filter by avatar"
-// @Param    userId query int false "Filter by user"
+// @Param    senderId query int false "Filter by user"
 // @Param    date query string false "Filter by date (YYYY-MM-DD)"
 // @Param    q query string false "Keyword in message content"
 // @Param    page query int false "Page (1-based)"
@@ -309,34 +310,34 @@ func (h *ChatHandler) ListUsers(c *gin.Context) {
 // @Router   /chat/logs [get]
 func (h *ChatHandler) Logs(c *gin.Context) {
 	type row struct {
-		models.ChatMessage
+		models.LiveMessage
 		AvatarName string `json:"avatarName"`
 	}
-	q := h.db.Model(&models.ChatMessage{}).
-		Select("chat_messages.*, avatars.name AS avatar_name").
-		Joins("LEFT JOIN avatars ON avatars.id = chat_messages.avatar_id")
+	q := h.db.Model(&models.LiveMessage{}).
+		Select("live_messages.*, avatars.name AS avatar_name").
+		Joins("LEFT JOIN avatars ON avatars.id = live_messages.avatar_id")
 
 	if avatarID := c.Query("avatarId"); avatarID != "" {
 		if id, err := strconv.ParseUint(avatarID, 10, 64); err == nil && id > 0 {
-			q = q.Where("chat_messages.avatar_id = ?", id)
+			q = q.Where("live_messages.avatar_id = ?", id)
 		}
 	}
-	if userID := c.Query("userId"); userID != "" {
+	if userID := c.Query("senderId"); userID != "" {
 		if id, err := strconv.ParseUint(userID, 10, 64); err == nil && id > 0 {
-			q = q.Where("chat_messages.user_id = ?", id)
+			q = q.Where("live_messages.sender_id = ?", id)
 		}
 	}
 	if date := strings.TrimSpace(c.Query("date")); date != "" {
 		if t, err := time.Parse("2006-01-02", date); err == nil {
 			q = q.Where(
-				"chat_messages.created_at >= ? AND chat_messages.created_at < ?",
+				"live_messages.created_at >= ? AND live_messages.created_at < ?",
 				t, t.Add(24*time.Hour),
 			)
 		}
 	}
 	if kw := strings.TrimSpace(c.Query("q")); kw != "" {
 		like := "%" + kw + "%"
-		q = q.Where("chat_messages.content LIKE ?", like)
+		q = q.Where("live_messages.content LIKE ?", like)
 	}
 
 	page := 1
@@ -354,7 +355,7 @@ func (h *ChatHandler) Logs(c *gin.Context) {
 		return
 	}
 	var rows []row
-	if err := q.Order("chat_messages.id desc").
+	if err := q.Order("live_messages.id desc").
 		Offset((page - 1) * pageSize).
 		Limit(pageSize).
 		Find(&rows).Error; err != nil {
@@ -367,7 +368,7 @@ func (h *ChatHandler) Logs(c *gin.Context) {
 			ID:         r.ID,
 			AvatarID:   r.AvatarID,
 			AvatarName: r.AvatarName,
-			UserID:     r.UserID,
+			SenderID:     r.SenderID,
 			Username:   r.Username,
 			Role:       r.Role,
 			Content:    r.Content,

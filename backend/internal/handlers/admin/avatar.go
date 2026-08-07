@@ -1,4 +1,4 @@
-package handlers
+package admin
 
 import (
 	"crypto/rand"
@@ -68,7 +68,7 @@ func personaFromForm(c *gin.Context) (string, error) {
 	return string(b), nil
 }
 
-func parsePersona(raw string) models.PersonaProfile {
+func ParsePersona(raw string) models.PersonaProfile {
 	var p models.PersonaProfile
 	if raw == "" {
 		return p
@@ -125,7 +125,7 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 	if voiceID == "" {
 		voiceID = models.DefaultEdgeVoice
 	}
-	category := normalizeCategory(c.PostForm("category"))
+	category := NormalizeCategory(c.PostForm("category"))
 	persona, err := personaFromForm(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -258,7 +258,7 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 	}
 
 	avatar.Name = name
-	avatar.Category = normalizeCategory(req.Category)
+	avatar.Category = NormalizeCategory(req.Category)
 	avatar.VoiceID = voiceID
 	persona := req.Persona
 	if persona.Age == nil {
@@ -687,14 +687,14 @@ func (h *AvatarHandler) uploadFormFile(c *gin.Context, header *multipart.FileHea
 }
 
 func toAvatarResponse(db *gorm.DB, a models.Avatar, s3 *storage.Client) avatarResponse {
-	liveSettings := parseLiveSettings(a.LiveSettings)
+	liveSettings := ParseLiveSettings(a.LiveSettings)
 	resp := avatarResponse{
 		ID:           a.ID,
 		Name:         a.Name,
 		ImageS3Key:   a.ImageS3Key,
 		ImageS3URL:   s3.PublicURL(a.ImageS3Key),
-		Category:     normalizeCategory(a.Category),
-		Persona:      parsePersona(a.Persona),
+		Category:     NormalizeCategory(a.Category),
+		Persona:      ParsePersona(a.Persona),
 		VoiceID:      a.VoiceID,
 		Status:       a.Status,
 		LiveSettings: liveSettings,
@@ -714,7 +714,7 @@ func toAvatarResponse(db *gorm.DB, a models.Avatar, s3 *storage.Client) avatarRe
 	return resp
 }
 
-func normalizeCategory(c string) string {
+func NormalizeCategory(c string) string {
 	if c = strings.TrimSpace(c); c == "" {
 		return "其他"
 	}
@@ -733,7 +733,7 @@ func optionalInt(raw string) *int {
 
 // parseLiveSettings decodes the avatar's JSON live settings, falling back to
 // defaults for missing/invalid content and filling zero fields with defaults.
-func parseLiveSettings(raw string) models.LiveSettings {
+func ParseLiveSettings(raw string) models.LiveSettings {
 	settings := models.DefaultLiveSettings()
 	if strings.TrimSpace(raw) != "" {
 		if err := json.Unmarshal([]byte(raw), &settings); err != nil {

@@ -5,23 +5,26 @@ import (
 
 	"talkingavatar/backend/internal/app"
 	"talkingavatar/backend/internal/config"
-	"talkingavatar/backend/internal/handlers"
+		"talkingavatar/backend/internal/handlers/admin"
+	"talkingavatar/backend/internal/handlers/live"
+	"talkingavatar/backend/internal/handlers/telegram"
+	"talkingavatar/backend/internal/handlers/web"
 )
 
 // RegisterUser wires the audience-facing API (api-user service). All
 // endpoints are public; this is where the viewer app and the live-chat
 // orchestrator live.
 func RegisterUser(r *gin.Engine, cfg config.Config, deps *app.Deps) {
-	avatarHandler := handlers.NewAvatarHandler(deps.DB, deps.S3, deps.Queue, cfg.AvatarInitQueueKey)
-	chatHandler := handlers.NewChatHandler(deps.DB)
-	liveHandler := handlers.NewLiveHandler(
+	avatarHandler := admin.NewAvatarHandler(deps.DB, deps.S3, deps.Queue, cfg.AvatarInitQueueKey)
+	chatHandler := web.NewChatHandler(deps.DB)
+	liveHandler := live.NewLiveHandler(
 		deps.DB, deps.Queue, deps.S3,
 		cfg.LiveControlQueueKey, cfg.TaskQueueKey,
 		cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel,
 		cfg.EmbedServerURL, cfg.TTSServiceURL,
 	)
-	tgAuthHandler := handlers.NewTelegramAuthHandler(deps.DB, cfg.TgBotToken)
-	tgWebhookHandler := handlers.NewTelegramWebhookHandler(
+	tgAuthHandler := telegram.NewTelegramAuthHandler(deps.DB, cfg.TgBotToken)
+	tgWebhookHandler := telegram.NewTelegramWebhookHandler(
 		deps.DB, cfg.TgBotToken, cfg.NgrokAPIURL,
 		cfg.TgWebhookURL, cfg.TgMiniAppURL,
 	)
