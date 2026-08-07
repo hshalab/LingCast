@@ -125,15 +125,19 @@ func (h *TelegramAuthHandler) Login(c *gin.Context) {
 		return
 	}
 	var tgUser struct {
-		ID       int64  `json:"id"`
-		Username string `json:"username"`
+		ID           int64  `json:"id"`
+		Username     string `json:"username"`
+		FirstName    string `json:"first_name"`
+		LastName     string `json:"last_name"`
+		LanguageCode string `json:"language_code"`
+		PhotoUrl     string `json:"photo_url"`
 	}
 	if err := json.Unmarshal([]byte(fields["user"]), &tgUser); err != nil || tgUser.ID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": i18n.Tc(c, "err.tg.invalid_user")})
 		return
 	}
 
-	user, err := h.upsertUser(tgUser.ID, tgUser.Username)
+	user, err := h.upsertUser(tgUser.ID, tgUser.Username, tgUser.FirstName, tgUser.LastName, tgUser.LanguageCode, tgUser.PhotoUrl)
 	if err != nil {
 		log.Printf("[tg] upsert user %d failed: %v", tgUser.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tc(c, "err.internal")})
@@ -155,12 +159,29 @@ func (h *TelegramAuthHandler) Login(c *gin.Context) {
 
 // upsertUser finds the TelegramUser bound to the Telegram ID or silently creates
 // one (preferring the Telegram username, falling back to tg_<id> on collision).
-func (h *TelegramAuthHandler) upsertUser(tgID int64, tgUsername string) (*models.TelegramUser, error) {
+func (h *TelegramAuthHandler) upsertUser(tgID int64, tgUsername, firstName, lastName, languageCode, photoUrl string) (*models.TelegramUser, error) {
 	var user models.TelegramUser
 	err := h.db.Where("telegram_id = ?", tgID).First(&user).Error
+	
 	if err == nil {
+		updates := map[string]any{}
 		if name := sanitizeTelegramUsername(tgUsername); name != "" && name != user.Username {
-			_ = h.db.Model(&user).Update("username", name)
+			updates["username"] = name
+		}
+		if firstName != "" && (user.FirstName == nil || *user.FirstName != firstName) {
+			updates["first_name"] = firstName
+		}
+		if lastName != "" && (user.LastName == nil || *user.LastName != lastName) {
+			updates["last_name"] = lastName
+		}
+		if languageCode != "" && (user.LanguageCode == nil || *user.LanguageCode != languageCode) {
+			updates["language_code"] = languageCode
+		}
+		if photoUrl != "" && (user.PhotoUrl == nil || *user.PhotoUrl != photoUrl) {
+			updates["photo_url"] = photoUrl
+		}
+		if len(updates) > 0 {
+			_ = h.db.Model(&user).Updates(updates)
 		}
 		return &user, nil
 	}
@@ -175,10 +196,23 @@ func (h *TelegramAuthHandler) upsertUser(tgID int64, tgUsername string) (*models
 	// Map-based create writes the keys verbatim: struct Create would skip the
 	// false IsGuest zero value because of its `default:true` tag.
 	createUser := func(name string) error {
-		return h.db.Model(&models.TelegramUser{}).Create(map[string]any{
-			"username":    name,
-			"telegram_id": tgID,
-		}).Error
+		createMap := map[string]any{
+			"username":      name,
+			"telegram_id":   tgID,
+		}
+		if firstName != "" {
+			createMap["first_name"] = firstName
+		}
+		if lastName != "" {
+			createMap["last_name"] = lastName
+		}
+		if languageCode != "" {
+			createMap["language_code"] = languageCode
+		}
+		if photoUrl != "" {
+			createMap["photo_url"] = photoUrl
+		}
+		return h.db.Model(&models.TelegramUser{}).Create(createMap).Error
 	}
 	if err := createUser(username); err == nil {
 		// Re-read the row so the returned struct carries the DB id.

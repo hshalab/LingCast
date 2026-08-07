@@ -15,8 +15,12 @@ type LiveUser struct {
 type TelegramUser struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
 	TelegramID int64     `gorm:"uniqueIndex;not null" json:"telegramId"`
-	Username   string    `gorm:"size:64;not null" json:"username"`
-	CreatedAt  time.Time `json:"createdAt"`
+	Username     string    `gorm:"size:64;not null" json:"username"`
+	FirstName    *string   `gorm:"size:64" json:"firstName,omitempty"`
+	LastName     *string   `gorm:"size:64" json:"lastName,omitempty"`
+	LanguageCode *string   `gorm:"size:16" json:"languageCode,omitempty"`
+	PhotoUrl     *string   `gorm:"type:text" json:"photoUrl,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 type LiveMessage struct {
