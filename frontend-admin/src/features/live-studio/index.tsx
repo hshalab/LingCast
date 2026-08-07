@@ -2,8 +2,8 @@ import axios from 'axios'
 import Player from 'xgplayer'
 import 'xgplayer/dist/index.min.css'
 import FlvPlugin from 'xgplayer-flv'
-import { Copy, Eye, EyeOff, LoaderCircle, Power, PowerOff, Send, Video, X } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Copy, Eye, EyeOff, LoaderCircle, Power, PowerOff, Video, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -29,7 +29,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
 import {
   api,
   type Avatar,
@@ -37,6 +36,7 @@ import {
   type LiveSessionItem,
   type LiveSettings,
   type LiveStatus,
+  type Scene,
 } from '@/lib/api'
 
 function showApiError(error: unknown, fallback: string) {
@@ -68,11 +68,13 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
     subtitlePosition: 'bottom',
     subtitleBorder: 2,
     subtitleSize: 46,
+    idleSceneId: 0,
+    idleSwitchMode: 'interval',
+    idleSwitchSeconds: 15,
   })
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
-  const [text, setText] = useState('')
-  const [sending, setSending] = useState(false)
+  const [scenes, setScenes] = useState<Scene[]>([])
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [liveSessions, setLiveSessions] = useState<LiveSessionItem[]>([])
   // Full pull URL: dev uses VITE_API_BASE_URL, dockerized app falls back to
@@ -104,10 +106,25 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
             subtitlePosition: s.subtitlePosition === 'top' ? 'top' : 'bottom',
             subtitleBorder: s.subtitleBorder ?? 2,
             subtitleSize: s.subtitleSize || 46,
+            idleSceneId: s.idleSceneId ?? 0,
+            idleSwitchMode: s.idleSwitchMode === 'random' ? 'random' : 'interval',
+            idleSwitchSeconds: s.idleSwitchSeconds || 15,
           })
         }
       })
       .finally(() => setSettingsLoading(false))
+  }, [id])
+
+  // Scenes of the avatar, to pick the idle stream default videos.
+  useEffect(() => {
+    if (!id) {
+      setScenes([])
+      return
+    }
+    api
+      .get<{ data: Scene[] }>(`/avatars/${id}/scenes`)
+      .then(({ data }) => setScenes(data.data))
+      .catch(() => setScenes([]))
   }, [id])
 
   const saveSettings = async () => {
@@ -313,20 +330,6 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
       toast.error(t('live.toastCopyFailed'))
     }
   }
-
-  const handleSend = useCallback(async () => {
-    const trimmed = text.trim()
-    if (!trimmed || sending) return
-    setSending(true)
-    try {
-      await api.post(`/live/${id}/push`, { text: trimmed })
-      setText('')
-    } catch (error) {
-      showApiError(error, t('common.requestFailed'))
-    } finally {
-      setSending(false)
-    }
-  }, [id, text, sending])
 
   const statusVariant =
     status?.status === 'active'
@@ -615,32 +618,86 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
 
             <Card>
               <CardHeader className='gap-1'>
-                <CardTitle>{t('live.sendTitle')}</CardTitle>
-                <CardDescription>{t('live.sendDesc')}</CardDescription>
+                <CardTitle>{t('live.idleStreamTitle')}</CardTitle>
+                <CardDescription>{t('live.idleStreamDesc')}</CardDescription>
               </CardHeader>
               <CardContent className='flex flex-col gap-3'>
-                {status && status.history.length > 0 && (
-                  <div className='flex flex-col gap-1'>
-                    <p className='text-xs text-muted-foreground'>{t('live.sentText')}</p>
-                    <ol className='max-h-32 list-decimal space-y-1 overflow-y-auto border rounded-md bg-muted/40 p-2 ps-6 text-xs text-muted-foreground'>
-                      {status.history.map((item, i) => (
-                        <li key={`${i}-${item}`} className='break-all'>
-                          {item}
-                        </li>
+                <div className='flex flex-col gap-1.5'>
+                  <Label>{t('live.idleScene')}</Label>
+                  <Select
+                    value={String(liveSettings.idleSceneId ?? 0)}
+                    onValueChange={(v) =>
+                      setLiveSettings((s) => ({ ...s, idleSceneId: Number(v) }))
+                    }
+                    disabled={settingsLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='0'>{t('live.idleSceneDefault')}</SelectItem>
+                      {scenes.map((scene) => (
+                        <SelectItem key={scene.id} value={String(scene.id)}>
+                          {scene.title}（{scene.videos.length}{' '}
+                          {t('live.idleVideoCount')}）
+                        </SelectItem>
                       ))}
-                    </ol>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className='flex flex-col gap-1.5'>
+                  <Label>{t('live.idleSwitchMode')}</Label>
+                  <Select
+                    value={liveSettings.idleSwitchMode ?? 'interval'}
+                    onValueChange={(v) =>
+                      setLiveSettings((s) => ({
+                        ...s,
+                        idleSwitchMode: v as 'interval' | 'random',
+                      }))
+                    }
+                    disabled={settingsLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='interval'>{t('live.switchInterval')}</SelectItem>
+                      <SelectItem value='random'>{t('live.switchRandom')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {liveSettings.idleSwitchMode === 'interval' && (
+                  <div className='flex flex-col gap-1.5'>
+                    <Label htmlFor='idle-switch-seconds'>
+                      {t('live.idleSwitchSeconds')}
+                    </Label>
+                    <Input
+                      id='idle-switch-seconds'
+                      type='number'
+                      min={3}
+                      max={600}
+                      value={liveSettings.idleSwitchSeconds ?? 15}
+                      onChange={(e) =>
+                        setLiveSettings((s) => ({
+                          ...s,
+                          idleSwitchSeconds: Number(e.target.value) || 15,
+                        }))
+                      }
+                      disabled={settingsLoading}
+                    />
                   </div>
                 )}
-                <Textarea
-                  value={text}
-                  onChange={(event) => setText(event.target.value)}
-                  placeholder={t('live.sendPlaceholder')}
-                  rows={4}
-                />
-                <Button onClick={() => void handleSend()} disabled={sending || !text.trim()}>
-                  {sending ? <LoaderCircle className='size-4 animate-spin' /> : <Send className='size-4' />}
-                  {t('live.send')}
+
+                <Button
+                  onClick={() => void saveSettings()}
+                  disabled={savingSettings || settingsLoading}
+                >
+                  {savingSettings ? <LoaderCircle className='size-4 animate-spin' /> : null}
+                  {t('live.save')}
                 </Button>
+                <p className='text-xs text-muted-foreground'>{t('live.idleStreamHint')}</p>
               </CardContent>
             </Card>
           </div>

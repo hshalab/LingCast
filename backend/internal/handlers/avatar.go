@@ -200,10 +200,10 @@ func (h *AvatarHandler) Get(c *gin.Context) {
 }
 
 type updateAvatarRequest struct {
-	Name               string                `json:"name"`
-	Category           string                `json:"category"`
-	VoiceID            string                `json:"voiceId"`
-	Persona            models.PersonaProfile `json:"persona"`
+	Name     string                `json:"name"`
+	Category string                `json:"category"`
+	VoiceID  string                `json:"voiceId"`
+	Persona  models.PersonaProfile `json:"persona"`
 	// Legacy flat fields: old admin clients sent the persona profile at the
 	// top level; keep accepting them so an outdated build cannot wipe the
 	// stored persona with an empty object.
@@ -645,6 +645,12 @@ func (h *AvatarHandler) UpdateLiveSettings(c *gin.Context) {
 	if settings.SubtitleBorder < 0 || settings.SubtitleBorder > 10 {
 		settings.SubtitleBorder = 0
 	}
+	if settings.IdleSwitchMode != "random" {
+		settings.IdleSwitchMode = "interval"
+	}
+	if settings.IdleSwitchSeconds < 3 || settings.IdleSwitchSeconds > 600 {
+		settings.IdleSwitchSeconds = models.DefaultLiveSettings().IdleSwitchSeconds
+	}
 
 	data, err := json.Marshal(settings)
 	if err != nil {
@@ -743,6 +749,12 @@ func parseLiveSettings(raw string) models.LiveSettings {
 	}
 	if settings.SubtitleBorder < 0 {
 		settings.SubtitleBorder = 0
+	}
+	if settings.IdleSwitchMode != "random" {
+		settings.IdleSwitchMode = "interval"
+	}
+	if settings.IdleSwitchSeconds <= 0 {
+		settings.IdleSwitchSeconds = models.DefaultLiveSettings().IdleSwitchSeconds
 	}
 	return settings
 }

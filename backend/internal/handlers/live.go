@@ -183,17 +183,20 @@ type liveStatusResponse struct {
 }
 
 type liveSessionItem struct {
-	AvatarID           uint                `json:"avatarId"`
-	AvatarName         string              `json:"avatarName"`
-	Category           string              `json:"category"`
-	Persona            models.PersonaProfile `json:"persona"`
-	ImageS3URL         string              `json:"imageS3Url"`
-	ImageS3Key         string              `json:"imageS3Key"`
-	BaseVideoS3Key     string              `json:"baseVideoS3Key"`
-	VoiceID            string              `json:"voiceId"`
-	StreamID           string              `json:"streamId"`
-	Status             string              `json:"status"`
-	LiveSettings       models.LiveSettings `json:"liveSettings"`
+	AvatarID          uint                  `json:"avatarId"`
+	AvatarName        string                `json:"avatarName"`
+	Category          string                `json:"category"`
+	Persona           models.PersonaProfile `json:"persona"`
+	ImageS3URL        string                `json:"imageS3Url"`
+	ImageS3Key        string                `json:"imageS3Key"`
+	BaseVideoS3Key    string                `json:"baseVideoS3Key"`
+	IdleVideos        []string              `json:"idleVideos,omitempty"`
+	IdleSwitchMode    string                `json:"idleSwitchMode,omitempty"`
+	IdleSwitchSeconds int                   `json:"idleSwitchSeconds,omitempty"`
+	VoiceID           string                `json:"voiceId"`
+	StreamID          string                `json:"streamId"`
+	Status            string                `json:"status"`
+	LiveSettings      models.LiveSettings   `json:"liveSettings"`
 }
 
 func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey, taskQueueKey, openAIAPIKey, openAIBaseURL, openAIModel, embedServerURL, ttsServiceURL string) *LiveHandler {
@@ -206,7 +209,7 @@ func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControl
 }
 
 // defaultVideoKey returns the avatar's default scene default video S3 key
-// (the live fallback while scene switching is not implemented yet).
+// (the live fallback when no idle scene is configured).
 func (h *LiveHandler) defaultVideoKey(avatarID uint) (string, error) {
 	var scene models.Scene
 	if err := h.db.Where("avatar_id = ? AND is_default = ?", avatarID, true).
@@ -219,6 +222,31 @@ func (h *LiveHandler) defaultVideoKey(avatarID uint) (string, error) {
 		return "", errors.New("avatar default video is not ready (base video still generating)")
 	}
 	return v.S3Key, nil
+}
+
+// idleVideoKeys returns the scene videos pushed while the avatar is idle.
+// When liveSettings.IdleSceneID points to one of the avatar's scenes, ALL of
+// that scene's videos are returned (the worker switches between them); any
+// other/empty selection falls back to the default scene's default video.
+func (h *LiveHandler) idleVideoKeys(avatarID uint, settings models.LiveSettings) ([]string, error) {
+	if settings.IdleSceneID > 0 {
+		var scene models.Scene
+		if err := h.db.Where("id = ? AND avatar_id = ?", settings.IdleSceneID, avatarID).
+			First(&scene).Error; err == nil {
+			var keys []string
+			if err := h.db.Model(&models.SceneVideo{}).
+				Where("scene_id = ?", scene.ID).
+				Order("id asc").
+				Pluck("s3_key", &keys).Error; err == nil && len(keys) > 0 {
+				return keys, nil
+			}
+		}
+	}
+	key, err := h.defaultVideoKey(avatarID)
+	if err != nil {
+		return nil, err
+	}
+	return []string{key}, nil
 }
 
 func liveQueueKey(avatarID uint) string {
@@ -267,7 +295,8 @@ func (h *LiveHandler) Start(c *gin.Context) {
 		})
 		return
 	}
-	videoKey, err := h.defaultVideoKey(avatar.ID)
+	settings := parseLiveSettings(avatar.LiveSettings)
+	videoKeys, err := h.idleVideoKeys(avatar.ID, settings)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -293,12 +322,15 @@ func (h *LiveHandler) Start(c *gin.Context) {
 	}
 
 	payload := queue.LiveControlPayload{
-		Action:         "start",
-		AvatarID:       avatar.ID,
-		StreamID:       streamID,
-		ImageS3Key:     avatar.ImageS3Key,
-		BaseVideoS3Key: videoKey,
-		VoiceID:        avatar.VoiceID,
+		Action:            "start",
+		AvatarID:          avatar.ID,
+		StreamID:          streamID,
+		ImageS3Key:        avatar.ImageS3Key,
+		BaseVideoS3Key:    videoKeys[0],
+		IdleVideos:        videoKeys,
+		IdleSwitchMode:    settings.IdleSwitchMode,
+		IdleSwitchSeconds: settings.IdleSwitchSeconds,
+		VoiceID:           avatar.VoiceID,
 	}
 	liveSettings := strings.TrimSpace(avatar.LiveSettings)
 	if liveSettings == "" {
@@ -839,7 +871,7 @@ func (h *LiveHandler) retrieveKnowledge(ctx context.Context, avatarID uint, text
 	}
 	body, err := json.Marshal(map[string]any{
 		"collection_ids": collectionIDs,
-		"query":           text,
+		"query":          text,
 	})
 	if err != nil {
 		return nil
@@ -1072,10 +1104,13 @@ func (h *LiveHandler) ListSessions(c *gin.Context) {
 			item.ImageS3URL = h.s3.PublicURL(avatar.ImageS3Key)
 			item.ImageS3Key = avatar.ImageS3Key
 			item.VoiceID = avatar.VoiceID
-			if key, err := h.defaultVideoKey(avatar.ID); err == nil {
-				item.BaseVideoS3Key = key
-			}
 			item.LiveSettings = parseLiveSettings(avatar.LiveSettings)
+			if keys, err := h.idleVideoKeys(avatar.ID, item.LiveSettings); err == nil {
+				item.BaseVideoS3Key = keys[0]
+				item.IdleVideos = keys
+				item.IdleSwitchMode = item.LiveSettings.IdleSwitchMode
+				item.IdleSwitchSeconds = item.LiveSettings.IdleSwitchSeconds
+			}
 		}
 		items = append(items, item)
 	}

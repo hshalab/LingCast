@@ -50,6 +50,9 @@ export type LiveSettings = {
   subtitlePosition: 'bottom' | 'top'
   subtitleBorder: number
   subtitleSize: number
+  idleSceneId?: number
+  idleSwitchMode?: 'interval' | 'random'
+  idleSwitchSeconds?: number
 }
 
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed'

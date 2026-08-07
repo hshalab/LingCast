@@ -32,6 +32,7 @@ import json
 import logging
 import os
 import queue as queue_mod
+import random
 import requests
 import shutil
 import signal
@@ -125,6 +126,9 @@ class LiveAvatarSession:
         queue_key: str,
         subtitle_settings: dict | None = None,
         storage: S3Storage | None = None,
+        idle_video_paths: list[Path] | None = None,
+        idle_switch_mode: str = "interval",
+        idle_switch_seconds: int = 15,
     ):
         self.avatar_id = avatar_id
         self.stream_id = stream_id
@@ -136,8 +140,19 @@ class LiveAvatarSession:
         self.queue_key = queue_key
         self.subtitle_settings = subtitle_settings or {}
         self.storage = storage
+        self.idle_video_paths = idle_video_paths or []
+        self.idle_switch_mode = idle_switch_mode or "interval"
+        self.idle_switch_seconds = max(1, int(idle_switch_seconds or 15))
         self.pipe = None
         self.base_frames: list | None = None
+        # Idle clips: every pre-processed driving video pushed while the
+        # avatar is not talking; the worker switches between them (interval or
+        # random) so the default stream picture is not a single fixed loop.
+        self.idle_clips: list[list] = []
+        self._idle_clip_idx = 0
+        self._idle_frame_idx = 0
+        self._idle_elapsed_frames = 0
+        self._idle_switch_frames = max(1, int(self.idle_switch_seconds * self.fps))
         self.cursor = 0
         self.lipsync = None
         self.tts = None
@@ -188,6 +203,37 @@ class LiveAvatarSession:
             self.lipsync.enhancer = self.enhancer
             logger.info("live pipeline face enhancer: %s", self.enhancer.kind)
         self.base_frames, base_fps = Wav2LipOnnxLipSync._read_frames(self.base_video_path)
+        # Idle clips: the base video plus any additional scene videos of the
+        # configured idle scene. Clips must match the base resolution so the
+        # same ffmpeg pipe can play them all; mismatched ones are skipped.
+        self.idle_clips = [self.base_frames]
+        for p in self.idle_video_paths:
+            try:
+                if not p.exists():
+                    logger.warning("idle video not found: %s", p)
+                    continue
+                frames, _ = Wav2LipOnnxLipSync._read_frames(p)
+                if not frames:
+                    continue
+                if frames[0].shape[:2] != self.base_frames[0].shape[:2]:
+                    logger.warning(
+                        "skip idle video %s: shape %s != base shape %s",
+                        p,
+                        frames[0].shape[:2],
+                        self.base_frames[0].shape[:2],
+                    )
+                    continue
+                self.idle_clips.append(frames)
+            except Exception:
+                logger.exception("failed to load idle video %s", p)
+        if len(self.idle_clips) > 1:
+            logger.info(
+                "avatar %s idle clips: %d videos, mode=%s, switch every %ds",
+                self.avatar_id,
+                len(self.idle_clips),
+                self.idle_switch_mode,
+                self.idle_switch_seconds,
+            )
         # Preload the Wav2Lip session + face detector so the FIRST sentence
         # starts as soon as TTS lands (lazy load would add 2-4s at talk time).
         try:
@@ -437,9 +483,51 @@ class LiveAvatarSession:
                 self.pipe.stop()
 
     def _idle_frame(self):
-        frame = self.base_frames[self.cursor % len(self.base_frames)]
-        self.cursor += 1
+        clips = self.idle_clips or [self.base_frames]
+        clip = clips[self._idle_clip_idx % len(clips)]
+        frame = clip[self._idle_frame_idx % len(clip)]
+        self._idle_frame_idx += 1
+        self._idle_elapsed_frames += 1
+        if len(clips) > 1 and self._idle_elapsed_frames >= self._idle_switch_frames:
+            self._switch_idle_clip()
         return frame
+
+    def _switch_idle_clip(self) -> None:
+        """Switch to the next (interval) or a random (random) idle clip and
+        schedule the next switch: fixed N seconds, or a random 5-30s window."""
+        n = len(self.idle_clips)
+        if n <= 1:
+            self._idle_elapsed_frames = 0
+            return
+        if self.idle_switch_mode == "random":
+            candidates = [i for i in range(n) if i != self._idle_clip_idx] or [0]
+            self._idle_clip_idx = random.choice(candidates)
+            lo = max(5, self.idle_switch_seconds // 2)
+            hi = max(30, self.idle_switch_seconds * 2)
+            self._idle_switch_frames = max(
+                1, random.randint(int(lo * self.fps), int(hi * self.fps))
+            )
+            logger.info(
+                "avatar %s idle -> random clip %d/%d (next switch in %.1fs)",
+                self.avatar_id,
+                self._idle_clip_idx + 1,
+                n,
+                self._idle_switch_frames / self.fps,
+            )
+        else:
+            self._idle_clip_idx = (self._idle_clip_idx + 1) % n
+            self._idle_switch_frames = max(
+                1, int(self.idle_switch_seconds * self.fps)
+            )
+            logger.info(
+                "avatar %s idle -> clip %d/%d (switch every %ds)",
+                self.avatar_id,
+                self._idle_clip_idx + 1,
+                n,
+                self.idle_switch_seconds,
+            )
+        self._idle_frame_idx = 0
+        self._idle_elapsed_frames = 0
 
     # ------------------------------------------------------------------ #
     # Queue management loop (lightweight; no pipe I/O)
@@ -738,15 +826,26 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> 
         work_dir.mkdir(parents=True)
         image_path = work_dir / ("image" + Path(payload["imageS3Key"]).suffix)
         storage.download(payload["imageS3Key"], image_path)
-        if not payload.get("baseVideoS3Key"):
+        idle_keys = payload.get("idleVideos") or []
+        if not idle_keys:
+            idle_keys = [payload.get("baseVideoS3Key", "")]
+        if not idle_keys[0]:
             logger.error(
-                "control message for %s has no baseVideoS3Key; "
+                "control message for %s has no idle/base video; "
                 "run the avatar pre-processing step first",
                 stream_id,
             )
             return
         base_video_path = work_dir / "base_video.mp4"
-        storage.download(payload["baseVideoS3Key"], base_video_path)
+        storage.download(idle_keys[0], base_video_path)
+        idle_paths = []
+        for i, key in enumerate(idle_keys[1:], start=1):
+            p = work_dir / f"idle_{i}.mp4"
+            try:
+                storage.download(key, p)
+                idle_paths.append(p)
+            except Exception:
+                logger.exception("failed to download idle video %s", key)
         session = LiveAvatarSession(
             avatar_id=avatar_id,
             stream_id=stream_id,
@@ -758,6 +857,9 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> 
             queue_key=f"live_queue:{avatar_id}",
             subtitle_settings=payload.get("liveSettings") or {},
             storage=storage,
+            idle_video_paths=idle_paths,
+            idle_switch_mode=payload.get("idleSwitchMode") or "interval",
+            idle_switch_seconds=int(payload.get("idleSwitchSeconds") or 15),
         )
         session.setup()
         sessions[avatar_id] = session
@@ -790,12 +892,16 @@ def _restore_sessions(api_base_url, sessions, storage, work_root, fps, r) -> Non
                     "streamId": stream_id,
                     "imageS3Key": item.get("imageS3Key", ""),
                     "baseVideoS3Key": item.get("baseVideoS3Key", ""),
+                    "idleVideos": item.get("idleVideos") or [],
+                    "idleSwitchMode": item.get("idleSwitchMode") or "interval",
+                    "idleSwitchSeconds": item.get("idleSwitchSeconds") or 15,
                     "voiceId": item.get("voiceId", ""),
                     "liveSettings": item.get("liveSettings") or {},
                 }
-                if not payload["imageS3Key"] or not payload["baseVideoS3Key"]:
+                if not payload["imageS3Key"] or not payload["idleVideos"]:
                     logger.warning(
-                        "session for avatar %s missing S3 keys, skip restore", aid
+                        "session for avatar %s missing image/idle video keys, skip restore",
+                        aid,
                     )
                     continue
                 logger.info("restoring live session for avatar %s", aid)

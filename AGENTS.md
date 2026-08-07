@@ -63,12 +63,13 @@
   ID；`GET /api/chat/history?avatarId=` 拉持久化聊天记录；客户端身份存
   localStorage（`tav_chat_identity`），由 `IdentityProvider` 全局管理，注册/登录弹窗
   首页与直播间共用。`POST /api/live/:id/message` 会同时入库用户消息与机器人完整回复。
-- ✅ 字幕配置：Avatar 表新增 JSON 字段 `live_settings`
-  （`subtitleEnabled/subtitleFont/subtitlePosition/subtitleBorder/subtitleSize`），
-  `PUT /api/avatars/:id/live-settings` 读写；start 控制消息与 `GET /api/live` 都会带
-  上配置；worker 的 `SubtitleRenderer` 支持顶部/底部、描边宽度、字号，字体按文件名
-  从 `worker/fonts/` 解析（缺失回退系统默认）；Live Studio「字幕设置」卡片保存后自动
-  重启直播生效。
+- ✅ 直播配置：Avatar 表 JSON 字段 `live_settings`（字幕
+  `subtitleEnabled/subtitleFont/subtitlePosition/subtitleBorder/subtitleSize` +
+  闲置推流 `idleSceneId/idleSwitchMode(interval|random)/idleSwitchSeconds`），
+  `PUT /api/avatars/:id/live-settings` 读写；start 控制消息与 `GET /api/live`
+  都会带上配置（含 `idleVideos` S3 列表）；worker 的 `SubtitleRenderer` 支持
+  顶部/底部、描边宽度、字号，字体按文件名从 `worker/fonts/` 解析（缺失回退系统
+  默认）；Live Studio「字幕设置」与「默认推流视频」卡片保存后自动重启直播生效。
 - ✅ 管理端用户列表：`GET /api/users`（游客+账号，含消息数），侧边栏「用户相关 →
   用户列表」（/users）展示真实数据。
 - ✅ 国际化（中/英）：管理端（react-i18next，`frontend-admin/src/i18n/`）与观众端
@@ -99,7 +100,8 @@
   引擎（代码仍在 `ai/tts_real.py`，权重不入库需自行下载）。LivePortrait 不再出现在
   广播/直播循环里。
 - ✅ 直播管线 `stream_worker.py`（闲置/说话循环）：`POST /api/live/{id}/start`
-  通知 Worker 打开**常驻 FFmpeg 管道**（闲置态喂 base 动画 + numpy 静音音频）；
+  通知 Worker 打开**常驻 FFmpeg 管道**（闲置态喂所选场景的全部驱动视频 +
+  numpy 静音音频，定时 N 秒顺序切换或随机切换；未配置时回退默认视频单循环）；
   `POST /api/live/{id}/push` 按句切块入 `live_queue:{id}` → 异步 TTS → Wav2Lip
   内存出帧 → 口型帧 + TTS 音频替换推流，句子结束自动回闲置，管道不关闭。
   `GET /api/live/{id}/status` 供前端轮询队列。SRS v5 已入 docker-compose

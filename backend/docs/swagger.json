@@ -1927,6 +1927,17 @@
         "models.LiveSettings": {
             "type": "object",
             "properties": {
+                "idleSceneId": {
+                    "description": "IdleSceneID is the scene whose videos are pushed while the avatar is\nidle (0 = fall back to the default scene's default video only).",
+                    "type": "integer"
+                },
+                "idleSwitchMode": {
+                    "description": "IdleSwitchMode: \"interval\" cycles the scene videos every\nIdleSwitchSeconds; \"random\" picks a random next video at a random\ninterval.",
+                    "type": "string"
+                },
+                "idleSwitchSeconds": {
+                    "type": "integer"
+                },
                 "subtitleBorder": {
                     "description": "stroke width in px (0 = none)",
                     "type": "integer"

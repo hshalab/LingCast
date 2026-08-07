@@ -29,23 +29,35 @@ const (
 const DefaultEdgeVoice = "zh-CN-XiaoxiaoNeural"
 
 // LiveSettings is the per-avatar live-streaming configuration persisted as a
-// JSON string on the avatar row (subtitles: on/off, font file, position,
-// border width and size). Unknown fields are ignored by both sides.
+// JSON string on the avatar row: subtitle rendering (on/off, font file,
+// position, border width and size) plus the idle-stream default videos
+// (selected scene, switch mode interval/random and the N-seconds interval).
+// Unknown fields are ignored by both sides.
 type LiveSettings struct {
 	SubtitleEnabled  bool   `json:"subtitleEnabled"`
 	SubtitleFont     string `json:"subtitleFont"`     // font filename in worker/fonts/, "" = system default
 	SubtitlePosition string `json:"subtitlePosition"` // "bottom" | "top"
 	SubtitleBorder   int    `json:"subtitleBorder"`   // stroke width in px (0 = none)
 	SubtitleSize     int    `json:"subtitleSize"`     // px
+	// IdleSceneID is the scene whose videos are pushed while the avatar is
+	// idle (0 = fall back to the default scene's default video only).
+	IdleSceneID uint `json:"idleSceneId,omitempty"`
+	// IdleSwitchMode: "interval" cycles the scene videos every
+	// IdleSwitchSeconds; "random" picks a random next video at a random
+	// interval.
+	IdleSwitchMode    string `json:"idleSwitchMode,omitempty"`
+	IdleSwitchSeconds int    `json:"idleSwitchSeconds,omitempty"`
 }
 
 // DefaultLiveSettings is applied when an avatar has no saved settings yet.
 func DefaultLiveSettings() LiveSettings {
 	return LiveSettings{
-		SubtitleEnabled:  true,
-		SubtitlePosition: "bottom",
-		SubtitleBorder:   2,
-		SubtitleSize:     46,
+		SubtitleEnabled:   true,
+		SubtitlePosition:  "bottom",
+		SubtitleBorder:    2,
+		SubtitleSize:      46,
+		IdleSwitchMode:    "interval",
+		IdleSwitchSeconds: 15,
 	}
 }
 
@@ -73,7 +85,7 @@ type Avatar struct {
 	Persona string `gorm:"type:text;not null;default:'{}'" json:"-"`
 	// VoiceID selects the Edge-TTS voice used for broadcast/live speech.
 	VoiceID string `gorm:"size:64;not null;default:zh-CN-XiaoxiaoNeural" json:"voiceId"`
-	Status         string  `gorm:"size:32;not null;default:initializing;index" json:"status"`
+	Status  string `gorm:"size:32;not null;default:initializing;index" json:"status"`
 	// LiveSettings holds the JSON-serialized models.LiveSettings.
 	LiveSettings string    `gorm:"type:text;not null;default:'{}'" json:"-"`
 	CreatedAt    time.Time `json:"createdAt"`
@@ -106,20 +118,20 @@ type SceneVideo struct {
 
 // BroadcastTask is an async synthesis task queued to the AI worker.
 type BroadcastTask struct {
-	ID               uint      `gorm:"primaryKey" json:"id"`
-	AvatarID         uint      `gorm:"not null;index" json:"avatarId"`
-	ScriptText       string    `gorm:"type:text;not null" json:"scriptText"`
-	Status           string    `gorm:"size:32;not null;default:pending;index" json:"status"`
+	ID         uint   `gorm:"primaryKey" json:"id"`
+	AvatarID   uint   `gorm:"not null;index" json:"avatarId"`
+	ScriptText string `gorm:"type:text;not null" json:"scriptText"`
+	Status     string `gorm:"size:32;not null;default:pending;index" json:"status"`
 	// Progress is the worker-reported percentage (0-100) while processing.
-	Progress         int       `gorm:"not null;default:0" json:"progress"`
+	Progress int `gorm:"not null;default:0" json:"progress"`
 	// Stage is the worker-reported pipeline step: tts | lipsync | mux.
-	Stage            string    `gorm:"size:16;not null;default:''" json:"stage,omitempty"`
+	Stage string `gorm:"size:16;not null;default:''" json:"stage,omitempty"`
 	// SceneID/SceneVideoID record which scene video the task used, so retries
 	// and the history table can show/show the right parameters.
-	SceneID          uint      `gorm:"not null;default:0" json:"sceneId"`
-	SceneVideoID     uint      `gorm:"not null;default:0" json:"sceneVideoId"`
+	SceneID      uint `gorm:"not null;default:0" json:"sceneId"`
+	SceneVideoID uint `gorm:"not null;default:0" json:"sceneVideoId"`
 	// VideoS3Key is the driving video used for this task (a scene video).
-	VideoS3Key       string    `gorm:"size:512;not null;default:''" json:"videoS3Key,omitempty"`
+	VideoS3Key string `gorm:"size:512;not null;default:''" json:"videoS3Key,omitempty"`
 	// TtsS3Key caches the synthesized TTS wav (S3) so a retry can reuse it.
 	TtsS3Key         *string   `gorm:"size:512" json:"ttsS3Key,omitempty"`
 	OutputVideoS3URL *string   `gorm:"size:1024" json:"outputVideoS3Url,omitempty"`
