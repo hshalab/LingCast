@@ -247,35 +247,55 @@ services:
       service-tts:
         condition: service_started
 
-  # ---- Docker mock worker: COMMENTED OUT ----
-  # The real AI worker runs natively on the host (AI_MODE=real) and shares the
-  # same Redis queue; keeping this mock service up makes it race the host
-  # worker and produce espeak male-voice/static-image results. Re-enable only
-  # for a demo without host models:
-  #
-  # worker:
-  #   build:
-  #     context: ./worker
-  #   restart: unless-stopped
-  #   environment:
-  #     REDIS_ADDR: redis:6379
-  #     REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-  #     REDIS_DB: "0"
-  #     TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks}
-  #     API_BASE_URL: http://api-scheduler:8083
-  #     S3_ENDPOINT: http://rustfs:9000
-  #     S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
-  #     S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
-  #     S3_BUCKET: ${S3_BUCKET:-talking-avatar}
-  #     S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
-  #     AI_MODE: ${AI_MODE:-mock}
-  #   depends_on:
-  #     api:
-  #       condition: service_started
-  #     redis:
-  #       condition: service_healthy
-  #     rustfs:
-  #       condition: service_healthy
+  worker:
+    build:
+      context: ./worker
+    restart: unless-stopped
+    ipc: host
+    security_opt:
+      - "seccomp:unconfined"
+    devices:
+      - "/dev/kfd:/dev/kfd"
+      - "/dev/dri:/dev/dri"
+    group_add:
+      - video
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    environment:
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "0"
+      TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks}
+      LIVE_CONTROL_QUEUE_KEY: ${LIVE_CONTROL_QUEUE_KEY:-talking_avatar:live_control}
+      AVATAR_INIT_QUEUE_KEY: ${AVATAR_INIT_QUEUE_KEY:-talking_avatar:avatar_init}
+      API_BASE_URL: http://api-scheduler:8083
+      S3_ENDPOINT: http://rustfs:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+      S3_BUCKET: ${S3_BUCKET:-talking-avatar}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
+      AI_MODE: real
+      LIVEPORTRAIT_HALF: "false"
+      WAV2LIP_PROVIDER: rocm
+      TTS_ENGINE: edge
+      MIOPEN_DISABLE_CACHE: "1"
+      MIOPEN_FIND_ENFORCE: "3"
+    volumes:
+      - ./worker/models:/app/models
+      - ./worker/external:/app/external
+      - ./worker/fonts:/app/fonts
+      - ${HOME}/.cache/torch:/root/.cache/torch
+      - ${HOME}/.cache/onnxruntime:/root/.cache/onnxruntime
+      - ${HOME}/.cache/miopen:/root/.cache/miopen
+    depends_on:
+      api-scheduler:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
 
   # Real-time streaming gateway (SRS v5). The host-native AI worker pushes
   # RTMP to 1935; HTTP-FLV/API stay on the internal network and are exposed

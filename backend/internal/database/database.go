@@ -381,10 +381,12 @@ func migrateScenes(db *gorm.DB) error {
 				S3Key string
 			}
 			var videos []legacyVideo
-			if err := tx.Raw(
-				`SELECT name, s3_key FROM avatar_videos WHERE avatar_id = ?`, r.ID,
-			).Scan(&videos).Error; err != nil {
-				return err
+			if tx.Migrator().HasTable("avatar_videos") {
+				if err := tx.Raw(
+					`SELECT name, s3_key FROM avatar_videos WHERE avatar_id = ?`, r.ID,
+				).Scan(&videos).Error; err != nil {
+					return err
+				}
 			}
 			for _, v := range videos {
 				if err := tx.Create(&models.SceneVideo{
