@@ -132,6 +132,11 @@
   机器人回复标注「命中知识库」并可展开查看命中的知识片段。
 - [x] **观众端用户中心**：`/account` 展示游客/账号身份，支持注册/登录/退出与
   「我的消息」（跨房间）；首页增加 Hero CTA、卡片悬停进入直播间、页脚账号入口。
+- [x] **Telegram Mini App 登录**：`frontend/telegram`（React + Vite + Tailwind +
+  `@twa-dev/sdk`，:3002）把 `WebApp.initData` 提交到 `POST /api/auth/telegram`
+  （api-user）；后端用 `TG_BOT_TOKEN` 做 HMAC-SHA-256 签名校验（24h 时效），
+  通过后按 `telegram_id` 自动注册/登录（HttpOnly cookie）。本地联调用根目录
+  `ngrok.yml` 双隧道（TMA + API 网关），`docker compose up ngrok` 即可。
 - [ ] **Mock 管线**（`AI_MODE=mock`）：轻量占位，供 Docker Worker 镜像演示。
 
 ## 界面截图

@@ -226,6 +226,12 @@ AMD GPUs using ROCm.
   推 `switch_scene` 控制消息带 `video_pool`）；worker 用 `_idle_lock` 原子替换
   闲置视频池（不打断 Watchdog），动作句按需 S3 加载（LRU 缓存）；观众端
   `SceneSwitcher` 胶囊条 + 切换反馈。
+- ✅ **Telegram Mini App 登录 + Ngrok 隧道**：`POST /api/auth/telegram`（api-user）
+  校验 `initData`（HMAC-SHA-256 + 24h 时效）并 upsert `chat_users`（按
+  `telegram_id`，非游客，HttpOnly `tg_uid` cookie）；`frontend/telegram` 用
+  `@twa-dev/sdk` 取 `WebApp.initData` 调该接口（`VITE_API_ORIGIN` 可指向 ngrok
+  api-gateway）；根 `ngrok.yml` 双隧道 + compose `ngrok` 服务，`TG_BOT_TOKEN`/
+  `NGROK_AUTHTOKEN`/`VITE_API_ORIGIN` 见 `.env.example`。
 
 ## Strict Rules for Execution
 

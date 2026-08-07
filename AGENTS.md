@@ -72,6 +72,20 @@
   默认）；Live Studio「字幕设置」与「默认推流视频」卡片保存后自动重启直播生效。
 - ✅ 管理端用户列表：`GET /api/users`（游客+账号，含消息数），侧边栏「用户相关 →
   用户列表」（/users）展示真实数据。
+- ✅ **Telegram Mini App 登录**：`POST /api/auth/telegram`（api-user）用
+  `TG_BOT_TOKEN` 校验 `initData`（HMAC-SHA-256：`secret=HMAC("WebAppData", token)`，
+  对除 `hash` 外按字典序的 `key=value` 串签名，24h 新鲜度检查），通过后按
+  `telegram_id` upsert `chat_users`（非游客，用户名优先 TG username、冲突回退
+  `tg_<id>`），设置 HttpOnly `tg_uid` cookie 并返回 `{userId,username,...}`；
+  `frontend/admin/nginx.conf` 单独把 `/api/auth/telegram` 路由到 api-user（TMA
+  走同一网关）。前端 `frontend/telegram` 初始化 `WebApp.ready()` 后把
+  `WebApp.initData` POST 到 `${VITE_API_ORIGIN}/api/auth/telegram`，含加载中/
+  成功/失败三态。
+- ✅ **Ngrok 本地联调**：根目录 `ngrok.yml` 双隧道（`tg-app`→宿主机 3002、
+  `api-gateway`→宿主机 8080）；compose 新增 `ngrok` 服务
+  （`ngrok/ngrok:latest`，`start --all`，4040 检查台，`host.docker.internal`
+  已映射 host-gateway）；`.env(.example)` 需填 `NGROK_AUTHTOKEN`/`TG_BOT_TOKEN`/
+  `VITE_API_ORIGIN`（TMA 构建期注入 api-gateway 的 https 地址）。
 - ✅ 国际化（中/英）：管理端（react-i18next，`frontend/admin/src/i18n/`）与观众端
   （`frontend/live/lib/i18n.tsx` 轻量 provider）均有语言切换（localStorage 记忆 +
   浏览器语言自动检测）；后端按 `Accept-Language` 本地化错误消息

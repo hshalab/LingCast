@@ -20,9 +20,12 @@ func RegisterUser(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 		cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel,
 		cfg.EmbedServerURL, cfg.TTSServiceURL,
 	)
+	tgAuthHandler := handlers.NewTelegramAuthHandler(deps.DB, cfg.TgBotToken)
 
 	api := r.Group("/api")
 	{
+		// Telegram Mini App login (initData HMAC validation, no passwords).
+		api.POST("/auth/telegram", tgAuthHandler.Login)
 		// Public avatar detail (viewer room page).
 		api.GET("/avatars/:id", avatarHandler.Get)
 		// Public scene list (audience scene switcher).

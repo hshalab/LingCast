@@ -7,6 +7,9 @@ COPY package.json pnpm-lock.yaml* ./
 RUN corepack enable && corepack prepare pnpm@10.25.0 --activate \
     && pnpm install --frozen-lockfile
 
+ARG VITE_API_ORIGIN=
+ENV VITE_API_ORIGIN=$VITE_API_ORIGIN
+
 COPY . .
 RUN pnpm build
 

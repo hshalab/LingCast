@@ -8,11 +8,11 @@ import (
 
 // Config aggregates all runtime configuration read from environment variables.
 type Config struct {
-	ServerPort string // legacy single-entry port (kept for tooling)
-	AdminPort  string
-	UserPort   string
+	ServerPort    string // legacy single-entry port (kept for tooling)
+	AdminPort     string
+	UserPort      string
 	SchedulerPort string
-	GinMode    string
+	GinMode       string
 
 	MySQLDSN string
 
@@ -29,6 +29,7 @@ type Config struct {
 	TTSServiceURL       string
 	AdminUsername       string
 	AdminPassword       string
+	TgBotToken          string
 
 	S3Endpoint      string
 	S3AccessKey     string
@@ -78,11 +79,11 @@ func splitCSV(s string) []string {
 // so the API can also be run locally against dockerized dependencies.
 func Load() Config {
 	return Config{
-		ServerPort: env("API_PORT", "8080"),
-		AdminPort:    env("API_ADMIN_PORT", "8081"),
-		UserPort:     env("API_USER_PORT", "8082"),
+		ServerPort:    env("API_PORT", "8080"),
+		AdminPort:     env("API_ADMIN_PORT", "8081"),
+		UserPort:      env("API_USER_PORT", "8082"),
 		SchedulerPort: env("API_SCHEDULER_PORT", "8083"),
-		GinMode:    env("GIN_MODE", "debug"),
+		GinMode:       env("GIN_MODE", "debug"),
 		MySQLDSN: env("MYSQL_DSN",
 			"talking:talking123@tcp(127.0.0.1:3306)/talking_avatar?charset=utf8mb4&parseTime=True&loc=Local"),
 
@@ -99,6 +100,7 @@ func Load() Config {
 		TTSServiceURL:       env("TTS_SERVICE_URL", "http://service-tts:8002"),
 		AdminUsername:       env("ADMIN_USERNAME", "admin"),
 		AdminPassword:       env("ADMIN_PASSWORD", "admin123"),
+		TgBotToken:          os.Getenv("TG_BOT_TOKEN"),
 
 		S3Endpoint:      env("S3_ENDPOINT", "http://127.0.0.1:9000"),
 		S3AccessKey:     env("S3_ACCESS_KEY", "rustfsadmin"),

@@ -150,6 +150,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.deepseek.com}
       OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-flash}
+      TG_BOT_TOKEN: ${TG_BOT_TOKEN:-}
       EMBED_SERVER_URL: ${EMBED_SERVER_URL:-http://service-rag:8001}
       TTS_SERVICE_URL: ${TTS_SERVICE_URL:-http://service-tts:8002}
       S3_ENDPOINT: http://rustfs:9000
@@ -324,9 +325,26 @@ services:
   frontend-tg:
     build:
       context: ./frontend/telegram
+      args:
+        VITE_API_ORIGIN: ${VITE_API_ORIGIN:-}
     restart: unless-stopped
     ports:
       - "${TG_PORT:-3002}:80"
+
+  # Ngrok tunnels: expose the TG Mini App (:3002) and the API gateway (:8080)
+  # with public HTTPS URLs so Telegram WebApp can reach local services.
+  ngrok:
+    image: ngrok/ngrok:latest
+    command: start --all --config /etc/ngrok.yml
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+    volumes:
+      - ./ngrok.yml:/etc/ngrok.yml
+    ports:
+      - "4040:4040"   # ngrok web inspector
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
 
 volumes:
   srs-data:

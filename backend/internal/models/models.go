@@ -159,11 +159,14 @@ type LiveSession struct {
 // password; registering upgrades the guest row (same ID -> history kept),
 // logging in merges the guest's messages into the existing account.
 type ChatUser struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	Username     string    `gorm:"size:64;not null;uniqueIndex" json:"username"`
-	PasswordHash string    `gorm:"size:255" json:"-"`
-	IsGuest      bool      `gorm:"not null;default:true;index" json:"isGuest"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID           uint   `gorm:"primaryKey" json:"id"`
+	Username     string `gorm:"size:64;not null;uniqueIndex" json:"username"`
+	PasswordHash string `gorm:"size:255" json:"-"`
+	IsGuest      bool   `gorm:"not null;default:true;index" json:"isGuest"`
+	// TelegramID is the validated Telegram user id for TMA logins (NULL for
+	// web/guest identities); unique index allows many NULLs in MariaDB.
+	TelegramID *int64    `gorm:"uniqueIndex" json:"telegramId,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 // ChatMessage is one persisted line of a room chat: a viewer message or the

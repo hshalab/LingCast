@@ -1,0 +1,10 @@
+version: 3
+agent:
+  authtoken: ${NGROK_AUTHTOKEN}
+tunnels:
+  tg-app:
+    proto: http
+    addr: host.docker.internal:3002
+  api-gateway:
+    proto: http
+    addr: host.docker.internal:8080

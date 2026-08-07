@@ -164,6 +164,11 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
 - [x] **Audience account center**: `/account` shows the viewer identity
   (guest/account), register / login / logout, and "my messages" across rooms;
   the home page got a hero CTA, card hover overlays and a footer account link.
+- [x] **Telegram Mini App login**: `frontend/telegram` (React + Vite + Tailwind +
+  `@twa-dev/sdk`, :3002) sends `WebApp.initData` to `POST /api/auth/telegram`
+  (api-user); the backend validates the HMAC-SHA-256 signature against
+  `TG_BOT_TOKEN` (24h freshness) and upserts a chat identity (HttpOnly cookie).
+  Local testing: `ngrok.yml` exposes the TMA and API gateway, `docker compose up ngrok`.
 - [ ] **Mock pipeline** (`AI_MODE=mock`): lightweight placeholder for Docker Worker image demos.
 
 ## Screenshots
