@@ -16,7 +16,8 @@ COPY pyproject.toml uv.lock ./
 # installed in the rocm base image, instead of uninstalling it.
 # (As specified in AGENTS.md dependencies section)
 ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
-RUN uv sync --frozen --no-dev --inexact --all-groups --no-group cuda
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --inexact --all-groups --no-group cuda
 
 COPY . .
 
