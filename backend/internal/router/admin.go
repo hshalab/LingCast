@@ -39,7 +39,7 @@ func RegisterAdmin(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 		// ---- Protected: admin-only operations ----
 		protected := api.Group("", adminHandler.RequireAdmin())
 		{
-			protected.POST("/tts/preview", handlers.PreviewTTS)
+			protected.POST("/tts/preview", handlers.PreviewTTS(cfg.TTSServiceURL))
 			protected.POST("/avatars", avatarHandler.Create)
 			protected.GET("/avatars", avatarHandler.List)
 			protected.PUT("/avatars/:id", avatarHandler.Update)

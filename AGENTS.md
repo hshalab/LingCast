@@ -140,6 +140,10 @@
   - ⚠️ 旧 `worker/rag_worker.py`（bge 向量 + RediSearch）已删除，相关依赖
     （pymupdf / sentence-transformers）已从 `worker/pyproject.toml` 移除；
     `redis/redis-stack-server` 已回退为 `redis:8.2.2-alpine`。
+- ✅ TTS 试听走微服务：`POST /api/tts/preview` 由 api-admin 代理到
+  `tts-service` 的 `/v1/tts/preview`（一次性试听，直接返回音频字节、不走
+  S3）；`backend/Dockerfile` 不再捆绑 python3 / edge-tts，正式合成仍走
+  `/v1/tts/synthesize` → S3 共享存储。
 - ⬜ Mock 管线（`AI_MODE=mock`，Docker Worker 镜像默认）仅为占位/轻量演示。
 - ✅ 客户端用户中心：`frontend-user/app/account/page.tsx`（`/account`）身份卡 +
   注册/登录/退出 + 「我的消息」（`GET /api/chat/history?userId=`）；导航身份

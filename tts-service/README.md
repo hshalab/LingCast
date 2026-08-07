@@ -35,6 +35,12 @@ curl http://localhost:8002/healthz
 curl -X POST http://localhost:8002/v1/tts/synthesize \
   -H 'Content-Type: application/json' \
   -d '{"text": "你好，欢迎来到直播间！", "voiceId": "zh-CN-XiaoxiaoNeural"}'
+
+# 试听（一次性临时数据）：直接返回 MP3 字节，不走 S3
+curl -X POST http://localhost:8002/v1/tts/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"text": "你好，我是你的数字人助理", "voiceId": "zh-CN-XiaoxiaoNeural"}' \
+  --output /tmp/preview.mp3
 ```
 
 响应（仅 S3 key + 元数据）：

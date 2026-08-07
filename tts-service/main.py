@@ -30,7 +30,7 @@ from pathlib import Path
 import boto3
 import edge_tts
 from botocore.client import Config
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger("tts-service")
@@ -226,4 +226,29 @@ async def synthesize(req: SynthesizeRequest) -> dict:
         ) from exc
     finally:
         # The container disk must never fill up with temp audio.
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+@app.post("/v1/tts/preview")
+async def preview(req: SynthesizeRequest) -> Response:
+    """Synthesize a short audition sample and return the audio bytes directly.
+
+    Unlike `/v1/tts/synthesize` this does NOT touch S3: the preview is a
+    one-shot, throwaway sample (the admin console plays it once and discards
+    it), so uploading it to shared storage would only add round-trips and
+    leave orphan objects. Temp files are always removed.
+    """
+    workdir = Path(tempfile.mkdtemp(prefix="tts-preview-"))
+    mp3_path = workdir / "preview.mp3"
+    try:
+        await _generate_mp3(req.text, req.voiceId, mp3_path)
+        data = mp3_path.read_bytes()
+        logger.info("preview voice=%s bytes=%d", req.voiceId, len(data))
+        return Response(content=data, media_type="audio/mpeg")
+    except Exception as exc:
+        logger.exception("preview failed")
+        raise HTTPException(
+            status_code=500, detail=f"tts preview failed: {exc}"
+        ) from exc
+    finally:
         shutil.rmtree(workdir, ignore_errors=True)

@@ -3,8 +3,9 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -18,48 +19,68 @@ type previewTTSRequest struct {
 	Text    string `json:"text"`
 }
 
-// PreviewTTS handles POST /api/tts/preview. It synthesizes a short sample
-// with the selected Edge-TTS voice (via the bundled `python3 -m edge_tts`
-// CLI in the API image) and returns MP3 bytes so the frontend can audition
-// voices before creating an avatar.
-func PreviewTTS(c *gin.Context) {
-	var req previewTTSRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_body", err.Error())})
-		return
-	}
-	voiceID := strings.TrimSpace(req.VoiceID)
-	text := strings.TrimSpace(req.Text)
-	if voiceID == "" || text == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.tts.fields_required")})
-		return
-	}
-	if len([]rune(text)) > 200 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.tts.text_too_long")})
-		return
-	}
+// PreviewTTS returns the gin handler for POST /api/tts/preview. Voice
+// audition is delegated to the tts-service microservice over HTTP — the API
+// image no longer bundles python3 / edge-tts. The preview is a one-shot
+// throwaway sample, so the service streams the bytes back directly (no S3).
+func PreviewTTS(serviceURL string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req previewTTSRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_body", err.Error())})
+			return
+		}
+		voiceID := strings.TrimSpace(req.VoiceID)
+		text := strings.TrimSpace(req.Text)
+		if voiceID == "" || text == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.tts.fields_required")})
+			return
+		}
+		if len([]rune(text)) > 200 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.tts.text_too_long")})
+			return
+		}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(
-		ctx,
-		"python3", "-m", "edge_tts",
-		"--voice", voiceID,
-		"--text", text,
-		"--write-media", "-",
-	)
-	var out, errBuf bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error": i18n.Tcf(c, "err.tts.preview_failed", strings.TrimSpace(errBuf.String())),
-		})
-		return
+		body, err := json.Marshal(map[string]string{"voiceId": voiceID, "text": text})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+		defer cancel()
+		url := strings.TrimRight(serviceURL, "/") + "/v1/tts/preview"
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error": i18n.Tcf(c, "err.tts.preview_failed", err.Error()),
+			})
+			return
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error": i18n.Tcf(c, "err.tts.preview_failed", err.Error()),
+			})
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error": i18n.Tcf(c, "err.tts.preview_failed", strings.TrimSpace(string(msg))),
+			})
+			return
+		}
+
+		data, err := io.ReadAll(resp.Body)
+		if err != nil || len(data) == 0 {
+			c.JSON(http.StatusBadGateway, gin.H{"error": i18n.Tc(c, "err.tts.empty_audio")})
+			return
+		}
+		c.Data(http.StatusOK, "audio/mpeg", data)
 	}
-	if out.Len() == 0 {
-		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.Tc(c, "err.tts.empty_audio")})
-		return
-	}
-	c.Data(http.StatusOK, "audio/mpeg", out.Bytes())
 }

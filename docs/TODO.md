@@ -178,9 +178,10 @@ AMD GPUs using ROCm.
 - [x] **端口收敛**：宿主机不调试，SRS 只发布 1935（RTMP 推流），1985/8081
   收回内网；`api`/`rag-service`/`tts-service` 均不发布端口；对外仅
   3000/8080/1935/6379/9000。
-- [ ] **TTS 试听接口重构（后效优化）**：将 `backend/internal/handlers/tts.go` 中的
-  `POST /api/tts/preview` 音色试听改为直接 HTTP 调用 `tts-service` 微服务，彻底从
-  `backend/Dockerfile` 中移除 `python3` / `edge-tts` 依赖，降低后端镜像体积。
+- [x] **TTS 试听接口重构（后效优化）**：`POST /api/tts/preview` 音色试听已改为
+  直接 HTTP 调用 `tts-service` 微服务的 `/v1/tts/preview`（试听为一次性临时
+  数据，直接返回字节、不走 S3）；`backend/Dockerfile` 已移除 `python3` /
+  `edge-tts` 依赖，后端镜像不再捆绑 Python。
 
 ## Strict Rules for Execution
 
