@@ -5,7 +5,7 @@ RUN pip install --no-cache-dir uv==0.12.1
 
 # Install required system packages
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg espeak-ng \
+    && apt-get install -y --no-install-recommends ffmpeg espeak-ng libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
