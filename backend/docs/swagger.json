@@ -1205,6 +1205,48 @@
                 }
             }
         },
+        "/live/session/{avatarID}/scene": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "live"
+                ],
+                "summary": "Switch the active scene of a live session",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Avatar (session) ID",
+                        "name": "avatarID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "scene_id",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/live/{avatarID}/message": {
             "post": {
                 "consumes": [

@@ -84,6 +84,9 @@ const zh = {
     chatEmpty: '还没有消息，说点什么吧',
     sendFailed: '发送失败',
     system: '系统',
+    switching: '切换中…',
+    sceneSwitched: '场景已切换',
+    sceneSwitchFailed: '场景切换失败，请重试',
   },
   auth: {
     registerTitle: '注册账号',
@@ -187,6 +190,9 @@ const en: typeof zh = {
     chatEmpty: 'No messages yet — say something!',
     sendFailed: 'Failed to send',
     system: 'System',
+    switching: 'Switching…',
+    sceneSwitched: 'Scene switched',
+    sceneSwitchFailed: 'Failed to switch scene, please retry',
   },
   auth: {
     registerTitle: 'Create account',

@@ -66,27 +66,36 @@ logger = logging.getLogger("stream_worker")
 PACING_BUSY_TAIL = 0.004
 
 
-def parse_live_message(raw: str) -> tuple[str, str | None]:
-    """Parse one live_queue entry into (text, tts_s3_key).
+def _read_video_frames(path):
+    """Read every frame of a driving video (lazy import keeps startup light)."""
+    from ai.lipsync_onnx import Wav2LipOnnxLipSync
+
+    return Wav2LipOnnxLipSync._read_frames(path)
+
+
+def parse_live_message(raw: str) -> tuple[str, str | None, str | None]:
+    """Parse one live_queue entry into (text, tts_s3_key, base_video_s3_key).
 
     The queue carries plain-text sentences (the legacy/current producer) or
     JSON messages from the S3-shared-storage architecture:
         {"text": "...", "tts_s3_key": "tts/xxx.wav", "base_video_s3_key": "..."}
-    The `base_video_s3_key` is ignored here — the live session already owns
-    its base clip; only the TTS key (optional) is acted upon.
+    The optional `base_video_s3_key` selects a specific action video to
+    lip-sync THIS sentence against (agentic action selection); when absent the
+    session falls back to the currently displayed idle clip.
     """
     raw = (raw or "").strip()
     if not raw:
-        return "", None
+        return "", None, None
     try:
         obj = json.loads(raw)
         if isinstance(obj, dict):
             text = str(obj.get("text") or obj.get("content") or "")
             tts_key = str(obj.get("tts_s3_key") or "").strip() or None
-            return text, tts_key
+            base_key = str(obj.get("base_video_s3_key") or "").strip() or None
+            return text, tts_key, base_key
     except (json.JSONDecodeError, TypeError):
         pass
-    return raw, None
+    return raw, None, None
 
 
 class _TalkingSegment:
@@ -126,6 +135,7 @@ class LiveAvatarSession:
         queue_key: str,
         subtitle_settings: dict | None = None,
         storage: S3Storage | None = None,
+        idle_video_keys: list[str] | None = None,
         idle_video_paths: list[Path] | None = None,
         idle_switch_mode: str = "interval",
         idle_switch_seconds: int = 15,
@@ -140,6 +150,7 @@ class LiveAvatarSession:
         self.queue_key = queue_key
         self.subtitle_settings = subtitle_settings or {}
         self.storage = storage
+        self.idle_video_keys = idle_video_keys or []
         self.idle_video_paths = idle_video_paths or []
         self.idle_switch_mode = idle_switch_mode or "interval"
         self.idle_switch_seconds = max(1, int(idle_switch_seconds or 15))
@@ -149,6 +160,14 @@ class LiveAvatarSession:
         # avatar is not talking; the worker switches between them (interval or
         # random) so the default stream picture is not a single fixed loop.
         self.idle_clips: list[list] = []
+        # S3 key of each idle clip, parallel to idle_clips (used to reuse an
+        # already-loaded clip as a per-sentence action video).
+        self._idle_clip_keys: list[str] = []
+        # Guards idle-clip state (list, current index/position) shared between
+        # the watchdog writer and the scene-switch/action producers.
+        self._idle_lock = threading.Lock()
+        # Per-sentence action videos (S3 key -> frames), bounded LRU cache.
+        self._action_clips: dict[str, list] = {}
         self._idle_clip_idx = 0
         self._idle_frame_idx = 0
         self._idle_elapsed_frames = 0
@@ -157,6 +176,7 @@ class LiveAvatarSession:
         # ended inside that clip), so idle resumes seamlessly on speech end.
         self._talk_base_clip = 0
         self._talk_base_end = 0
+        self._talk_is_action = False
         self.lipsync = None
         self.tts = None
         self.ready = False
@@ -205,17 +225,19 @@ class LiveAvatarSession:
         if self.enhancer is not None:
             self.lipsync.enhancer = self.enhancer
             logger.info("live pipeline face enhancer: %s", self.enhancer.kind)
-        self.base_frames, base_fps = Wav2LipOnnxLipSync._read_frames(self.base_video_path)
+        self.base_frames, base_fps = _read_video_frames(self.base_video_path)
         # Idle clips: the base video plus any additional scene videos of the
         # configured idle scene. Clips must match the base resolution so the
         # same ffmpeg pipe can play them all; mismatched ones are skipped.
         self.idle_clips = [self.base_frames]
-        for p in self.idle_video_paths:
+        self._idle_clip_keys = [self.idle_video_keys[0]] if self.idle_video_keys else [""]
+        # keys[1:] align 1:1 with idle_video_paths (the extra scene videos).
+        for key, p in zip(self.idle_video_keys[1:], self.idle_video_paths):
             try:
                 if not p.exists():
                     logger.warning("idle video not found: %s", p)
                     continue
-                frames, _ = Wav2LipOnnxLipSync._read_frames(p)
+                frames, _ = _read_video_frames(p)
                 if not frames:
                     continue
                 if frames[0].shape[:2] != self.base_frames[0].shape[:2]:
@@ -227,6 +249,7 @@ class LiveAvatarSession:
                     )
                     continue
                 self.idle_clips.append(frames)
+                self._idle_clip_keys.append(key)
             except Exception:
                 logger.exception("failed to load idle video %s", p)
         if len(self.idle_clips) > 1:
@@ -273,20 +296,30 @@ class LiveAvatarSession:
     # ------------------------------------------------------------------ #
     # Text intake (async TTS)
     # ------------------------------------------------------------------ #
-    def maybe_start_tts(self, text: str, tts_s3_key: str | None = None) -> bool:
+    def maybe_start_tts(
+        self,
+        text: str,
+        tts_s3_key: str | None = None,
+        base_video_key: str | None = None,
+    ) -> bool:
         """Kick off a producer-side TTS job (synthesize or S3 download)."""
         if self._tts_thread is not None and self._tts_thread.is_alive():
             return False
         self._tts_thread = threading.Thread(
             target=self._run_tts,
-            args=(text, tts_s3_key),
+            args=(text, tts_s3_key, base_video_key),
             daemon=True,
             name=f"tts-{self.stream_id}",
         )
         self._tts_thread.start()
         return True
 
-    def _run_tts(self, text: str, tts_s3_key: str | None = None) -> None:
+    def _run_tts(
+        self,
+        text: str,
+        tts_s3_key: str | None = None,
+        base_video_key: str | None = None,
+    ) -> None:
         """Synthesize locally or download a shared TTS wav from S3.
 
         Runs on the TTS thread (producer side) so the network I/O can never
@@ -323,10 +356,10 @@ class LiveAvatarSession:
                 )
             wav = out
             logger.info("avatar %s TTS ready (%.1fs): %s", self.avatar_id, _wav_duration(wav), text)
-            self._tts_results.put((text, wav))
+            self._tts_results.put((text, wav, base_video_key))
         except Exception:
             logger.exception("avatar %s TTS failed for: %s", self.avatar_id, text)
-            self._tts_results.put((text, None))
+            self._tts_results.put((text, None, base_video_key))
 
     def _get_tts(self):
         if self.tts is None:
@@ -437,10 +470,12 @@ class LiveAvatarSession:
                         self._subtitle_text = ""
                         # Resume idle from the clip that was actually speaking
                         # (mouth moves on the same video that was on screen),
-                        # continuing where the talking loop left off.
-                        self._idle_clip_idx = self._talk_base_clip
-                        self._idle_frame_idx = self._talk_base_end
-                        self._idle_elapsed_frames = 0
+                        # continuing where the talking loop left off. Action
+                        # sentences leave the idle pool untouched.
+                        if not self._talk_is_action:
+                            self._idle_clip_idx = self._talk_base_clip
+                            self._idle_frame_idx = self._talk_base_end
+                            self._idle_elapsed_frames = 0
                 else:
                     # Idle fallback: base animation + silence, never blocking.
                     idle_count += 1
@@ -492,18 +527,23 @@ class LiveAvatarSession:
                 self.pipe.stop()
 
     def _idle_frame(self):
-        clips = self.idle_clips or [self.base_frames]
-        clip = clips[self._idle_clip_idx % len(clips)]
-        frame = clip[self._idle_frame_idx % len(clip)]
-        self._idle_frame_idx += 1
-        self._idle_elapsed_frames += 1
-        if len(clips) > 1 and self._idle_elapsed_frames >= self._idle_switch_frames:
-            self._switch_idle_clip()
+        with self._idle_lock:
+            clips = self.idle_clips or [self.base_frames]
+            clip = clips[self._idle_clip_idx % len(clips)]
+            frame = clip[self._idle_frame_idx % len(clip)]
+            self._idle_frame_idx += 1
+            self._idle_elapsed_frames += 1
+            if (
+                len(clips) > 1
+                and self._idle_elapsed_frames >= self._idle_switch_frames
+            ):
+                self._switch_idle_clip()
         return frame
 
     def _switch_idle_clip(self) -> None:
         """Switch to the next (interval) or a random (random) idle clip and
-        schedule the next switch: fixed N seconds, or a random 5-30s window."""
+        schedule the next switch: fixed N seconds, or a random 5-30s window.
+        Caller must hold `self._idle_lock`."""
         n = len(self.idle_clips)
         if n <= 1:
             self._idle_elapsed_frames = 0
@@ -571,14 +611,14 @@ class LiveAvatarSession:
         ) and not self._pending.full():
             raw = r.lpop(self.queue_key)
             if raw:
-                text, tts_s3_key = parse_live_message(raw)
+                text, tts_s3_key, base_video_key = parse_live_message(raw)
                 if text or tts_s3_key:
-                    self.maybe_start_tts(text, tts_s3_key)
+                    self.maybe_start_tts(text, tts_s3_key, base_video_key)
 
         # 2) Move finished TTS results into the producer's pending queue.
         try:
-            text, wav = self._tts_results.get_nowait()
-            self._pending.put((text, wav))
+            text, wav, base_video_key = self._tts_results.get_nowait()
+            self._pending.put((text, wav, base_video_key))
         except queue_mod.Empty:
             pass
 
@@ -586,10 +626,10 @@ class LiveAvatarSession:
         if (
             self._produce_thread is None or not self._produce_thread.is_alive()
         ) and not self._pending.empty():
-            text, wav = self._pending.get_nowait()
+            text, wav, base_video_key = self._pending.get_nowait()
             self._produce_thread = threading.Thread(
                 target=self._produce_segment,
-                args=(text, wav),
+                args=(text, wav, base_video_key),
                 daemon=True,
                 name=f"produce-{self.stream_id}",
             )
@@ -629,7 +669,7 @@ class LiveAvatarSession:
     # ------------------------------------------------------------------ #
     # Inference producer (async; Wav2Lip in small batches)
     # ------------------------------------------------------------------ #
-    def _produce_segment(self, text: str, wav) -> None:
+    def _produce_segment(self, text: str, wav, base_video_key: str | None = None) -> None:
         """Lip-sync `wav` in small batches and push frames to the writer queue.
 
         Runs on its own thread so it never blocks the 24fps writer. The segment
@@ -647,7 +687,10 @@ class LiveAvatarSession:
             n_frames = len(self.lipsync._mel_chunks(wav, self.fps))
             seg = _TalkingSegment(text, audio, n_frames)
             self._talk_queue.put(("seg", seg))
-            base_slice, _ = self._slice_current_idle(n_frames)
+            if base_video_key:
+                base_slice = self._action_slice(base_video_key, n_frames)
+            else:
+                base_slice, _ = self._slice_current_idle(n_frames)
             pre_ms = (time.perf_counter() - t_pre) * 1000.0
             logger.info(
                 "[PRODUCER] avatar %s preprocessing took %.1fms "
@@ -745,14 +788,128 @@ class LiveAvatarSession:
         """Slice the clip that is currently on screen (the idle clip the
         writer is pushing right now) as the Wav2Lip base, so the mouth moves
         on the same video the viewer sees — not always the default clip."""
-        clips = self.idle_clips or [self.base_frames]
-        idx = self._idle_clip_idx % len(clips)
-        clip = clips[idx]
-        start = self._idle_frame_idx % len(clip)
-        seg = [clip[(start + k) % len(clip)] for k in range(n)]
-        self._talk_base_clip = idx
-        self._talk_base_end = (start + n) % len(clip)
+        with self._idle_lock:
+            clips = self.idle_clips or [self.base_frames]
+            idx = self._idle_clip_idx % len(clips)
+            clip = clips[idx]
+            start = self._idle_frame_idx % len(clip)
+            seg = [clip[(start + k) % len(clip)] for k in range(n)]
+            self._talk_base_clip = idx
+            self._talk_base_end = (start + n) % len(clip)
+        self._talk_is_action = False
         return seg, idx
+
+    def _action_slice(self, base_key: str, n: int) -> list:
+        """Slice a specific action video (agentic <action:key> selection) as
+        the Wav2Lip base for ONE sentence. The idle pool is left untouched —
+        when the sentence ends the writer resumes the clip that was showing."""
+        clip = self._load_action_frames(base_key)
+        if clip is None:
+            logger.warning(
+                "avatar %s action video unavailable (%s); falling back to idle clip",
+                self.avatar_id,
+                base_key,
+            )
+            seg, _ = self._slice_current_idle(n)
+            return seg
+        seg = [clip[k % len(clip)] for k in range(n)]
+        self._talk_is_action = True
+        return seg
+
+    def _load_action_frames(self, base_key: str) -> list | None:
+        """Return pre-loaded frames for an action video, reusing an already
+        loaded idle clip or a cached action clip; otherwise download + read
+        (bounded LRU cache, resolution must match the base clip)."""
+        # Reuse an idle clip that is already in memory (same S3 key).
+        with self._idle_lock:
+            for key, clip in zip(self._idle_clip_keys, self.idle_clips):
+                if key == base_key:
+                    return clip
+        cached = self._action_clips.get(base_key)
+        if cached is not None:
+            return cached
+        if self.storage is None:
+            return None
+        try:
+            path = self.work_dir / f"action_{abs(hash(base_key))}.mp4"
+            self.storage.download(base_key, path)
+            frames, _ = _read_video_frames(path)
+            if not frames:
+                return None
+            with self._idle_lock:
+                base_shape = (self.base_frames or self.idle_clips[0])[0].shape[:2]
+            if frames[0].shape[:2] != base_shape:
+                logger.warning(
+                    "skip action video %s: shape %s != base shape %s",
+                    base_key,
+                    frames[0].shape[:2],
+                    base_shape,
+                )
+                return None
+            # Bound the cache (keep the 4 most recent action videos).
+            self._action_clips[base_key] = frames
+            if len(self._action_clips) > 4:
+                self._action_clips.pop(next(iter(self._action_clips)))
+            logger.info(
+                "avatar %s action video loaded: %s (%d frames)",
+                self.avatar_id,
+                base_key,
+                len(frames),
+            )
+            return frames
+        except Exception:
+            logger.exception("failed to load action video %s", base_key)
+            return None
+
+    def switch_idle_pool(self, keys: list[str]) -> None:
+        """Swap the Watchdog's idle video pool (scene switch). Downloads the
+        new videos first, then atomically replaces the in-memory clip list
+        under `_idle_lock` so the writer never sees a half-updated pool."""
+        if not keys:
+            logger.warning("avatar %s switch_scene got an empty video pool", self.avatar_id)
+            return
+        if self.storage is None:
+            logger.error("avatar %s cannot switch scene: no S3 storage", self.avatar_id)
+            return
+        new_clips: list[list] = []
+        new_keys: list[str] = []
+        for i, key in enumerate(keys):
+            try:
+                path = self.work_dir / f"idle_switch_{i}.mp4"
+                self.storage.download(key, path)
+                frames, _ = _read_video_frames(path)
+                if not frames:
+                    continue
+                with self._idle_lock:
+                    base_shape = (self.base_frames or self.idle_clips[0])[0].shape[:2]
+                if frames[0].shape[:2] != base_shape:
+                    logger.warning(
+                        "skip switch video %s: shape %s != base shape %s",
+                        key,
+                        frames[0].shape[:2],
+                        base_shape,
+                    )
+                    continue
+                new_clips.append(frames)
+                new_keys.append(key)
+            except Exception:
+                logger.exception("failed to download scene-switch video %s", key)
+        if not new_clips:
+            logger.error("avatar %s switch_scene produced no usable videos", self.avatar_id)
+            return
+        with self._idle_lock:
+            self.idle_clips = new_clips
+            self._idle_clip_keys = new_keys
+            self._idle_clip_idx = 0
+            self._idle_frame_idx = 0
+            self._idle_elapsed_frames = 0
+            self._idle_switch_frames = max(1, int(self.idle_switch_seconds * self.fps))
+        logger.info(
+            "avatar %s idle pool switched to %d video(s): %s",
+            self.avatar_id,
+            len(new_clips),
+            new_keys,
+        )
 
     def close(self) -> None:
         self._running = False
@@ -806,6 +963,24 @@ def _control_listener(
             action = payload.get("action")
             avatar_id = int(payload.get("avatarId"))
             stream_id = payload.get("streamId") or f"avatar_{avatar_id}"
+
+            # Agentic scene switch: swap a running session's idle video pool.
+            if payload.get("type") == "control" and action == "switch_scene":
+                session = sessions.get(avatar_id)
+                if session is None:
+                    logger.info(
+                        "avatar %s switch_scene ignored (session not running)",
+                        avatar_id,
+                    )
+                    continue
+                video_pool = payload.get("video_pool") or []
+                threading.Thread(
+                    target=session.switch_idle_pool,
+                    args=(video_pool,),
+                    daemon=True,
+                    name=f"switch-{stream_id}",
+                ).start()
+                continue
 
             if action == "stop":
                 session = sessions.pop(avatar_id, None)
@@ -875,6 +1050,7 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> 
             idle_video_paths=idle_paths,
             idle_switch_mode=payload.get("idleSwitchMode") or "interval",
             idle_switch_seconds=int(payload.get("idleSwitchSeconds") or 15),
+            idle_video_keys=idle_keys,
         )
         session.setup()
         sessions[avatar_id] = session

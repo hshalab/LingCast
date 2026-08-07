@@ -6,13 +6,17 @@ import { ArrowLeft, Bot, Heart, Tv } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import NavHeader from '@/components/nav-header'
 import XgFlvPlayer from '@/components/xg-player'
+import SceneSwitcher from '@/components/scene-switcher'
 import {
   fetchAvatar,
   fetchChatHistory,
   getLiveStatus,
+  listAvatarScenes,
   sendMessage,
+  switchLiveScene,
   type Avatar,
   type ChatMessage,
+  type Scene,
 } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { useIdentity } from '@/lib/identity'
@@ -46,6 +50,10 @@ export default function RoomPage() {
   const [started, setStarted] = useState(false)
   const { identity } = useIdentity()
   const [avatar, setAvatar] = useState<Avatar | null>(null)
+  const [scenes, setScenes] = useState<Scene[]>([])
+  const [activeSceneId, setActiveSceneId] = useState(0)
+  const [switchingSceneId, setSwitchingSceneId] = useState<number | null>(null)
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -59,6 +67,24 @@ export default function RoomPage() {
 
   const colorFor = (uid: number) => AVATAR_COLORS[Math.abs(uid) % AVATAR_COLORS.length]
   const initialFor = (name: string) => name.trim().slice(0, 1).toUpperCase() || '?'
+  const showToast = (msg: string) => {
+    setToastMsg(msg)
+    window.setTimeout(() => setToastMsg(null), 2500)
+  }
+
+  const handleSceneSwitch = async (sceneId: number) => {
+    if (!id || switchingSceneId !== null || sceneId === activeSceneId) return
+    setSwitchingSceneId(sceneId)
+    try {
+      await switchLiveScene(id, sceneId)
+      setActiveSceneId(sceneId)
+      showToast(t('room.sceneSwitched'))
+    } catch {
+      showToast(t('room.sceneSwitchFailed'))
+    } finally {
+      setSwitchingSceneId(null)
+    }
+  }
   const like = () => {
     const hid = ++likeId.current
     const x = 15 + Math.random() * 70
@@ -71,8 +97,19 @@ export default function RoomPage() {
   useEffect(() => {
     if (!id) return
     fetchAvatar(id)
-      .then(setAvatar)
+      .then((data) => {
+        setAvatar(data)
+        setActiveSceneId(data.liveSettings?.idleSceneId ?? 0)
+      })
       .catch(() => setAvatar(null))
+  }, [id])
+
+  // Available scenes for the audience scene switcher.
+  useEffect(() => {
+    if (!id) return
+    listAvatarScenes(id)
+      .then(({ data }) => setScenes(data))
+      .catch(() => setScenes([]))
   }, [id])
 
   // Poll the session status; the player mounts once the stream is live.
@@ -398,6 +435,21 @@ export default function RoomPage() {
                 </button>
               </div>
             </div>
+
+            {/* 场景切换：可横向滚动的胶囊条，覆盖在画面上 */}
+            <SceneSwitcher
+              scenes={scenes}
+              activeSceneId={activeSceneId}
+              switchingSceneId={switchingSceneId}
+              onSwitch={(sceneId) => void handleSceneSwitch(sceneId)}
+            />
+
+            {/* 场景切换结果提示 */}
+            {toastMsg && (
+              <div className='absolute left-1/2 top-16 z-40 -translate-x-1/2 rounded-full bg-black/75 px-4 py-1.5 text-xs text-white backdrop-blur'>
+                {toastMsg}
+              </div>
+            )}
           </div>
 
           {/* 右：聊天面板，固定 400 宽 */}

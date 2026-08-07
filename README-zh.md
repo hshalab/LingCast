@@ -76,6 +76,11 @@
   持久化在 `live_settings`（`idleSceneId/idleSwitchMode/idleSwitchSeconds`）。
   说话时 Wav2Lip 基于**当前正在显示的那段视频**做口型（不再固定默认视频），说完从
   该视频衔接处继续。
+- [x] **Agentic 场景/动作视频（1v1）**：DeepSeek 提示词注入当前场景的全部动作视频
+  （S3 Key + 描述），机器人可在句首用 `<action:S3_KEY>` 为该句指定动作画面（标签
+  不出现在文字/字幕/聊天记录里）；观众端直播间画面底部新增 `SceneSwitcher` 胶囊条，
+  点击即可切换数字人的活跃场景（`PUT /api/live/session/:id/scene`），worker 热替换
+  闲置视频池，不打断 24fps Watchdog。
 - [x] **管理端用户列表**：侧边栏「用户相关 → 用户列表」展示全部聊天用户
   （游客/账号 + 消息数），数据来自 `GET /api/users`。
 - [x] **亮/暗主题**：管理端默认暗色（含白色版 logo），观众端导航头可切换亮/暗并记忆。

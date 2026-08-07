@@ -91,6 +91,12 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   `live_settings` (`idleSceneId/idleSwitchMode/idleSwitchSeconds`). While talking,
   Wav2Lip animates the **currently displayed** clip, so the mouth moves on the same
   video the viewer sees, and idle resumes from that clip when speech ends.
+- [x] **Agentic scene & action videos (1v1 chat)**: the LLM system prompt lists the
+  current scene's videos (S3 key + description); the bot can pick an action video
+  per sentence by prefixing it with `<action:S3_KEY>` (stripped from text, subtitles
+  and history). Viewers switch the active scene from a floating `SceneSwitcher` chip
+  bar (`PUT /api/live/session/:id/scene`), and the worker hot-swaps its idle video
+  pool thread-safely without interrupting the 24fps watchdog.
 - [x] **Admin user list**: sidebar "Users → User list" shows all chat users (guests/accounts
   + message counts), backed by `GET /api/users`.
 - [x] **Light/dark themes**: the admin console defaults to dark (with a white logo variant);

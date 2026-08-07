@@ -17,3 +17,10 @@ export async function POST(
 ) {
   return proxyRequest(req, ctx, apiOrigin, 'api')
 }
+
+export async function PUT(
+  req: NextRequest,
+  ctx: { params: Promise<{ path: string[] }> },
+) {
+  return proxyRequest(req, ctx, apiOrigin, 'api')
+}

@@ -108,6 +108,18 @@
   `GET /api/live/{id}/status` 供前端轮询队列。SRS v5 已入 docker-compose
   （仅发布 1935 RTMP 供宿主机 Worker 推流；1985 API / 8080 HTTP-FLV 只在内网，
   Nginx `/live/` 代理到 srs:8080）。
+- ✅ **Agentic 场景/动作视频**：`POST /api/live/chat` 与 `POST /api/live/:id/message`
+  在调 DeepSeek 前把当前活跃场景的全部视频（S3 Key + 描述）注入 System Prompt，
+  LLM 可在句首输出 `<action:S3_KEY>` 指定该句动作视频；后端 `parseActionTag` 用
+  正则 `<action:(.*?)>` 剥离标签（不入库、不显示、不说出），并作为该句
+  `base_video_s3_key` 进入 render/live 队列（无标签回退默认视频）。观众端
+  `PUT /api/live/session/:id/scene`（body `{"scene_id":N}`）切换活跃场景：更新
+  `live_sessions.scene_id` + avatar `live_settings.idleSceneId`，并向
+  `live_control` 推 `{"type":"control","action":"switch_scene","video_pool":[...]}`；
+  worker 控制监听线程收到后**线程安全**（`_idle_lock` + 原子替换）下载并替换闲置
+  视频池，不打断 Watchdog 写帧；说话句的动作视频按需从 S3 加载（LRU 缓存 4 个）。
+  观众端直播间新增 `SceneSwitcher` 胶囊条（`frontend-user/components/scene-switcher.tsx`）
+  覆盖在 9:16 画面上，点击切换并带加载/提示反馈。
 - ✅ `worker/download_models.py --models all`：克隆外部代码、下载权重、导出
   wav2lip ONNX、创建软链接（一键可复现）。
 - ✅ 性能：16 秒视频口型阶段约 10 秒；CPU 线程数受限（`WAV2LIP_THREADS`，默认 4）。

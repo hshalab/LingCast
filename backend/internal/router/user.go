@@ -25,10 +25,13 @@ func RegisterUser(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 	{
 		// Public avatar detail (viewer room page).
 		api.GET("/avatars/:id", avatarHandler.Get)
+		// Public scene list (audience scene switcher).
+		api.GET("/avatars/:id/scenes", avatarHandler.ListScenes)
 		// Live streaming: audience-facing read + chat intake.
 		api.GET("/live", liveHandler.ListSessions)
 		api.POST("/live/:avatarID/message", liveHandler.Message)
 		api.POST("/live/chat", liveHandler.Chat)
+		api.PUT("/live/session/:avatarID/scene", liveHandler.SwitchScene)
 		api.GET("/live/:avatarID/status", liveHandler.Status)
 		// Audience chat identity + persisted room history.
 		api.POST("/chat/guest", chatHandler.Guest)

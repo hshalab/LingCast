@@ -44,7 +44,26 @@ export type Avatar = {
   category: string
   voiceId: string
   persona?: Persona
+  liveSettings?: { idleSceneId?: number }
   status: string
+}
+
+export type SceneVideo = {
+  id: number
+  sceneId: number
+  s3Url: string
+  description?: string
+  isDefault: boolean
+}
+
+export type Scene = {
+  id: number
+  avatarId: number
+  title: string
+  description?: string
+  coverS3Url: string
+  isDefault: boolean
+  videos: SceneVideo[]
 }
 
 export type ChatMessage = {
@@ -149,4 +168,18 @@ export function fetchMyHistory(
 
 export function fetchAvatar(avatarId: number): Promise<Avatar> {
   return request(`/api/avatars/${avatarId}`)
+}
+
+export function listAvatarScenes(avatarId: number): Promise<{ data: Scene[] }> {
+  return request(`/api/avatars/${avatarId}/scenes`)
+}
+
+export function switchLiveScene(
+  avatarId: number,
+  sceneId: number,
+): Promise<{ sceneId: number; videoPool: string[] }> {
+  return request(`/api/live/session/${avatarId}/scene`, {
+    method: 'PUT',
+    body: JSON.stringify({ scene_id: sceneId }),
+  })
 }

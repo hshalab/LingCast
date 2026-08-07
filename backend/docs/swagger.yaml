@@ -1058,6 +1058,34 @@ paths:
       summary: Live-chat orchestrator (LLM -> TTS -> queue)
       tags:
       - live
+  /live/session/{avatarID}/scene:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Avatar (session) ID
+        in: path
+        name: avatarID
+        required: true
+        type: integer
+      - description: scene_id
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Switch the active scene of a live session
+      tags:
+      - live
   /scenes/{id}:
     delete:
       parameters:

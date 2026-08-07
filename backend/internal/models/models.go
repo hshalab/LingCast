@@ -145,10 +145,12 @@ type BroadcastTask struct {
 // "idle" while the worker feeds the silent base animation, and "active" while
 // a text chunk is being lip-synced.
 type LiveSession struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	AvatarID  uint      `gorm:"not null;uniqueIndex" json:"avatarId"`
-	StreamID  string    `gorm:"size:128;not null" json:"streamId"`
-	Status    string    `gorm:"size:32;not null;default:idle;index" json:"status"`
+	ID       uint   `gorm:"primaryKey" json:"id"`
+	AvatarID uint   `gorm:"not null;uniqueIndex" json:"avatarId"`
+	StreamID string `gorm:"size:128;not null" json:"streamId"`
+	Status   string `gorm:"size:32;not null;default:idle;index" json:"status"`
+	// SceneID is the session's currently active scene (0 = avatar default).
+	SceneID   uint      `gorm:"not null;default:0" json:"sceneId"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }

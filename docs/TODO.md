@@ -218,6 +218,14 @@ AMD GPUs using ROCm.
   worker 下载全部闲置视频（同分辨率），闲置态定时顺序或随机（5-30s）切换；
   **说话口型基于当前正在显示的那段场景视频**（`_slice_current_idle`），说完从
   该视频衔接处继续，不再固定默认视频。
+- ✅ **Agentic 场景/动作视频（1v1）**：DeepSeek System Prompt 注入当前场景全部
+  动作视频（S3 Key + 描述），LLM 可在句首输出 `<action:S3_KEY>`；后端
+  `parseActionTag` 剥离标签（不入库/不显示/不说出）并把 key 作为该句
+  `base_video_s3_key`（无标签回退默认视频）；`PUT /api/live/session/:id/scene`
+  切换活跃场景（更新 `live_sessions.scene_id` + `live_settings.idleSceneId`，
+  推 `switch_scene` 控制消息带 `video_pool`）；worker 用 `_idle_lock` 原子替换
+  闲置视频池（不打断 Watchdog），动作句按需 S3 加载（LRU 缓存）；观众端
+  `SceneSwitcher` 胶囊条 + 切换反馈。
 
 ## Strict Rules for Execution
 

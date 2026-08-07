@@ -33,6 +33,15 @@ import (
 // English, plus newlines). Sentences are kept intact including the delimiter.
 var sentenceSplit = regexp.MustCompile(`[^。！？!?；;\n]+[。！？!?；;\n]*`)
 
+// actionTagAtStart matches the LLM action-video directive at the very start
+// of a sentence chunk: <action:s3_key>. It is stripped before TTS/display and
+// the extracted key becomes that sentence's base video.
+var actionTagAtStart = regexp.MustCompile(`(?i)^\s*<action:(.*?)>\s*`)
+
+// actionTagAnywhere strips any stray <action:...> markers from persisted text
+// (e.g. a tag the model placed mid-sentence).
+var actionTagAnywhere = regexp.MustCompile(`(?i)<action:[^>]*>`)
+
 // sentenceBoundaryChars are the delimiters used by the STREAMING splitter
 // (Chinese comma included, per the orchestrator spec). Fragments shorter than
 // minSentenceRunes are merged into the following sentence so comma splits do
@@ -190,6 +199,7 @@ type liveSessionItem struct {
 	ImageS3URL        string                `json:"imageS3Url"`
 	ImageS3Key        string                `json:"imageS3Key"`
 	BaseVideoS3Key    string                `json:"baseVideoS3Key"`
+	SceneID           uint                  `json:"sceneId"`
 	IdleVideos        []string              `json:"idleVideos,omitempty"`
 	IdleSwitchMode    string                `json:"idleSwitchMode,omitempty"`
 	IdleSwitchSeconds int                   `json:"idleSwitchSeconds,omitempty"`
@@ -197,6 +207,13 @@ type liveSessionItem struct {
 	StreamID          string                `json:"streamId"`
 	Status            string                `json:"status"`
 	LiveSettings      models.LiveSettings   `json:"liveSettings"`
+}
+
+// sceneVideoOption is one selectable action video (S3 key + human description)
+// exposed to the LLM and to the audience scene switcher.
+type sceneVideoOption struct {
+	S3Key       string `json:"s3Key"`
+	Description string `json:"description"`
 }
 
 func NewLiveHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client, liveControlQueueKey, taskQueueKey, openAIAPIKey, openAIBaseURL, openAIModel, embedServerURL, ttsServiceURL string) *LiveHandler {
@@ -229,16 +246,38 @@ func (h *LiveHandler) defaultVideoKey(avatarID uint) (string, error) {
 // that scene's videos are returned (the worker switches between them); any
 // other/empty selection falls back to the default scene's default video.
 func (h *LiveHandler) idleVideoKeys(avatarID uint, settings models.LiveSettings) ([]string, error) {
-	if settings.IdleSceneID > 0 {
+	opts, err := h.sceneVideoOptions(avatarID, settings.IdleSceneID)
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]string, 0, len(opts))
+	for _, o := range opts {
+		keys = append(keys, o.S3Key)
+	}
+	return keys, nil
+}
+
+// sceneVideoOptions returns (S3 key, description) for every video of the
+// avatar's scene `sceneID` (0 = the default scene's default video). This is
+// what the LLM sees as "available action videos" and what the worker's idle
+// pool is built from.
+func (h *LiveHandler) sceneVideoOptions(avatarID, sceneID uint) ([]sceneVideoOption, error) {
+	if sceneID > 0 {
 		var scene models.Scene
-		if err := h.db.Where("id = ? AND avatar_id = ?", settings.IdleSceneID, avatarID).
+		if err := h.db.Where("id = ? AND avatar_id = ?", sceneID, avatarID).
 			First(&scene).Error; err == nil {
-			var keys []string
-			if err := h.db.Model(&models.SceneVideo{}).
-				Where("scene_id = ?", scene.ID).
-				Order("id asc").
-				Pluck("s3_key", &keys).Error; err == nil && len(keys) > 0 {
-				return keys, nil
+			var vids []models.SceneVideo
+			if err := h.db.Where("scene_id = ?", scene.ID).
+				Order("id asc").Find(&vids).Error; err == nil && len(vids) > 0 {
+				opts := make([]sceneVideoOption, 0, len(vids))
+				for _, v := range vids {
+					desc := strings.TrimSpace(v.Description)
+					if desc == "" {
+						desc = "视频 #" + strconv.FormatUint(uint64(v.ID), 10)
+					}
+					opts = append(opts, sceneVideoOption{S3Key: v.S3Key, Description: desc})
+				}
+				return opts, nil
 			}
 		}
 	}
@@ -246,7 +285,44 @@ func (h *LiveHandler) idleVideoKeys(avatarID uint, settings models.LiveSettings)
 	if err != nil {
 		return nil, err
 	}
-	return []string{key}, nil
+	return []sceneVideoOption{{S3Key: key, Description: "默认"}}, nil
+}
+
+// activeSceneID resolves the session's active scene (explicit session
+// override first, otherwise the avatar's persisted idle-scene selection).
+func activeSceneID(s *models.LiveSession, avatar models.Avatar) uint {
+	if s != nil && s.SceneID > 0 {
+		return s.SceneID
+	}
+	return parseLiveSettings(avatar.LiveSettings).IdleSceneID
+}
+
+// chatActionVideos loads the action videos of the avatar's currently active
+// live session scene (fallback: avatar default) for system-prompt injection.
+func (h *LiveHandler) chatActionVideos(avatar models.Avatar) []sceneVideoOption {
+	var session models.LiveSession
+	sceneID := uint(0)
+	if err := h.db.Where("avatar_id = ?", avatar.ID).First(&session).Error; err == nil {
+		sceneID = session.SceneID
+	}
+	opts, err := h.sceneVideoOptions(avatar.ID, sceneID)
+	if err != nil {
+		return nil
+	}
+	return opts
+}
+
+// parseActionTag extracts an LLM action-video directive from the start of a
+// sentence chunk and returns the cleaned text plus the S3 key ("" when no
+// directive is present). Stray markers anywhere in the text are removed.
+func parseActionTag(s string) (clean string, key string) {
+	if m := actionTagAtStart.FindStringSubmatch(s); len(m) == 2 {
+		key = strings.TrimSpace(m[1])
+		clean = strings.TrimSpace(s[len(m[0]):])
+	} else {
+		clean = s
+	}
+	return actionTagAnywhere.ReplaceAllString(clean, ""), key
 }
 
 func liveQueueKey(avatarID uint) string {
@@ -316,6 +392,7 @@ func (h *LiveHandler) Start(c *gin.Context) {
 	}
 	session.StreamID = streamID
 	session.Status = models.LiveStatusIdle
+	session.SceneID = settings.IdleSceneID
 	if err := h.db.Save(&session).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -392,6 +469,85 @@ func (h *LiveHandler) Stop(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"stopped": session.AvatarID})
+}
+
+// SwitchScene handles PUT /api/live/session/:avatarID/scene — the audience
+// picks a new active scene for the avatar's 1v1 live session. The scene is
+// persisted (live session + avatar default), then a control message tells the
+// worker to swap its idle video pool immediately.
+// @Summary  Switch the active scene of a live session
+// @Tags     live
+// @Accept   json
+// @Produce  json
+// @Param    avatarID path int true "Avatar (session) ID"
+// @Param    request body map[string]any true "scene_id"
+// @Success  200 {object} map[string]any
+// @Router   /live/session/{avatarID}/scene [put]
+func (h *LiveHandler) SwitchScene(c *gin.Context) {
+	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
+	if err != nil || avatarID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.invalid_avatar_id")})
+		return
+	}
+	var req struct {
+		SceneID uint `json:"scene_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_body", err.Error())})
+		return
+	}
+
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, avatarID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.live.avatar_not_found")})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	opts, err := h.sceneVideoOptions(avatar.ID, req.SceneID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	keys := make([]string, 0, len(opts))
+	for _, o := range opts {
+		keys = append(keys, o.S3Key)
+	}
+
+	// Persist on the live session (active scene for this session) and on the
+	// avatar default (so a later start / session restore uses the same scene).
+	var session models.LiveSession
+	if err := h.db.Where("avatar_id = ?", avatar.ID).First(&session).Error; err == nil {
+		session.SceneID = req.SceneID
+		_ = h.db.Save(&session).Error
+	}
+	settings := parseLiveSettings(avatar.LiveSettings)
+	settings.IdleSceneID = req.SceneID
+	if b, err := json.Marshal(settings); err == nil {
+		avatar.LiveSettings = string(b)
+		_ = h.db.Save(&avatar).Error
+	}
+
+	// Tell the running worker to swap its idle video pool right now.
+	control := map[string]any{
+		"type":       "control",
+		"action":     "switch_scene",
+		"avatarId":   avatar.ID,
+		"scene_id":   req.SceneID,
+		"video_pool": keys,
+	}
+	if err := h.q.PushTo(c.Request.Context(), h.liveControlQueueKey, control); err != nil {
+		log.Printf("[live] avatar %d scene switch control push failed: %v", avatar.ID, err)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"sceneId":   req.SceneID,
+		"videoPool": keys,
+		"videos":    opts,
+	})
 }
 
 // Push handles POST /api/live/:avatarID/push. It chunks the incoming text by
@@ -525,6 +681,10 @@ func (h *LiveHandler) processChatReply(ctx context.Context, lang, userText strin
 		log.Printf("[live] avatar %d empty LLM reply, skipping bot message", avatar.ID)
 		return
 	}
+	// Strip <action:...> markers from the persisted reply (they are invisible
+	// to viewers) and rebuild the clean text from the parsed chunks so a
+	// marker at a chunk start is removed exactly once.
+	cleanReply := actionTagAnywhere.ReplaceAllString(reply, "")
 
 	ragJSON := ""
 	if len(ragFacts) > 0 {
@@ -537,7 +697,7 @@ func (h *LiveHandler) processChatReply(ctx context.Context, lang, userText strin
 		UserID:     userID,
 		Username:   avatar.Name,
 		Role:       "bot",
-		Content:    reply,
+		Content:    cleanReply,
 		RAGHit:     len(ragFacts) > 0,
 		RAGSources: ragJSON,
 	}).Error; err != nil {
@@ -547,9 +707,19 @@ func (h *LiveHandler) processChatReply(ctx context.Context, lang, userText strin
 
 	key := liveQueueKey(avatar.ID)
 	historyKey := liveHistoryKey(avatar.ID)
-	for _, text := range chunks {
-		_ = h.q.RPushList(ctx, key, text)
-		_ = h.q.RPushList(ctx, historyKey, text)
+	for _, chunk := range chunks {
+		clean, actionKey := parseActionTag(chunk)
+		entry := clean
+		if actionKey != "" {
+			if b, err := json.Marshal(map[string]any{
+				"text":              clean,
+				"base_video_s3_key": actionKey,
+			}); err == nil {
+				entry = string(b)
+			}
+		}
+		_ = h.q.RPushList(ctx, key, entry)
+		_ = h.q.RPushList(ctx, historyKey, clean)
 	}
 	_ = h.q.TrimList(ctx, historyKey, -200, -1)
 	log.Printf("[live] avatar %d bot reply queued (%d chunks)", avatar.ID, len(chunks))
@@ -648,7 +818,8 @@ func (h *LiveHandler) Chat(c *gin.Context) {
 
 	// ---- 2. RAG knowledge (500ms timeout, graceful fallback) ----
 	ragFacts := h.retrieveKnowledge(ctx, avatar.ID, userText, 500*time.Millisecond)
-	systemPrompt := chatSystemPrompt(avatar, i18n.Lang(c), nil, ragFacts)
+	systemPrompt := chatSystemPrompt(avatar, i18n.Lang(c), nil, ragFacts,
+		h.chatActionVideos(avatar)...)
 
 	// ---- 3. Streaming LLM + sentence chunking ----
 	client := openai.NewClient(
@@ -694,15 +865,16 @@ func (h *LiveHandler) Chat(c *gin.Context) {
 			log.Printf("[chat] client disconnected; %d/%d sentences queued", queued, len(sentences))
 			return
 		}
-		if err := h.synthesizeAndEnqueue(ctx, avatar, sentence); err != nil {
+		clean, actionKey := parseActionTag(sentence)
+		if err := h.synthesizeAndEnqueue(ctx, avatar, clean, actionKey); err != nil {
 			// One bad sentence must not crash the whole turn.
-			log.Printf("[chat] sentence skipped (%v): %q", err, sentence)
+			log.Printf("[chat] sentence skipped (%v): %q", err, clean)
 			continue
 		}
 		queued++
 	}
 
-	finalReply := strings.TrimSpace(reply.String())
+	finalReply := strings.TrimSpace(actionTagAnywhere.ReplaceAllString(reply.String(), ""))
 	ragJSON := ""
 	if len(ragFacts) > 0 {
 		if b, err := json.Marshal(ragFacts); err == nil {
@@ -730,7 +902,7 @@ func (h *LiveHandler) Chat(c *gin.Context) {
 // synthesizeAndEnqueue runs ONE sentence through tts-service (3s timeout),
 // reads the returned S3 key and pushes a render task to the Redis queue.
 // The call is serial, which is what preserves the LLM's sentence order.
-func (h *LiveHandler) synthesizeAndEnqueue(ctx context.Context, avatar models.Avatar, sentence string) error {
+func (h *LiveHandler) synthesizeAndEnqueue(ctx context.Context, avatar models.Avatar, sentence, actionKey string) error {
 	if strings.TrimSpace(h.ttsServiceURL) == "" {
 		return fmt.Errorf("tts-service URL not configured")
 	}
@@ -771,9 +943,13 @@ func (h *LiveHandler) synthesizeAndEnqueue(ctx context.Context, avatar models.Av
 		return fmt.Errorf("tts-service returned an empty s3_key")
 	}
 
-	videoKey, err := h.defaultVideoKey(avatar.ID)
-	if err != nil {
-		return err
+	videoKey := strings.TrimSpace(actionKey)
+	if videoKey == "" {
+		var err error
+		videoKey, err = h.defaultVideoKey(avatar.ID)
+		if err != nil {
+			return err
+		}
 	}
 	payload := renderTaskPayload{
 		Type:           "render",
@@ -813,8 +989,9 @@ func (h *LiveHandler) llmChat(ctx context.Context, lang, userText string, avatar
 		log.Printf("[rag] avatar %d retrieved %d fact(s)", avatar.ID, len(ragFacts))
 	}
 	resp, err := client.Responses.New(ctx, responses.ResponseNewParams{
-		Model:           h.openAIModel,
-		Instructions:    openai.String(chatSystemPrompt(avatar, lang, memory, ragFacts)),
+		Model: h.openAIModel,
+		Instructions: openai.String(chatSystemPrompt(avatar, lang, memory, ragFacts,
+			h.chatActionVideos(avatar)...)),
 		Input:           responses.ResponseNewParamsInputUnion{OfString: openai.String(userText)},
 		Temperature:     openai.Float(0.8),
 		MaxOutputTokens: openai.Int(300),
@@ -913,7 +1090,7 @@ func (h *LiveHandler) retrieveKnowledge(ctx context.Context, avatarID uint, text
 // personality) is baked in so viewers can ask about it naturally. Optional
 // RAG facts (private knowledge base, isolated per avatar) and the last N room
 // messages (long-term memory) are injected so the bot answers from them.
-func chatSystemPrompt(a models.Avatar, lang string, memory []models.ChatMessage, ragFacts []string) string {
+func chatSystemPrompt(a models.Avatar, lang string, memory []models.ChatMessage, ragFacts []string, actionVideos ...sceneVideoOption) string {
 	zh := lang == "" || lang == "zh"
 	p := parsePersona(a.Persona)
 	profile := []string{}
@@ -1001,6 +1178,30 @@ func chatSystemPrompt(a models.Avatar, lang string, memory []models.ChatMessage,
 				persona += fmt.Sprintf("\n%d. %s", i+1, f)
 			}
 			persona += "\nThe viewer may send just a keyword instead of a full question: if the keyword matches the facts above, treat it as \"tell me about this topic\" and proactively explain the relevant facts — do not simply echo the keyword. Only if the question truly has no answer in the facts, say you don't know."
+		}
+	}
+
+	// Agentic action videos: the LLM may pick a video of the current scene to
+	// match a sentence's emotion by prefixing that sentence with <action:key>.
+	if len(actionVideos) > 0 {
+		if zh {
+			persona += "\n[当前场景可用的动作视频] 你可以为某句话指定一个动作视频来配合情绪："
+			persona += "在句首用 <action:S3_KEY> 前缀标记，例如："
+			for _, v := range actionVideos {
+				persona += fmt.Sprintf("\n- <action:%s> : %s", v.S3Key, v.Description)
+			}
+			persona += "\n如果某句话不需要特定动作，直接输出纯文本即可。" +
+				"注意：<action:...> 标记必须放在句首，且一个标记只作用于紧随其后的一句话。" +
+				"标记本身不会显示给观众，也不会被说出来。"
+		} else {
+			persona += "\n[Available Action Videos in Current Scene] " +
+				"You can specify a video to match your emotion for a sentence by prefixing your reply with <action:S3_KEY>, e.g.:"
+			for _, v := range actionVideos {
+				persona += fmt.Sprintf("\n- <action:%s> : %s", v.S3Key, v.Description)
+			}
+			persona += "\nIf no specific action is needed, output plain text. " +
+				"The <action:...> marker must be at the very beginning of a sentence " +
+				"and applies only to that sentence. The marker is never shown or spoken."
 		}
 	}
 
@@ -1105,7 +1306,12 @@ func (h *LiveHandler) ListSessions(c *gin.Context) {
 			item.ImageS3Key = avatar.ImageS3Key
 			item.VoiceID = avatar.VoiceID
 			item.LiveSettings = parseLiveSettings(avatar.LiveSettings)
-			if keys, err := h.idleVideoKeys(avatar.ID, item.LiveSettings); err == nil {
+			item.SceneID = activeSceneID(&s, avatar)
+			if opts, err := h.sceneVideoOptions(avatar.ID, item.SceneID); err == nil {
+				keys := make([]string, 0, len(opts))
+				for _, o := range opts {
+					keys = append(keys, o.S3Key)
+				}
 				item.BaseVideoS3Key = keys[0]
 				item.IdleVideos = keys
 				item.IdleSwitchMode = item.LiveSettings.IdleSwitchMode
