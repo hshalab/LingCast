@@ -51,11 +51,19 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
 - [x] **Digital human editing**: the "Edit" button on a card jumps to Avatar Studio
   (`?edit=<id>`) pre-filled; saving performs a PUT update (the appearance image is kept);
   deletion is confirmed via the system AlertDialog.
+- [x] **Scene-based video library**: every digital human owns 1-N **scenes**
+  (`scenes`, with cover/title/description) and each scene 1-N **driving videos**
+  (`scene_videos`, each with a description). The creation-time base video becomes the
+  default scene's default video (protected from deletion). The **Scene management**
+  page (`/scenes`) adds/edits scenes and batch-uploads videos; Broadcast (offline) and
+  Live Studio pick a scene + video from this library.
 - [x] **Admin accounts**: after login you can change the display name and password in "Account
   settings" (persisted in the `admin_users` table, survives restarts).
-- [x] **Broadcast (offline announcement)**: pick a ready digital human + enter a script →
-  submit a task → poll → the result is embedded in the status card and played with
-  **xgplayer** (9:16 portrait, up to 720×1080, modal playback).
+- [x] **Broadcast (offline announcement)**: pick a ready digital human + a scene/video
+  (defaults to the default scene's default video) + enter a script → submit a task →
+  poll with stage/progress → the result is embedded in the status card and played with
+  **xgplayer** (9:16 portrait, up to 720×1080, modal playback); history keeps the scene
+  and video used so a retry never mixes parameters.
 - [x] **Client live room (viewer app)**: a standalone Next.js + TailwindCSS project
   (`frontend-user/`, port **3000**, separate from the admin console): the home page has a nav bar
   (guest/account identity, register/login/logout) and **category filtering**, listing all
@@ -77,6 +85,12 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   settings" whether subtitles are shown, the font (file name under `worker/fonts/`), position
   (top/bottom), stroke width, and font size; persisted as the Avatar's JSON field
   `live_settings`; the stream restarts automatically after saving.
+- [x] **Idle default stream videos**: Live Studio "Default stream video" picks which
+  scene's videos play while the avatar is idle and how they switch — fixed every N
+  seconds in order, or random (5-30s interval + random next video); persisted in
+  `live_settings` (`idleSceneId/idleSwitchMode/idleSwitchSeconds`). While talking,
+  Wav2Lip animates the **currently displayed** clip, so the mouth moves on the same
+  video the viewer sees, and idle resumes from that clip when speech ends.
 - [x] **Admin user list**: sidebar "Users → User list" shows all chat users (guests/accounts
   + message counts), backed by `GET /api/users`.
 - [x] **Light/dark themes**: the admin console defaults to dark (with a white logo variant);
@@ -129,10 +143,11 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   indexed per collection; the live chat endpoint injects the last 10 room
   messages plus Top-3 chunks from the avatar's bound collections into the LLM
   prompt.
-- [x] **Knowledge management UI**: `/knowledge` lists collections (create /
+- [x] **Knowledge management UI**: `/knowledge` lists global collections (create /
   rename / delete) and `/knowledge/$id` manages the documents inside a
   collection (add text / upload .txt/.pdf / delete) with a Top-3 retrieval test
-  scoped to that collection.
+  scoped to that collection; the Avatar editor has a "Knowledge base" panel to
+  bind one or more collections to each digital human.
 - [x] **Edge-TTS microservice** (`tts-service/`, internal :8002): async
   `edge_tts.Communicate` → ffmpeg → **16 kHz / 16-bit / mono PCM WAV** (the exact
   format Wav2Lip requires) → upload to S3 (RustFS) → returns only the S3 object
@@ -358,16 +373,18 @@ broadcasts and live streaming.
 
 ### Offline broadcast
 
-**Broadcast**: pick a digital human + enter a script → submit a task → track progress in the
-history and play/download the result (9:16 MP4, Edge-TTS + Wav2Lip).
+**Broadcast**: pick a digital human + a scene/video (defaults to the default scene's
+default video) + enter a script → submit a task → track stage/progress in the history and
+play/download the result (9:16 MP4, Edge-TTS + Wav2Lip). Task retries reuse the cached TTS
+audio.
 
 ### Live streaming
 
 **Live Studio**: after starting a live stream the digital human pushes a persistent stream
-(idle state plays the base animation); the studio can send test messages, while viewer
-messages go through the **DeepSeek LLM** and are spoken aloud. Subtitles can be configured
-per digital human in "Subtitle settings" (on/off, font, position, border, size; fonts live
-in `worker/fonts/`).
+(idle state plays the chosen scene videos, switching every N seconds or randomly); viewer
+messages go through the **DeepSeek LLM** and are spoken aloud. "Default stream video" picks
+which scene drives the idle picture and how it switches; "Subtitle settings" configure
+on/off, font, position, border and size per digital human (fonts live in `worker/fonts/`).
 
 ```bash
 # command-line examples

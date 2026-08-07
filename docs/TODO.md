@@ -211,6 +211,13 @@ AMD GPUs using ROCm.
 - ✅ **任务进度分阶段 + TTS 复用**：worker 按 `tts/lipsync/mux` 上报 stage、
   每 1% 上报 progress（前端进度条 + 阶段标签）；TTS 首次合成后缓存到 S3
   （`tts/tasks/{id}.wav`），重试直接复用不再合成；删除任务时一并清理。
+- ✅ **直播默认推流视频（场景 + 切换）**：`live_settings` 新增
+  `idleSceneId/idleSwitchMode(interval|random)/idleSwitchSeconds`，Live Studio
+  移除「发送文字」、新增「默认推流视频」卡片（选场景 + 定时 N 秒/随机切换）；
+  start 控制消息与 `GET /api/live` 携带 `idleVideos`（所选场景全部视频 S3 Key）；
+  worker 下载全部闲置视频（同分辨率），闲置态定时顺序或随机（5-30s）切换；
+  **说话口型基于当前正在显示的那段场景视频**（`_slice_current_idle`），说完从
+  该视频衔接处继续，不再固定默认视频。
 
 ## Strict Rules for Execution
 
