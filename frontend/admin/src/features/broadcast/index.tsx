@@ -242,6 +242,7 @@ export function Broadcast({
         videoId: selectedVideoId ? Number(selectedVideoId) : undefined,
       })
       void loadHistory()
+      setScript('')
     } catch (error) {
       showApiError(error, t('common.requestFailed'))
     } finally {
@@ -505,8 +506,6 @@ export function Broadcast({
                                 </a>
                               </Button>
                               </>
-                            ) : (
-                              <span className='text-xs text-muted-foreground'>-</span>
                             )}
                             {(item.status === 'failed' || item.status === 'processing') && (
                               <Button
