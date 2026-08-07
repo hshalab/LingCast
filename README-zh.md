@@ -10,7 +10,8 @@
 基础视频 → **Edge-TTS 语音 + Wav2Lip 口型** → **DeepSeek LLM 实时回复** → SRS 直播推流。
 
 管理后台 `:8080` · 观众端 `:3000` · [架构文档](docs/技术需求与架构文档.md) ·
-[Roadmap / TODO](docs/TODO.md) · [开发交接说明](AGENTS.md)
+[Roadmap / TODO](docs/TODO.md) · [开发交接说明](AGENTS.md) ·
+[文档站点](https://taochangle.github.io/LingCast/)
 
 # Contents
 

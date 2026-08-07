@@ -11,7 +11,8 @@ voice + persona) → LivePortrait generates a base video → **Edge-TTS speech +
 lip-sync** → **DeepSeek LLM real-time replies** → SRS live streaming.
 
 Admin console `:8080` · Viewer app `:3000` · [Architecture doc](docs/技术需求与架构文档.md) ·
-[Roadmap / TODO](docs/TODO.md) · [Development handoff](AGENTS.md)
+[Roadmap / TODO](docs/TODO.md) · [Development handoff](AGENTS.md) ·
+[Documentation site](https://taochangle.github.io/LingCast/)
 
 # Contents
 
