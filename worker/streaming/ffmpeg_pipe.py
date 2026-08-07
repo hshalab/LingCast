@@ -176,7 +176,8 @@ class FFmpegPipe:
     def write_audio(self, pcm16_bytes: bytes) -> None:
         """Write mono 16kHz s16le PCM in small pieces to avoid pipe deadlocks."""
         self._check_alive()
-        if self._audio_fd is None:
+        fd = self._audio_fd
+        if fd is None:
             raise FFmpegPipeClosedError(
                 f"audio pipe for stream {self.stream_id} was never started"
             )
@@ -185,7 +186,7 @@ class FFmpegPipe:
             pos = 0
             while pos < len(view):
                 written = os.write(
-                    self._audio_fd, view[pos : pos + _AUDIO_WRITE_CHUNK]
+                    fd, view[pos : pos + _AUDIO_WRITE_CHUNK]
                 )
                 if written <= 0:
                     raise OSError("ffmpeg audio pipe closed early")
