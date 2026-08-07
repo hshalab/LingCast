@@ -96,5 +96,5 @@ var en = catalog{
 	"err.knowledge.document_invalid_id":   "invalid document id",
 	"err.knowledge.document_not_found":    "document not found",
 	"err.knowledge.search_required":       "provide avatarId/collectionId and search text",
-	"err.knowledge.embed_unavailable":     "local retrieval service unavailable (is rag-service running?)",
+	"err.knowledge.embed_unavailable":     "local retrieval service unavailable (is service-rag running?)",
 }

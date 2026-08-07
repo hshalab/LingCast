@@ -20,10 +20,10 @@ type previewTTSRequest struct {
 }
 
 // PreviewTTS returns the gin handler for POST /api/tts/preview. Voice
-// audition is delegated to the tts-service microservice over HTTP — the API
+// audition is delegated to the service-tts microservice over HTTP — the API
 // image no longer bundles python3 / edge-tts. The preview is a one-shot
 // throwaway sample, so the service streams the bytes back directly (no S3).
-// @Summary  Voice audition (MP3 bytes, proxied to tts-service)
+// @Summary  Voice audition (MP3 bytes, proxied to service-tts)
 // @Tags     tts
 // @Accept   json
 // @Produce  audio/mpeg

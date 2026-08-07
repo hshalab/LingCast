@@ -96,5 +96,5 @@ var zh = catalog{
 	"err.knowledge.document_invalid_id":   "无效的文档 ID",
 	"err.knowledge.document_not_found":    "文档不存在",
 	"err.knowledge.search_required":       "请提供 avatarId/collectionId 与检索文本",
-	"err.knowledge.embed_unavailable":     "本地检索服务不可用（请确认 rag-service 已启动）",
+	"err.knowledge.embed_unavailable":     "本地检索服务不可用（请确认 service-rag 已启动）",
 }

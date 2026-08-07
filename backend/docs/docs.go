@@ -1771,7 +1771,7 @@ const docTemplate = `{
                 "tags": [
                     "tts"
                 ],
-                "summary": "Voice audition (MP3 bytes, proxied to tts-service)",
+                "summary": "Voice audition (MP3 bytes, proxied to service-tts)",
                 "parameters": [
                     {
                         "description": "voiceId + text (\u003c=200 chars)",

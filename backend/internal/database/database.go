@@ -19,7 +19,7 @@ import (
 
 // Connect opens the MySQL connection and runs migrations. It retries for a
 // while so the API container can start before MySQL is fully ready. ragURL is
-// the rag-service base URL used to re-ingest legacy knowledge documents.
+// the service-rag base URL used to re-ingest legacy knowledge documents.
 func Connect(dsn, ragURL string) (*gorm.DB, error) {
 	var (
 		db  *gorm.DB
@@ -152,7 +152,7 @@ func migrateGlobalKnowledge(db *gorm.DB) error {
 // table (avatar_knowledges_legacy) into the current global model: one global
 // collection per old avatar, documents copied to knowledge_documents, the
 // collection bound to that avatar (enabled), and the text re-ingested into
-// rag-service so retrieval works. The legacy table is dropped only after every
+// service-rag so retrieval works. The legacy table is dropped only after every
 // row migrated successfully (ingest included), so an interrupted run retries
 // idempotently on the next start.
 func migrateLegacyKnowledgeDocs(db *gorm.DB, ragURL string) error {
@@ -267,7 +267,7 @@ func migrateLegacyKnowledgeDocs(db *gorm.DB, ragURL string) error {
 	return db.Migrator().DropTable("avatar_knowledges_legacy")
 }
 
-// reingestKnowledgeDoc pushes a migrated legacy document into rag-service so
+// reingestKnowledgeDoc pushes a migrated legacy document into service-rag so
 // its chunks are indexed under the new global collection.
 func reingestKnowledgeDoc(ragURL string, collectionID, sourceID uint, content string) error {
 	body, err := json.Marshal(map[string]any{
@@ -290,7 +290,7 @@ func reingestKnowledgeDoc(ragURL string, collectionID, sourceID uint, content st
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("rag-service ingest returned %d", resp.StatusCode)
+		return fmt.Errorf("service-rag ingest returned %d", resp.StatusCode)
 	}
 	return nil
 }

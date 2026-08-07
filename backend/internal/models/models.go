@@ -194,7 +194,7 @@ type AdminUser struct {
 // Knowledge ingestion lifecycle.
 const (
 	KnowledgeStatusPending = "pending" // row created, not ingested yet
-	KnowledgeStatusIndexed = "indexed" // chunks indexed into rag-service (RAG-ready)
+	KnowledgeStatusIndexed = "indexed" // chunks indexed into service-rag (RAG-ready)
 	KnowledgeStatusFailed  = "failed"  // extraction/ingest failed (see content)
 )
 
@@ -218,8 +218,8 @@ type AvatarKnowledge struct {
 }
 
 // KnowledgeDocument is one source document (raw text or uploaded .txt/.pdf)
-// inside a knowledge collection. It is chunked and indexed into rag-service;
-// the DB row mirrors the rag-service chunks via collection_id + source_id.
+// inside a knowledge collection. It is chunked and indexed into service-rag;
+// the DB row mirrors the service-rag chunks via collection_id + source_id.
 type KnowledgeDocument struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	CollectionID uint      `gorm:"not null;index" json:"collectionId"`

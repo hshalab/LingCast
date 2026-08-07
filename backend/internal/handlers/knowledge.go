@@ -25,8 +25,8 @@ import (
 // KnowledgeHandler serves the two-level knowledge base:
 //   avatar -> KnowledgeCollection (知识库) -> KnowledgeDocument (文档)
 // Source documents (.txt/.pdf/raw text) are stored in MariaDB + S3, then the
-// extracted text is ingested synchronously into the rag-service (zvec FTS +
-// Jieba, see rag-service/main.py). Chunks are strictly scoped by
+// extracted text is ingested synchronously into the service-rag (zvec FTS +
+// Jieba, see services/rag/main.py). Chunks are strictly scoped by
 // collection_id / source_id in the vector store.
 type KnowledgeHandler struct {
 	db     *gorm.DB
@@ -284,7 +284,7 @@ func (h *KnowledgeHandler) RenameCollection(c *gin.Context) {
 }
 
 // DeleteCollection handles DELETE /api/knowledge-collections/:id — removes the
-// collection, its documents (rows + S3 sources) and the rag-service chunks.
+// collection, its documents (rows + S3 sources) and the service-rag chunks.
 // DeleteCollection handles DELETE /api/knowledge-collections/:id.
 // @Summary  Delete a collection (cascades documents + indexes)
 // @Tags     knowledge
@@ -321,7 +321,7 @@ func (h *KnowledgeHandler) DeleteCollection(c *gin.Context) {
 		return
 	}
 	if err := h.ragDelete(map[string]any{"collection_id": row.ID}); err != nil {
-		log.Printf("[rag] rag-service delete for collection %d failed: %v", row.ID, err)
+		log.Printf("[rag] service-rag delete for collection %d failed: %v", row.ID, err)
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -359,7 +359,7 @@ func (h *KnowledgeHandler) ListDocuments(c *gin.Context) {
 // CreateDocument handles POST /api/knowledge-collections/:id/documents —
 // multipart/form-data with either a `text` field (raw knowledge text) or a
 // `file` field (.txt/.pdf). The row is persisted, the source is uploaded to
-// S3, plain text is extracted and ingested synchronously into rag-service.
+// S3, plain text is extracted and ingested synchronously into service-rag.
 // CreateDocument handles POST /api/knowledge-collections/:id/documents.
 // @Summary  Add a document (text or .txt/.pdf upload)
 // @Tags     knowledge
@@ -429,7 +429,7 @@ func (h *KnowledgeHandler) CreateDocument(c *gin.Context) {
 	}
 
 	// Extract plain text (raw text field is used directly; files are pulled
-	// from S3) and push it into the rag-service knowledge store.
+	// from S3) and push it into the service-rag knowledge store.
 	content := text
 	if fileErr == nil {
 		data, err := h.s3.Download(c.Request.Context(), s3Key)
@@ -448,7 +448,7 @@ func (h *KnowledgeHandler) CreateDocument(c *gin.Context) {
 	if content == "" || h.ragURL == "" {
 		status = models.KnowledgeStatusFailed
 	} else if err := h.ragIngest(0, row.CollectionID, row.ID, content); err != nil {
-		log.Printf("[rag] rag-service ingest failed for document %d: %v", row.ID, err)
+		log.Printf("[rag] service-rag ingest failed for document %d: %v", row.ID, err)
 		status = models.KnowledgeStatusFailed
 	}
 
@@ -470,7 +470,7 @@ func (h *KnowledgeHandler) CreateDocument(c *gin.Context) {
 }
 
 // DeleteDocument handles DELETE /api/knowledge-collections/:id/documents/:did —
-// removes the DB row, the S3 source and the rag-service chunks of that source.
+// removes the DB row, the S3 source and the service-rag chunks of that source.
 // DeleteDocument handles DELETE /api/knowledge-collections/:id/documents/:did.
 // @Summary  Delete a document (including its indexes)
 // @Tags     knowledge
@@ -503,14 +503,14 @@ func (h *KnowledgeHandler) DeleteDocument(c *gin.Context) {
 		return
 	}
 	if err := h.ragDelete(map[string]any{"source_id": row.ID}); err != nil {
-		log.Printf("[rag] rag-service delete for document %d failed: %v", row.ID, err)
+		log.Printf("[rag] service-rag delete for document %d failed: %v", row.ID, err)
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // ListDocumentChunks handles POST
 // /api/knowledge-collections/:id/documents/:did/chunks — returns the actual
-// indexed chunks of one document (from rag-service) in original order, so the
+// indexed chunks of one document (from service-rag) in original order, so the
 // management UI can show how the document was split.
 // ListDocumentChunks handles POST /api/knowledge-collections/:id/documents/:did/chunks.
 // @Summary  Inspect the indexed chunks of a document
@@ -576,7 +576,7 @@ func (h *KnowledgeHandler) ListDocumentChunks(c *gin.Context) {
 }
 
 // SearchTest handles POST /api/knowledge/search — a live retrieval test that
-// proxies to the rag-service /v1/knowledge/search. Scope is either an avatar
+// proxies to the service-rag /v1/knowledge/search. Scope is either an avatar
 // (all of its collections) or one collection (management UI).
 // SearchTest handles POST /api/knowledge/search.
 // @Summary  Retrieval test (avatarId or collectionId, Top-3)
@@ -629,9 +629,9 @@ func (h *KnowledgeHandler) SearchTest(c *gin.Context) {
 }
 
 // ------------------------------------------------------------------ #
-// rag-service client helpers
+// service-rag client helpers
 // ------------------------------------------------------------------ #
-// ragIngest pushes raw knowledge text into the rag-service for chunking +
+// ragIngest pushes raw knowledge text into the service-rag for chunking +
 // Jieba FTS indexing, scoped to one document (source_id) of one collection.
 func (h *KnowledgeHandler) ragIngest(avatarID, collectionID, sourceID uint, text string) error {
 	body, err := json.Marshal(map[string]any{
@@ -654,7 +654,7 @@ func (h *KnowledgeHandler) ragIngest(avatarID, collectionID, sourceID uint, text
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("rag-service ingest returned %d", resp.StatusCode)
+		return fmt.Errorf("service-rag ingest returned %d", resp.StatusCode)
 	}
 	return nil
 }
@@ -680,7 +680,7 @@ func (h *KnowledgeHandler) ragSearch(scope map[string]any, query string, topK in
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("rag-service search returned %d", resp.StatusCode)
+		return nil, nil, fmt.Errorf("service-rag search returned %d", resp.StatusCode)
 	}
 	var out struct {
 		Contexts []string  `json:"contexts"`
@@ -696,7 +696,7 @@ func (h *KnowledgeHandler) ragSearch(scope map[string]any, query string, topK in
 	return out.Contexts, out.Scores, nil
 }
 
-// ragDelete removes chunks from the rag-service for the given scope fields
+// ragDelete removes chunks from the service-rag for the given scope fields
 // (source_id / collection_id / avatar_id).
 func (h *KnowledgeHandler) ragDelete(scope map[string]any) error {
 	body, err := json.Marshal(scope)
@@ -713,7 +713,7 @@ func (h *KnowledgeHandler) ragDelete(scope map[string]any) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("rag-service delete returned %d", resp.StatusCode)
+		return fmt.Errorf("service-rag delete returned %d", resp.StatusCode)
 	}
 	return nil
 }

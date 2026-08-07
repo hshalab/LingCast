@@ -42,7 +42,7 @@
 
 - 知识库全局共享：Collection → 文档 Document（粘贴文本 / 上传 .txt/.pdf），
   数字人通过 `avatar_knowledge` 关系表 N:N 绑定（可多选、可共用）
-- rag-service：zvec 全文索引 + Jieba 分词，按绑定集合强制隔离，BM25 Top-3，零模型/零下载
+- service-rag：zvec 全文索引 + Jieba 分词，按绑定集合强制隔离，BM25 Top-3，零模型/零下载
 - LLM 链路：DeepSeek 回复注入人物设定 + 最近 10 条聊天（长期记忆）+ 命中知识 Top-3
 
 ## 管理与安全

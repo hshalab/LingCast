@@ -144,7 +144,7 @@ AMD GPUs using ROCm.
   机器人）→ 文档（Document，`knowledge_documents`：text/.txt/.pdf，源文件
   入 S3，Go 用 `ledongthuc/pdf` 提取 PDF 文本）；机器人通过
   `avatar_knowledge`（avatar_id + collection_id 复合主键，enabled 开关）
-  绑定若干知识库，多个数字人可共用一个；`rag-service` 微服务（zvec 全文
+  绑定若干知识库，多个数字人可共用一个；`service-rag` 微服务（zvec 全文
   索引 + Jieba 中文分词，**零模型/零下载**）负责入库 `/v1/knowledge/ingest`、
   检索 `/v1/knowledge/search`（按 avatar_id / collection_id /
   collection_ids 标量过滤 + BM25 Top-3）、删除 `/v1/knowledge/delete`、
@@ -152,11 +152,11 @@ AMD GPUs using ROCm.
   `enabled=true` 的绑定集合，再按 collection_ids 检索 Top-3 注入
   System Prompt；观众只发关键词时视为「想了解该主题」主动讲解。
 - ✅ **检索方案演进（已落地）**：原计划「RedisStack（RediSearch）做 KNN +
-  BAAI bge-small 向量化」已由 **rag-service（zvec 进程内全文索引 + 自带
+  BAAI bge-small 向量化」已由 **service-rag（zvec 进程内全文索引 + 自带
   Jieba 中文分词）** 取代——不需要向量模型、不需要 RediSearch、零下载；
   Redis 已回退 `redis:8.2.2-alpine`，`worker/rag_worker.py` 及其依赖
   （pymupdf / sentence-transformers）已删除。
-- ✅ **查询与拼接**：观众提问 → rag-service 按数字人聚合 Top-3 → 作为
+- ✅ **查询与拼接**：观众提问 → service-rag 按数字人聚合 Top-3 → 作为
   `<Context>` 注入 DeepSeek System Prompt，强制只根据知识库回答，减少
   带货/专业问答幻觉；管理端可在线检索测试并查看文档分块。
 
@@ -178,18 +178,18 @@ AMD GPUs using ROCm.
   首页美化（Hero CTA、卡片悬停进入直播间、页脚账号中心入口）。
 - ✅ **直播链路稳定化**：音频切片先于视频帧写入（防 AAC 欠载）、ffmpeg
   保留 `-re`（Watchdog 兜底填帧）、Redis 断连 1s 静默退避。
-- ✅ **RAG 迁移到 rag-service**：compose 新增 `rag-service`（zvec FTS +
+- ✅ **RAG 迁移到 service-rag**：compose 新增 `service-rag`（zvec FTS +
   Jieba，volume `rag-zvec-data`），`EMBED_SERVER_URL` 默认
-  `http://rag-service:8001`；Redis 回退 `redis:8.2.2-alpine`（不再需要
+  `http://service-rag:8001`；Redis 回退 `redis:8.2.2-alpine`（不再需要
   RediSearch），`worker/rag_worker.py` 与脚本中的 rag_worker 已删除。
-- ✅ **TTS 微服务（tts-service）**：async `edge_tts.Communicate` → ffmpeg
+- ✅ **TTS 微服务（service-tts）**：async `edge_tts.Communicate` → ffmpeg
   转 16kHz/16-bit/mono PCM WAV → 上传 S3（RustFS，S3 配置走环境变量）→ 只返回
   S3 key + 元数据，`finally` 清理临时文件；compose 内网 :8002，不发布宿主端口。
 - ✅ **端口收敛**：宿主机不调试，SRS 只发布 1935（RTMP 推流），1985/8081
-  收回内网；`api`/`rag-service`/`tts-service` 均不发布端口；对外仅
+  收回内网；`api`/`service-rag`/`service-tts` 均不发布端口；对外仅
   3000/8080/1935/6379/9000。
 - ✅ **TTS 试听接口重构（后效优化）**：`POST /api/tts/preview` 音色试听已改为
-  直接 HTTP 调用 `tts-service` 微服务的 `/v1/tts/preview`（试听为一次性临时
+  直接 HTTP 调用 `service-tts` 微服务的 `/v1/tts/preview`（试听为一次性临时
   数据，直接返回字节、不走 S3）；`backend/Dockerfile` 已移除 `python3` /
   `edge-tts` 依赖，后端镜像不再捆绑 Python。
 - ✅ **存储与任务队列演进**：MinIO → RustFS（SNSD 单盘模式）；S3 环境变量

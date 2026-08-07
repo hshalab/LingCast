@@ -19,7 +19,7 @@ services:
       retries: 20
 
   redis:
-    # Plain Redis — the knowledge base moved to the rag-service (zvec FTS),
+    # Plain Redis — the knowledge base moved to service-rag (zvec FTS),
     # so RediSearch is no longer required.
     image: ${REDIS_IMAGE:-redis:8.2.2-alpine}
     restart: unless-stopped
@@ -114,8 +114,8 @@ services:
       AVATAR_INIT_QUEUE_KEY: ${AVATAR_INIT_QUEUE_KEY:-talking_avatar:avatar_init}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
-      EMBED_SERVER_URL: ${EMBED_SERVER_URL:-http://rag-service:8001}
-      TTS_SERVICE_URL: ${TTS_SERVICE_URL:-http://tts-service:8002}
+      EMBED_SERVER_URL: ${EMBED_SERVER_URL:-http://service-rag:8001}
+      TTS_SERVICE_URL: ${TTS_SERVICE_URL:-http://service-tts:8002}
       S3_ENDPOINT: http://rustfs:9000
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
@@ -150,8 +150,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.deepseek.com}
       OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-flash}
-      EMBED_SERVER_URL: ${EMBED_SERVER_URL:-http://rag-service:8001}
-      TTS_SERVICE_URL: ${TTS_SERVICE_URL:-http://tts-service:8002}
+      EMBED_SERVER_URL: ${EMBED_SERVER_URL:-http://service-rag:8001}
+      TTS_SERVICE_URL: ${TTS_SERVICE_URL:-http://service-tts:8002}
       S3_ENDPOINT: http://rustfs:9000
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
@@ -198,9 +198,9 @@ services:
   # Local RAG knowledge-base microservice: zvec FTS + Jieba Chinese, zero
   # model dependencies. The Go API ingests documents and runs retrieval tests
   # against it over the internal network; zvec data persists in a volume.
-  rag-service:
+  service-rag:
     build:
-      context: ./rag-service
+      context: ./services/rag
     restart: unless-stopped
     environment:
       ZVEC_DATA_DIR: /app/zvec_data
@@ -210,9 +210,9 @@ services:
   # Edge-TTS microservice: async edge-tts -> 16kHz PCM WAV -> S3 shared
   # storage. Returns S3 keys only; temp files are removed after upload.
   # Internal network only — no host ports (not debugged on the host).
-  tts-service:
+  service-tts:
     build:
-      context: ./tts-service
+      context: ./services/tts
     restart: unless-stopped
     environment:
       S3_ENDPOINT: http://rustfs:9000
@@ -226,7 +226,7 @@ services:
   # API documentation gateway (docs): aggregates every HTTP microservice's
   # Swagger / OpenAPI docs behind one entry, exposed by nginx at
   # /doc/<prefix>: /doc/api-admin, /doc/api-user, /doc/api-scheduler,
-  # /doc/rag-service, /doc/tts-service
+  # /doc/service-rag, /doc/service-tts
   docs:
     build:
       context: ./docs
@@ -238,9 +238,9 @@ services:
         condition: service_started
       api-scheduler:
         condition: service_started
-      rag-service:
+      service-rag:
         condition: service_started
-      tts-service:
+      service-tts:
         condition: service_started
 
   # ---- Docker mock worker: COMMENTED OUT ----

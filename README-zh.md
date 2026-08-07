@@ -114,7 +114,7 @@
   永不掉线/缓冲。推理异步小批量（8 帧）产帧，连续句子无缝拼接。
 - [x] **私有知识库 + 长期记忆（本地 RAG，零模型）**：知识库全局共享，
   数字人通过关系表 N:N 绑定（多个数字人可共用一个知识库）。独立的
-  `rag-service` 微服务（FastAPI + uv + [zvec](https://zvec.org) 进程内
+  `service-rag` 微服务（FastAPI + uv + [zvec](https://zvec.org) 进程内
   全文索引）用自带 Jieba 中文分词——**不需要 sentence-transformers /
   torch / 模型下载，也不需要 RediSearch**。文档（粘贴文本或上传
   .txt/.pdf）按 ~300 字 / 50 字重叠切块并按知识库建索引；直播问答注入
@@ -124,7 +124,7 @@
   `/knowledge/$id` 管理知识库内的文档（文本/.txt/.pdf、删除、查看分块），支持按
   知识库做 Top-3 检索测试；数字人编辑页右侧「知识库」面板勾选绑定（可多选、多数字人
   共用一个知识库）。
-- [x] **Edge-TTS 微服务**（`tts-service/`，Docker 内网 :8002）：async
+- [x] **Edge-TTS 微服务**（`services/tts/`，Docker 内网 :8002）：async
   `edge_tts.Communicate` → ffmpeg → **16kHz / 16-bit / 单声道 PCM WAV**
   （Wav2Lip 下游要求的确切格式）→ 上传 S3（RustFS）→ 只返回 S3 key + 元数据；
   `finally` 清理临时文件，S3 配置全部来自环境变量。
@@ -165,7 +165,7 @@
 
 ```text
 管理后台 :8080 ──> Nginx (frontend)
-  ├── /api    ──> api-admin (Gin) ──> MariaDB 11 / Redis 8.2 / RustFS / rag-service
+  ├── /api    ──> api-admin (Gin) ──> MariaDB 11 / Redis 8.2 / RustFS / service-rag
   └── webhooks ──> api-scheduler（Worker 任务/基础视频回调）
   └── /media  ──> RustFS (S3 兼容)
 
@@ -176,10 +176,10 @@ Python AI Worker ──> Redis 队列 / boto3 下载素材
                   ──> 使用: Edge-TTS → Wav2Lip(ONNX) 离线播报 / 直播推流
                   ──> 上传成品到 S3, 通过 Webhook 回写任务状态
 
-rag-service ──> zvec 进程内全文索引（Jieba 中文分词，零模型）
+service-rag ──> zvec 进程内全文索引（Jieba 中文分词，零模型）
              ──> Go API 直连 /v1/knowledge/{ingest,search,delete,chunks}
 
-tts-service ──> async edge-tts → 16kHz PCM WAV → S3（RustFS）
+service-tts ──> async edge-tts → 16kHz PCM WAV → S3（RustFS）
              ──> POST /v1/tts/synthesize 只返回 S3 key（媒体不过 HTTP）
 ```
 
@@ -191,14 +191,14 @@ tts-service ──> async edge-tts → 16kHz PCM WAV → S3（RustFS）
   `api-admin`（管理端，:8081）、`api-user`（观众端/直播聊天，:8082）、
   `api-scheduler`（Worker 回调，:8083）；标准 AWS S3 SDK v2。
 - AI Worker：Python 3.11，uv 管理依赖，boto3 + Redis。
-- 知识库微服务：`rag-service`（FastAPI + uv + zvec FTS，Jieba 分词，零模型依赖，
+- 知识库微服务：`service-rag`（FastAPI + uv + zvec FTS，Jieba 分词，零模型依赖，
   Docker 内网 8001，数据持久化在 volume `rag-zvec-data`）。
 - 存储：S3 兼容对象存储（开发环境直接运行 RustFS）。
 - 部署：Docker Compose 编排基础设施与前端；**真实 AI Worker 在宿主机原生运行**
   （macOS Apple Silicon 用 MPS/CoreML，Linux 用 NVIDIA CUDA 或 AMD ROCm），
   宿主机仅开放必要端口：**3000**（观众端）、**8080**（管理端/API）、**1935**
   （RTMP 推流）、**6379**（Redis）与 **9000**（RustFS）；`api-admin`、
-  `api-user`、`api-scheduler`、`rag-service`、`tts-service` 均在内网，不开放
+  `api-user`、`api-scheduler`、`service-rag`、`service-tts` 均在内网，不开放
   宿主端口。
 
 ## 快速开始
@@ -377,7 +377,7 @@ curl http://localhost:8080/api/live/9/status
 | `S3_*` | `.env` / `.env.local` | 对象存储端点、凭据、桶名、公网前缀 |
 | `REDIS_*` | `.env` / `.env.local` | Redis 地址、密码、队列 Key |
 | `REDIS_IMAGE` | `.env` | Redis 镜像（默认 `redis:8.2.2-alpine`） |
-| `EMBED_SERVER_URL` | `.env` | 知识库检索服务地址（默认 `http://rag-service:8001`，Docker 内网） |
+| `EMBED_SERVER_URL` | `.env` | 知识库检索服务地址（默认 `http://service-rag:8001`，Docker 内网） |
 | `LIVEPORTRAIT_DEVICE` | `worker/.env.local` | `mps`（macOS 默认）/ `cuda`（Linux）/ `cpu` |
 | `LIVEPORTRAIT_DRIVING*` | `worker/.env.local` | 模板、速度、幅度 |
 | `LIVEPORTRAIT_OUTPUT_FPS` | `worker/.env.local` | base 视频帧率（默认 24） |
@@ -401,8 +401,8 @@ curl http://localhost:8080/api/live/9/status
 - `/doc/api-admin/` — 管理端 API（gin-swagger）
 - `/doc/api-user/` — 观众端 / 直播聊天 API（gin-swagger）
 - `/doc/api-scheduler/` — Worker Webhook（gin-swagger）
-- `/doc/rag-service/` — 知识库服务（FastAPI /docs）
-- `/doc/tts-service/` — 语音服务（FastAPI /docs）
+- `/doc/service-rag/` — 知识库服务（FastAPI /docs）
+- `/doc/service-tts/` — 语音服务（FastAPI /docs）
 
 ## 目录结构
 
@@ -410,8 +410,9 @@ curl http://localhost:8080/api/live/9/status
 LingCast/
 ├── backend/        Go module — 三个微服务：cmd/api-admin、cmd/api-user、
 │                   cmd/api-scheduler（共享 internal/ 包）
-├── rag-service/    本地 RAG 微服务（FastAPI + uv + zvec FTS/Jieba，:8001）
-├── tts-service/    Edge-TTS 微服务（FastAPI + uv + edge-tts + ffmpeg，:8002）
+├── services/       Python 微服务
+│   ├── rag/        本地 RAG 微服务（FastAPI + uv + zvec FTS/Jieba，:8001）
+│   └── tts/        Edge-TTS 微服务（FastAPI + uv + edge-tts + ffmpeg，:8002）
 ├── frontend/       BFF 多客户端矩阵（所有前端）
 │   ├── admin/      灵播管理后台（React + shadcn/ui，:8080）
 │   ├── live/       Next.js 观众端（独立项目，:3000）

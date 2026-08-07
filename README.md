@@ -141,7 +141,7 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   Wav2Lip batches, splicing consecutive sentences seamlessly.
 - [x] **Private knowledge base + long-term memory (local RAG, zero model)**:
   collections are global and shared; avatars bind to them via an N:N relation
-  table (one collection can serve multiple avatars). A dedicated `rag-service`
+  table (one collection can serve multiple avatars). A dedicated `service-rag`
   microservice (FastAPI + uv + [zvec](https://zvec.org) in-process full-text
   search) segments Chinese with its bundled Jieba tokenizer — no
   sentence-transformers / torch / model downloads, and no RediSearch. Documents
@@ -154,7 +154,7 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   collection (add text / upload .txt/.pdf / delete) with a Top-3 retrieval test
   scoped to that collection; the Avatar editor has a "Knowledge base" panel to
   bind one or more collections to each digital human.
-- [x] **Edge-TTS microservice** (`tts-service/`, internal :8002): async
+- [x] **Edge-TTS microservice** (`services/tts/`, internal :8002): async
   `edge_tts.Communicate` → ffmpeg → **16 kHz / 16-bit / mono PCM WAV** (the exact
   format Wav2Lip requires) → upload to S3 (RustFS) → returns only the S3 object
   key + metadata; temp files are removed in `finally`, S3 config comes from env.
@@ -198,7 +198,7 @@ disable with `FACE_ENHANCER=off`):
 
 ```text
 Admin console :8080 ──> Nginx (frontend)
-  ├── /api    ──> api-admin (Gin) ──> MariaDB 11 / Redis 8.2 / RustFS / rag-service
+  ├── /api    ──> api-admin (Gin) ──> MariaDB 11 / Redis 8.2 / RustFS / service-rag
   └── webhooks ──> api-scheduler (worker task/base-video callbacks)
   └── /media  ──> RustFS (S3-compatible)
 
@@ -209,10 +209,10 @@ Python AI Worker ──> Redis queue / boto3 downloads assets
                  ──> Use: Edge-TTS → Wav2Lip (ONNX) offline broadcast / live stream
                  ──> Uploads results to S3, writes task status back via Webhook
 
-rag-service ──> zvec in-process full-text index (Jieba Chinese, zero model)
+service-rag ──> zvec in-process full-text index (Jieba Chinese, zero model)
             ──> Go API calls /v1/knowledge/{ingest,search,delete,chunks} directly
 
-tts-service ──> async edge-tts → 16kHz PCM WAV → S3 (RustFS)
+service-tts ──> async edge-tts → 16kHz PCM WAV → S3 (RustFS)
             ──> POST /v1/tts/synthesize returns the S3 key only (no media over HTTP)
 ```
 
@@ -224,7 +224,7 @@ tts-service ──> async edge-tts → 16kHz PCM WAV → S3 (RustFS)
   `api-admin` (management console, :8081), `api-user` (audience/live chat,
   :8082) and `api-scheduler` (worker webhooks, :8083); standard AWS S3 SDK v2.
 - AI Worker: Python 3.11, uv-managed dependencies, boto3 + Redis.
-- Knowledge microservice: `rag-service` (FastAPI + uv + zvec FTS, Jieba tokenizer,
+- Knowledge microservice: `service-rag` (FastAPI + uv + zvec FTS, Jieba tokenizer,
   zero model dependencies, internal :8001, data persisted in the `rag-zvec-data` volume).
 - Storage: S3-compatible object storage (RustFS in dev).
 - Deployment: Docker Compose orchestrates the infrastructure and frontends; **the real AI
@@ -232,7 +232,7 @@ tts-service ──> async edge-tts → 16kHz PCM WAV → S3 (RustFS)
   ROCm on Linux). Host-published ports are limited to what the host worker and
   the web apps need: **3000** (viewer), **8080** (admin/API), **1935** (RTMP ingest),
   **6379** (Redis) and **9000** (RustFS). `api-admin`, `api-user`,
-  `api-scheduler`, `rag-service` and `tts-service` stay on the internal network.
+  `api-scheduler`, `service-rag` and `service-tts` stay on the internal network.
 
 ## Quick Start
 
@@ -418,7 +418,7 @@ send messages directly; after registering/logging in, chat history follows the a
 | `S3_*` | `.env` / `.env.local` | Object-storage endpoint, credentials, bucket, public prefix |
 | `REDIS_*` | `.env` / `.env.local` | Redis address, password, queue keys |
 | `REDIS_IMAGE` | `.env` | Redis image (default `redis:8.2.2-alpine`) |
-| `EMBED_SERVER_URL` | `.env` | Knowledge retrieval service (default `http://rag-service:8001`, Docker internal network) |
+| `EMBED_SERVER_URL` | `.env` | Knowledge retrieval service (default `http://service-rag:8001`, Docker internal network) |
 | `LIVEPORTRAIT_DEVICE` | `worker/.env.local` | `mps` (macOS default) / `cuda` (Linux) / `cpu` |
 | `LIVEPORTRAIT_DRIVING*` | `worker/.env.local` | Template, speed, amplitude |
 | `LIVEPORTRAIT_OUTPUT_FPS` | `worker/.env.local` | Base video framerate (default 24) |
@@ -443,8 +443,8 @@ dedicated `docs` gateway (nginx entry `http://localhost:8080/doc/`):
 - `/doc/api-admin/` — admin console API (gin-swagger)
 - `/doc/api-user/` — viewer / live-chat API (gin-swagger)
 - `/doc/api-scheduler/` — worker webhooks (gin-swagger)
-- `/doc/rag-service/` — knowledge-base service (FastAPI /docs)
-- `/doc/tts-service/` — TTS service (FastAPI /docs)
+- `/doc/service-rag/` — knowledge-base service (FastAPI /docs)
+- `/doc/service-tts/` — TTS service (FastAPI /docs)
 
 ## Directory Layout
 
@@ -452,8 +452,9 @@ dedicated `docs` gateway (nginx entry `http://localhost:8080/doc/`):
 LingCast/
 ├── backend/        Go module — three microservices: cmd/api-admin, cmd/api-user,
 │                   cmd/api-scheduler (shared internal/ packages)
-├── rag-service/    Local RAG microservice (FastAPI + uv + zvec FTS/Jieba, :8001)
-├── tts-service/    Edge-TTS microservice (FastAPI + uv + edge-tts + ffmpeg, :8002)
+├── services/       Python microservices
+│   ├── rag/        Local RAG microservice (FastAPI + uv + zvec FTS/Jieba, :8001)
+│   └── tts/        Edge-TTS microservice (FastAPI + uv + edge-tts + ffmpeg, :8002)
 ├── frontend/       BFF client matrix (all frontends)
 │   ├── admin/      LingCast admin console (React + shadcn/ui, :8080)
 │   ├── live/       Next.js viewer app (standalone project, :3000)

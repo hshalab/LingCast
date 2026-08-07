@@ -731,7 +731,7 @@ func (h *LiveHandler) processChatReply(ctx context.Context, lang, userText strin
 //  1. Long-term memory: fetch the last 10 chat_messages of this session
 //     (avatar_id) and format them as LLM messages [{"role","content"}].
 //  2. RAG knowledge: POST to the knowledge service
-//     (http://rag-service:8001/v1/knowledge/search) with a 500ms timeout;
+//     (http://service-rag:8001/v1/knowledge/search) with a 500ms timeout;
 //     on timeout/failure log a warning and continue WITHOUT knowledge.
 //  3. Streaming LLM (DeepSeek Responses, stream=true): tokens are appended
 //     to a sentence buffer and split on Chinese/English punctuation
@@ -739,7 +739,7 @@ func (h *LiveHandler) processChatReply(ctx context.Context, lang, userText strin
 //  4. Ordered TTS + queueing: sentences are synthesized and pushed to the
 //     Redis queue (talking_avatar:tasks) ONE BY ONE in the exact order the
 //     LLM produced them — the serial loop guarantees no race can reorder
-//     them. Each TTS call (http://tts-service:8002/v1/tts/synthesize) is
+//     them. Each TTS call (http://service-tts:8002/v1/tts/synthesize) is
 //     bounded by a 3s timeout and returns an S3 key; the render payload
 //     carries only S3 keys.
 //
@@ -899,12 +899,12 @@ func (h *LiveHandler) Chat(c *gin.Context) {
 	})
 }
 
-// synthesizeAndEnqueue runs ONE sentence through tts-service (3s timeout),
+// synthesizeAndEnqueue runs ONE sentence through service-tts (3s timeout),
 // reads the returned S3 key and pushes a render task to the Redis queue.
 // The call is serial, which is what preserves the LLM's sentence order.
 func (h *LiveHandler) synthesizeAndEnqueue(ctx context.Context, avatar models.Avatar, sentence, actionKey string) error {
 	if strings.TrimSpace(h.ttsServiceURL) == "" {
-		return fmt.Errorf("tts-service URL not configured")
+		return fmt.Errorf("service-tts URL not configured")
 	}
 	body, err := json.Marshal(map[string]any{
 		"text":    sentence,
@@ -927,20 +927,20 @@ func (h *LiveHandler) synthesizeAndEnqueue(ctx context.Context, avatar models.Av
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("tts-service request failed: %w", err)
+		return fmt.Errorf("service-tts request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("tts-service returned %d", resp.StatusCode)
+		return fmt.Errorf("service-tts returned %d", resp.StatusCode)
 	}
 	var out struct {
 		S3Key string `json:"s3_key"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return fmt.Errorf("bad tts-service response: %w", err)
+		return fmt.Errorf("bad service-tts response: %w", err)
 	}
 	if strings.TrimSpace(out.S3Key) == "" {
-		return fmt.Errorf("tts-service returned an empty s3_key")
+		return fmt.Errorf("service-tts returned an empty s3_key")
 	}
 
 	videoKey := strings.TrimSpace(actionKey)
@@ -1025,7 +1025,7 @@ func (h *LiveHandler) recentMessages(avatarID uint, limit int) []models.ChatMess
 }
 
 // retrieveKnowledge sends the user message to the knowledge service
-// (rag-service, zvec Jieba FTS + per-avatar scalar filter) and returns the
+// (service-rag, zvec Jieba FTS + per-avatar scalar filter) and returns the
 // Top-K chunks for THIS avatar only. The request is bounded by `timeout`
 // (the orchestrator uses 500ms); any failure or timeout degrades gracefully —
 // the chat continues WITHOUT knowledge and never crashes the request.

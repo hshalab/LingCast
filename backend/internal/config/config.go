@@ -96,7 +96,7 @@ func Load() Config {
 		OpenAIBaseURL:       env("OPENAI_BASE_URL", "https://api.deepseek.com"),
 		OpenAIModel:         env("OPENAI_MODEL", "deepseek-v4-flash"),
 		EmbedServerURL:      env("EMBED_SERVER_URL", "http://host.docker.internal:8090"),
-		TTSServiceURL:       env("TTS_SERVICE_URL", "http://tts-service:8002"),
+		TTSServiceURL:       env("TTS_SERVICE_URL", "http://service-tts:8002"),
 		AdminUsername:       env("ADMIN_USERNAME", "admin"),
 		AdminPassword:       env("ADMIN_PASSWORD", "admin123"),
 
