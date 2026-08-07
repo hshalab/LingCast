@@ -327,6 +327,7 @@ services:
       AI_MODE: real
       LIVEPORTRAIT_HALF: "false"
       WAV2LIP_PROVIDER: rocm
+      FACE_ENHANCER: "off"
       TTS_ENGINE: edge
     volumes:
       - ./worker/models:/app/models
