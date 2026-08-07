@@ -19,7 +19,7 @@ ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv export --format requirements-txt --no-hashes --all-groups --no-group cuda -o reqs.txt && \
     grep -vE '^(torch|torchvision|torchaudio|torchcodec|nvidia-|triton)' reqs.txt > reqs_filtered.txt && \
-    uv pip install --system --break-system-packages --no-deps -r reqs_filtered.txt
+    uv pip install --python python --no-deps -r reqs_filtered.txt
 
 COPY . .
 
