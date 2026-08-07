@@ -26,7 +26,7 @@ type Deps struct {
 // Bootstrap connects MariaDB, S3, Redis and the task queue. Failures are
 // fatal — a service that cannot reach its data layer must not half-start.
 func Bootstrap(cfg config.Config) *Deps {
-	db, err := database.Connect(cfg.MySQLDSN)
+	db, err := database.Connect(cfg.MySQLDSN, cfg.EmbedServerURL)
 	if err != nil {
 		log.Fatalf("connect mysql: %v", err)
 	}

@@ -270,6 +270,10 @@ uv run python -u worker.py          # 真实管线，AI_MODE=real
 - **ffmpeg**：宿主机需 `brew install ffmpeg`（torchcodec 依赖）。
 - **任务卡在 processing**：先看 worker 日志尾部；口型阶段卡住多半是用了旧 torch
   后端或模型缺失（`download_models.py --models wav2lip` 可补齐）。
+- **旧库启动报 Multiple primary key**：早期版本（dc867b7 前后）把知识文档存在
+  `avatar_knowledges`（id/avatar_id/content/...）表，与现在的 N:N 绑定表重名；
+  启动迁移会自动先把旧表改名 `avatar_knowledges_legacy`，再把它迁成全局集合
+  「旧知识库 #<id>」并重新入库 rag-service，全程非破坏（成功后旧表才删除）。
 - **直播推流没画面**：先确认 `docker compose up` 里 srs 健康、`/live/<id>.flv`
   可拉流；ffmpeg 日志在 `stream-<id>/ffmpeg.log`。音频必须与视频交错写（见
   ffmpeg_pipe.py 顶部说明），否则双管道死锁。
