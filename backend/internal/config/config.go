@@ -127,7 +127,6 @@ func Load() Config {
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:  env("GOOGLE_REDIRECT_URL", "http://localhost:8085/api/auth/google/callback"),
 
-		CORSOrigins: splitCSV(env("CORS_ORIGINS",
-			"http://localhost:5173,http://localhost:3000,http://localhost:8080")),
+		CORSOrigins: splitCSV(env("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:8080,https://admin.lingcast.com")),
 	}
 }
