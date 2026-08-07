@@ -14,7 +14,7 @@ COPY pyproject.toml uv.lock ./
 # IMPORTANT: For ROCm, we must use --inexact so uv sync preserves the PyTorch
 # installed in the rocm base image, instead of uninstalling it.
 # (As specified in AGENTS.md dependencies section)
-RUN uv sync --frozen --no-dev --inexact
+RUN uv sync --frozen --no-dev --inexact --all-groups --no-group cuda
 
 COPY . .
 
