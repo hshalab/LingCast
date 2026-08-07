@@ -22,7 +22,8 @@
   + **rag-service**（本地 RAG 微服务：zvec 全文索引 + Jieba 中文分词，
   Docker 内 `rag-service/`，端口 8001，零模型依赖）+ **tts-service**
   （Edge-TTS 微服务：async edge-tts → 16kHz PCM WAV → S3，`tts-service/`，
-  端口 8002，S3 共享存储，媒体不过 HTTP）。
+  端口 8002，S3 共享存储，媒体不过 HTTP）+ **docs**（API 文档网关：nginx
+  聚合各 HTTP 微服务的 Swagger/OpenAPI，经管理端 `:8080/doc/<prefix>` 访问）。
 - 部署模式：Docker 里跑基础设施 + API + 前端 + 轻量 Mock Worker；**真实 AI Worker
   在宿主机原生运行**：macOS Apple Silicon（MPS/CoreML）、Linux NVIDIA CUDA、
   Linux **AMD ROCm**（RX 6800 XT 等 RDNA2，见 README 对应章节）。宿主机仅开放
@@ -158,6 +159,8 @@
 backend/   Go API（Dockerfile）
 rag-service/  本地 RAG 知识库微服务（FastAPI + uv + zvec FTS/Jieba，端口 8001）
 tts-service/  Edge-TTS 微服务（FastAPI + uv + edge-tts + ffmpeg，端口 8002，内网）
+docs/         API 文档网关 + VitePress 文档站（nginx 聚合各服务 Swagger；
+              宿主经 /doc/<prefix> 访问；站点构建后部署 GitHub Pages）
 frontend-admin/  React 管理后台（Dockerfile + nginx.conf）
   src/features/knowledge/      知识库管理（index=Collection 列表 / detail=文档）
 frontend-user/    Next.js 观众端（独立项目）：app/page.tsx 列表 + app/rooms/[avatarId] 直播间

@@ -222,6 +222,26 @@ services:
       rustfs:
         condition: service_healthy
 
+  # API documentation gateway (docs): aggregates every HTTP microservice's
+  # Swagger / OpenAPI docs behind one entry, exposed by nginx at
+  # /doc/<prefix>: /doc/api-admin, /doc/api-user, /doc/api-scheduler,
+  # /doc/rag-service, /doc/tts-service
+  docs:
+    build:
+      context: ./docs
+    restart: unless-stopped
+    depends_on:
+      api-admin:
+        condition: service_started
+      api-user:
+        condition: service_started
+      api-scheduler:
+        condition: service_started
+      rag-service:
+        condition: service_started
+      tts-service:
+        condition: service_started
+
   # ---- Docker mock worker: COMMENTED OUT ----
   # The real AI worker runs natively on the host (AI_MODE=real) and shares the
   # same Redis queue; keeping this mock service up makes it race the host

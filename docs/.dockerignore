@@ -1,0 +1,13 @@
+node_modules/
+.vitepress/dist/
+.vitepress/cache/
+pnpm-lock.yaml
+package.json
+.vitepress/
+guide/
+*.md
+TODO.md
+images/
+videos/
+技术需求与架构文档.md
+index.md

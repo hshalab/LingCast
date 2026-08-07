@@ -21,7 +21,7 @@
 - [快速开始](#快速开始)
 - [使用说明](#使用说明)
 - [配置](#配置)
-- [API 参考](#api-参考)
+- [API 文档](#api-文档)
 - [目录结构](#目录结构)
 - [常见问题](#常见问题)
 - [生产注意事项](#生产注意事项)
@@ -373,50 +373,16 @@ curl http://localhost:8080/api/live/9/status
 完整清单见 `worker/.env.local.example`。动画节奏调整（驱动模板/速度/幅度）见
 `LIVEPORTRAIT_DRIVING*` 注释与 `worker/.env.local.example`。
 
-## API 参考
+## API 文档
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `POST` | `/api/avatars` | multipart 上传 `name` + `image`(必填) + `voice_id`(可选) + `category` |
-| `GET` | `/api/avatars` | 素材列表 |
-| `GET` | `/api/avatars/:id` | 单个素材（含 `liveSettings`） |
-| `PUT` | `/api/avatars/:id` | 编辑名称/分类/音色/人物设定 |
-| `DELETE` | `/api/avatars/:id` | 删除数字人（级联任务/会话/文件） |
-| `POST` | `/api/avatars/:id/retry` | 重新生成基础视频 |
-| `PUT` | `/api/avatars/:id/live-settings` | 保存直播字幕等配置（JSON） |
-| `POST` | `/api/avatars/:id/knowledge-collections` | 创建知识库（归属数字人，`{"name": ...}`） |
-| `GET` | `/api/knowledge-collections` | 知识库列表（`avatarId` / `q` 筛选，含文档数） |
-| `PUT` | `/api/knowledge-collections/:id` | 重命名知识库 |
-| `DELETE` | `/api/knowledge-collections/:id` | 删除知识库（级联文档与索引） |
-| `GET` | `/api/knowledge-collections/:id/documents` | 知识库文档列表 |
-| `POST` | `/api/knowledge-collections/:id/documents` | 添加文档：`text` 或 `.txt/.pdf`（直连 rag-service 建索引） |
-| `DELETE` | `/api/knowledge-collections/:id/documents/:did` | 删除文档（含索引） |
-| `POST` | `/api/knowledge-collections/:id/documents/:did/chunks` | 查看文档分块 |
-| `POST` | `/api/knowledge/search` | 在线检索测试（`avatarId` 或 `collectionId`，Top-3） |
-| `POST` | `/v1/tts/synthesize` | `{text, voiceId}` → 16kHz PCM WAV 上传 S3，返回 `{s3_key, metadata}`（tts-service，内网） |
-| `POST` | `/api/tasks` | `{avatarId, scriptText}`，入队并返回任务 |
-| `GET` | `/api/tasks/:id` | 轮询任务状态与输出 URL |
-| `POST` | `/api/tasks/:id/status` | Worker 内部 Webhook（processing/completed/failed） |
-| `POST` | `/api/live/:id/start` | 开启直播（登记会话 + 通知 Worker 开管道） |
-| `POST` | `/api/live/:id/stop` | 关闭直播 |
-| `POST` | `/api/live/:id/message` | 聊天消息 → LLM 回复切句入队（观众端用） |
-| `POST` | `/api/live/:id/push` | 直接按句入队（直播台测试用） |
-| `GET` | `/api/live/:id/status` | 会话状态与队列 |
-| `GET` | `/api/live` | 当前开播机器人列表 |
-| `POST` | `/api/chat/guest` | 获取临时游客身份（userId + username） |
-| `POST` | `/api/chat/register` | 注册（升级当前游客行，保留历史） |
-| `POST` | `/api/chat/login` | 登录（合并游客消息进账号） |
-| `GET` | `/api/chat/history` | 房间持久化聊天记录（`?avatarId=`） |
-| `GET` | `/api/chat/logs` | 管理端聊天日志：`avatarId`/`userId`/`date`/`q` + `page`/`pageSize`，含 `ragHit` + `ragSources` |
-| `GET` | `/api/users` | 用户列表（游客/账号 + 消息数） |
-| `POST` | `/api/admin/login` | 管理员登录（HttpOnly cookie 会话） |
-| `GET` | `/api/admin/me` | 当前管理员（username + name） |
-| `POST` | `/api/admin/logout` | 退出登录 |
-| `POST` | `/api/admin/change-name` | 修改管理员显示名字 |
-| `POST` | `/api/admin/change-password` | 修改管理员密码（需原密码） |
+各 HTTP 微服务的交互式 OpenAPI/Swagger 文档统一由独立的 `docs` 网关聚合，
+经 nginx 入口 `http://localhost:8080/doc/` 访问：
 
-> 管理端写操作与 `/api/users`、`/api/admin/*`（除 login/me/logout）需要登录态；
-> 观众端接口（直播/聊天/拉流）与 Worker Webhook 保持公开。
+- `/doc/api-admin/` — 管理端 API（gin-swagger）
+- `/doc/api-user/` — 观众端 / 直播聊天 API（gin-swagger）
+- `/doc/api-scheduler/` — Worker Webhook（gin-swagger）
+- `/doc/rag-service/` — 知识库服务（FastAPI /docs）
+- `/doc/tts-service/` — 语音服务（FastAPI /docs）
 
 ## 目录结构
 

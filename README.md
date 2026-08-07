@@ -22,7 +22,7 @@ Admin console `:8080` · Viewer app `:3000` · [Architecture doc](docs/技术需
 - [Quick Start](#quick-start)
 - [Usage](#usage)
 - [Configuration](#configuration)
-- [API Reference](#api-reference)
+- [API Docs](#api-docs)
 - [Directory Layout](#directory-layout)
 - [FAQ](#faq)
 - [Production Notes](#production-notes)
@@ -409,50 +409,16 @@ See `worker/.env.local.example` for the full list. Animation tempo (driving temp
 speed / amplitude) is documented in the `LIVEPORTRAIT_DRIVING*` comments and
 `worker/.env.local.example`.
 
-## API Reference
+## API Docs
 
-| Method | Path | Description |
-| --- | --- | --- |
-| `POST` | `/api/avatars` | multipart upload of `name` + `image` (required) + `voice_id` (optional) + `category` |
-| `GET` | `/api/avatars` | Avatar list |
-| `GET` | `/api/avatars/:id` | Single avatar (includes `liveSettings`) |
-| `PUT` | `/api/avatars/:id` | Edit name/category/voice/persona profile |
-| `DELETE` | `/api/avatars/:id` | Delete an avatar (cascades tasks/sessions/files) |
-| `POST` | `/api/avatars/:id/retry` | Regenerate the base video |
-| `PUT` | `/api/avatars/:id/live-settings` | Save live subtitle etc. settings (JSON) |
-| `POST` | `/api/avatars/:id/knowledge-collections` | Create a collection for an avatar (`{"name": ...}`) |
-| `GET` | `/api/knowledge-collections` | List collections (filter `avatarId` / `q`, with document count) |
-| `PUT` | `/api/knowledge-collections/:id` | Rename a collection |
-| `DELETE` | `/api/knowledge-collections/:id` | Delete a collection (cascades documents + indexes) |
-| `GET` | `/api/knowledge-collections/:id/documents` | List documents of a collection |
-| `POST` | `/api/knowledge-collections/:id/documents` | Add a document: `text` or `.txt/.pdf` (indexes via rag-service) |
-| `DELETE` | `/api/knowledge-collections/:id/documents/:did` | Delete a document (including its indexes) |
-| `POST` | `/api/knowledge-collections/:id/documents/:did/chunks` | Inspect the indexed chunks of a document |
-| `POST` | `/api/knowledge/search` | Retrieval test (`avatarId` or `collectionId`, Top-3) |
-| `POST` | `/v1/tts/synthesize` | `{text, voiceId}` → 16kHz PCM WAV to S3, returns `{s3_key, metadata}` (tts-service, internal) |
-| `POST` | `/api/tasks` | `{avatarId, scriptText}`, enqueues and returns a task |
-| `GET` | `/api/tasks/:id` | Poll task status and output URL |
-| `POST` | `/api/tasks/:id/status` | Worker-internal Webhook (processing/completed/failed) |
-| `POST` | `/api/live/:id/start` | Start a live stream (registers session + notifies Worker) |
-| `POST` | `/api/live/:id/stop` | Stop the live stream |
-| `POST` | `/api/live/:id/message` | Chat message → LLM reply chunked into the queue (viewer) |
-| `POST` | `/api/live/:id/push` | Push a sentence directly into the queue (studio test) |
-| `GET` | `/api/live/:id/status` | Session status and queue |
-| `GET` | `/api/live` | Currently live bots |
-| `POST` | `/api/chat/guest` | Get a temporary guest identity (userId + username) |
-| `POST` | `/api/chat/register` | Register (upgrades the current guest row, keeps history) |
-| `POST` | `/api/chat/login` | Login (merges guest messages into the account) |
-| `GET` | `/api/chat/history` | Persisted room chat history (`?avatarId=`) |
-| `GET` | `/api/chat/logs` | Admin chat logs: `avatarId` / `userId` / `date` / `q` + `page` / `pageSize`, includes `ragHit` + `ragSources` |
-| `GET` | `/api/users` | User list (guests/accounts + message counts) |
-| `POST` | `/api/admin/login` | Admin login (HttpOnly cookie session) |
-| `GET` | `/api/admin/me` | Current admin (username + name) |
-| `POST` | `/api/admin/logout` | Logout |
-| `POST` | `/api/admin/change-name` | Change the admin display name |
-| `POST` | `/api/admin/change-password` | Change the admin password (current password required) |
+All HTTP microservices expose interactive OpenAPI/Swagger docs through a
+dedicated `docs` gateway (nginx entry `http://localhost:8080/doc/`):
 
-> Admin write operations and `/api/users`, `/api/admin/*` (except login/me/logout) require a
-> login session; viewer endpoints (live/chat/streams) and the Worker Webhook stay public.
+- `/doc/api-admin/` — admin console API (gin-swagger)
+- `/doc/api-user/` — viewer / live-chat API (gin-swagger)
+- `/doc/api-scheduler/` — worker webhooks (gin-swagger)
+- `/doc/rag-service/` — knowledge-base service (FastAPI /docs)
+- `/doc/tts-service/` — TTS service (FastAPI /docs)
 
 ## Directory Layout
 
