@@ -36,6 +36,12 @@ type chatIdentityResponse struct {
 
 // Guest handles POST /api/chat/guest — creates a temporary viewer identity
 // (no password) used to watch rooms and chat without an account.
+// Guest handles POST /api/chat/guest.
+// @Summary  Get a temporary guest identity
+// @Tags     chat
+// @Produce  json
+// @Success  200 {object} map[string]any
+// @Router   /chat/guest [post]
 func (h *ChatHandler) Guest(c *gin.Context) {
 	for attempt := 0; attempt < 5; attempt++ {
 		u := models.ChatUser{Username: fmt.Sprintf("游客%04d", rand.IntN(10000)), IsGuest: true}
@@ -57,6 +63,14 @@ type chatRegisterRequest struct {
 
 // Register handles POST /api/chat/register — upgrades the current guest row
 // into a real account (same user ID, so the guest's chat history is kept).
+// Register handles POST /api/chat/register.
+// @Summary  Register (upgrades the guest row, keeps history)
+// @Tags     chat
+// @Accept   json
+// @Produce  json
+// @Param    request body map[string]any true "registration form"
+// @Success  200 {object} map[string]any
+// @Router   /chat/register [post]
 func (h *ChatHandler) Register(c *gin.Context) {
 	var req chatRegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -125,6 +139,14 @@ type chatLoginRequest struct {
 // Login handles POST /api/chat/login — verifies an account and merges the
 // current guest's chat messages into it, so nothing is lost when switching
 // from a guest session to a logged-in account.
+// Login handles POST /api/chat/login.
+// @Summary  Login (merges guest messages into the account)
+// @Tags     chat
+// @Accept   json
+// @Produce  json
+// @Param    request body map[string]any true "login form"
+// @Success  200 {object} map[string]any
+// @Router   /chat/login [post]
 func (h *ChatHandler) Login(c *gin.Context) {
 	var req chatLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -162,6 +184,16 @@ func (h *ChatHandler) Login(c *gin.Context) {
 
 // History handles GET /api/chat/history?avatarId= — the persisted room chat
 // (viewer messages + bot replies), newest 200 rows ordered oldest first.
+// History handles GET /api/chat/history.
+// @Summary  Persisted room chat history (paginated)
+// @Tags     chat
+// @Produce  json
+// @Param    avatarId query int false "Filter by avatar"
+// @Param    userId query int false "Filter by user"
+// @Param    page query int false "Page (1-based)"
+// @Param    pageSize query int false "Page size"
+// @Success  200 {object} map[string]any
+// @Router   /chat/history [get]
 func (h *ChatHandler) History(c *gin.Context) {
 	var avatarID uint64
 	if q := c.Query("avatarId"); q != "" {
@@ -216,6 +248,12 @@ type chatLogItem struct {
 
 // ListUsers handles GET /api/users — the persisted chat users (guests and
 // registered accounts) with their message counts, newest first.
+// ListUsers handles GET /api/users.
+// @Summary  User list (guests/accounts + message counts)
+// @Tags     admin
+// @Produce  json
+// @Success  200 {object} map[string]any
+// @Router   /users [get]
 func (h *ChatHandler) ListUsers(c *gin.Context) {
 	var users []models.ChatUser
 	if err := h.db.Order("id desc").Limit(500).Find(&users).Error; err != nil {
@@ -257,6 +295,18 @@ func (h *ChatHandler) ListUsers(c *gin.Context) {
 // Logs handles GET /api/chat/logs — admin chat log with filters:
 // ?avatarId=<id> &userId=<id> &date=YYYY-MM-DD &q=<keyword>.
 // Bot replies carry ragHit + the exact knowledge chunks that were retrieved.
+// Logs handles GET /api/chat/logs.
+// @Summary  Admin chat logs (avatarId/userId/date/q + pagination)
+// @Tags     admin
+// @Produce  json
+// @Param    avatarId query int false "Filter by avatar"
+// @Param    userId query int false "Filter by user"
+// @Param    date query string false "Filter by date (YYYY-MM-DD)"
+// @Param    q query string false "Keyword in message content"
+// @Param    page query int false "Page (1-based)"
+// @Param    pageSize query int false "Page size"
+// @Success  200 {object} map[string]any
+// @Router   /chat/logs [get]
 func (h *ChatHandler) Logs(c *gin.Context) {
 	type row struct {
 		models.ChatMessage

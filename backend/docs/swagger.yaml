@@ -1,0 +1,1074 @@
+basePath: /api
+definitions:
+  handlers.avatarResponse:
+    properties:
+      age:
+        type: integer
+      baseVideoS3Key:
+        type: string
+      baseVideoS3Url:
+        type: string
+      category:
+        type: string
+      createdAt:
+        type: string
+      ethnicity:
+        type: string
+      heightCm:
+        type: integer
+      id:
+        type: integer
+      imageS3Key:
+        type: string
+      imageS3Url:
+        type: string
+      initQueuePos:
+        type: integer
+      liveSettings:
+        $ref: '#/definitions/models.LiveSettings'
+      name:
+        type: string
+      personality:
+        type: string
+      relationshipStatus:
+        type: string
+      status:
+        type: string
+      voiceId:
+        type: string
+      weightKg:
+        type: integer
+    type: object
+  handlers.taskResponse:
+    properties:
+      avatarId:
+        type: integer
+      avatarName:
+        type: string
+      createdAt:
+        type: string
+      errorMessage:
+        type: string
+      id:
+        type: integer
+      outputVideoS3Url:
+        type: string
+      scriptText:
+        type: string
+      status:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  models.LiveSettings:
+    properties:
+      subtitleBorder:
+        description: stroke width in px (0 = none)
+        type: integer
+      subtitleEnabled:
+        type: boolean
+      subtitleFont:
+        description: font filename in worker/fonts/, "" = system default
+        type: string
+      subtitlePosition:
+        description: '"bottom" | "top"'
+        type: string
+      subtitleSize:
+        description: px
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: LingCast 数字人直播平台 API（api-admin / api-user / api-scheduler 共用一份 OpenAPI
+    文档；管理端写操作与 /users、/admin/* 需登录会话，观众端与 Worker Webhook 公开）。
+  title: LingCast API
+  version: 1.0.0
+paths:
+  /admin/change-name:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: new display name
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Change the admin display name
+      tags:
+      - admin
+  /admin/change-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: currentPassword + newPassword
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Change the admin password (current password required)
+      tags:
+      - admin
+  /admin/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: username + password
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Admin login (HttpOnly cookie session)
+      tags:
+      - admin
+  /admin/logout:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Admin logout
+      tags:
+      - admin
+  /admin/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Current admin profile
+      tags:
+      - admin
+  /avatars:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List all avatars
+      tags:
+      - avatars
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Avatar name
+        in: formData
+        name: name
+        required: true
+        type: string
+      - description: Appearance image
+        in: formData
+        name: image
+        required: true
+        type: file
+      - description: Edge-TTS voice id
+        in: formData
+        name: voice_id
+        type: string
+      - description: Category (闲聊/知识/娱乐/游戏/带货/其他)
+        in: formData
+        name: category
+        type: string
+      - description: Age
+        in: formData
+        name: age
+        type: integer
+      - description: Height in cm
+        in: formData
+        name: height_cm
+        type: integer
+      - description: Weight in kg
+        in: formData
+        name: weight_kg
+        type: integer
+      - description: Ethnicity
+        in: formData
+        name: ethnicity
+        type: string
+      - description: Relationship status
+        in: formData
+        name: relationship_status
+        type: string
+      - description: Personality
+        in: formData
+        name: personality
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.avatarResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 'Create an avatar (multipart: name + image + optional persona fields)'
+      tags:
+      - avatars
+  /avatars/{id}:
+    delete:
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete an avatar (cascades tasks/sessions/files)
+      tags:
+      - avatars
+    get:
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.avatarResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get a single avatar (includes liveSettings)
+      tags:
+      - avatars
+    put:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.avatarResponse'
+      summary: Edit an avatar (name/category/voice/persona profile)
+      tags:
+      - avatars
+  /avatars/{id}/base-video:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: baseVideoS3Key + status (+ coverS3Key)
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.avatarResponse'
+      summary: 'Worker webhook: persist base video + status'
+      tags:
+      - worker
+  /avatars/{id}/knowledge-collections:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: name
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a knowledge collection for an avatar
+      tags:
+      - knowledge
+  /avatars/{id}/live-settings:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: live settings
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.LiveSettings'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.avatarResponse'
+      summary: Save live settings (subtitles etc., JSON)
+      tags:
+      - avatars
+  /avatars/{id}/retry:
+    post:
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Regenerate the base driving video
+      tags:
+      - avatars
+  /avatars/{id}/skip:
+    post:
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Skip base-video generation for an avatar
+      tags:
+      - avatars
+  /chat/guest:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get a temporary guest identity
+      tags:
+      - chat
+  /chat/history:
+    get:
+      parameters:
+      - description: Filter by avatar
+        in: query
+        name: avatarId
+        type: integer
+      - description: Filter by user
+        in: query
+        name: userId
+        type: integer
+      - description: Page (1-based)
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: pageSize
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Persisted room chat history (paginated)
+      tags:
+      - chat
+  /chat/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: login form
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Login (merges guest messages into the account)
+      tags:
+      - chat
+  /chat/logs:
+    get:
+      parameters:
+      - description: Filter by avatar
+        in: query
+        name: avatarId
+        type: integer
+      - description: Filter by user
+        in: query
+        name: userId
+        type: integer
+      - description: Filter by date (YYYY-MM-DD)
+        in: query
+        name: date
+        type: string
+      - description: Keyword in message content
+        in: query
+        name: q
+        type: string
+      - description: Page (1-based)
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: pageSize
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Admin chat logs (avatarId/userId/date/q + pagination)
+      tags:
+      - admin
+  /chat/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: registration form
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Register (upgrades the guest row, keeps history)
+      tags:
+      - chat
+  /knowledge-collections:
+    get:
+      parameters:
+      - description: Filter by avatar
+        in: query
+        name: avatarId
+        type: integer
+      - description: Keyword in collection name
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List knowledge collections (filter avatarId / q)
+      tags:
+      - knowledge
+  /knowledge-collections/{id}:
+    delete:
+      parameters:
+      - description: Collection ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a collection (cascades documents + indexes)
+      tags:
+      - knowledge
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Collection ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: name
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Rename a knowledge collection
+      tags:
+      - knowledge
+  /knowledge-collections/{id}/documents:
+    get:
+      parameters:
+      - description: Collection ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List documents of a collection
+      tags:
+      - knowledge
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Collection ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Plain text content
+        in: formData
+        name: text
+        type: string
+      - description: .txt/.pdf source file
+        in: formData
+        name: file
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Add a document (text or .txt/.pdf upload)
+      tags:
+      - knowledge
+  /knowledge-collections/{id}/documents/{did}:
+    delete:
+      parameters:
+      - description: Collection ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Document ID
+        in: path
+        name: did
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a document (including its indexes)
+      tags:
+      - knowledge
+  /knowledge-collections/{id}/documents/{did}/chunks:
+    post:
+      parameters:
+      - description: Collection ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Document ID
+        in: path
+        name: did
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Inspect the indexed chunks of a document
+      tags:
+      - knowledge
+  /knowledge/search:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: query + avatarId/collectionId
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Retrieval test (avatarId or collectionId, Top-3)
+      tags:
+      - knowledge
+  /live:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List currently live bots
+      tags:
+      - live
+  /live/{avatarID}/message:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: avatarID
+        required: true
+        type: integer
+      - description: text + userId + username
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 'Send a chat message (async: 202 + background LLM reply)'
+      tags:
+      - live
+  /live/{avatarID}/push:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: avatarID
+        required: true
+        type: integer
+      - description: text
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Push a sentence into the live queue (studio test)
+      tags:
+      - live
+  /live/{avatarID}/start:
+    post:
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: avatarID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Start a live stream session
+      tags:
+      - live
+  /live/{avatarID}/status:
+    get:
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: avatarID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Live session status + queue
+      tags:
+      - live
+  /live/{avatarID}/stop:
+    post:
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: avatarID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Stop a live stream session
+      tags:
+      - live
+  /live/chat:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: chat request (sessionId + text)
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Live-chat orchestrator (LLM -> TTS -> queue)
+      tags:
+      - live
+  /tasks:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List broadcast tasks (newest first)
+      tags:
+      - tasks
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: avatarId + scriptText
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.taskResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a broadcast (offline video) task
+      tags:
+      - tasks
+  /tasks/{id}:
+    delete:
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a broadcast task
+      tags:
+      - tasks
+    get:
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.taskResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Poll task status and output URL
+      tags:
+      - tasks
+  /tasks/{id}/retry:
+    post:
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.taskResponse'
+      summary: Re-enqueue a failed task
+      tags:
+      - tasks
+  /tasks/{id}/status:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: status + outputVideoS3Url + error
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 'Worker webhook: task status callback'
+      tags:
+      - worker
+  /tts/preview:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: voiceId + text (<=200 chars)
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - audio/mpeg
+      responses:
+        "200":
+          description: audio/mpeg bytes
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Voice audition (MP3 bytes, proxied to tts-service)
+      tags:
+      - tts
+  /users:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: User list (guests/accounts + message counts)
+      tags:
+      - admin
+swagger: "2.0"

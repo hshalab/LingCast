@@ -6,6 +6,8 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 
 	"talkingavatar/backend/internal/config"
 	"talkingavatar/backend/internal/i18n"
@@ -34,5 +36,8 @@ func Base(cfg config.Config) *gin.Engine {
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+	// Swagger UI + OpenAPI JSON at /swagger/index.html (docs are generated
+	// by `swag init` into backend/docs; each service main imports it).
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	return r
 }

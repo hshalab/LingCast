@@ -23,6 +23,14 @@ type previewTTSRequest struct {
 // audition is delegated to the tts-service microservice over HTTP — the API
 // image no longer bundles python3 / edge-tts. The preview is a one-shot
 // throwaway sample, so the service streams the bytes back directly (no S3).
+// @Summary  Voice audition (MP3 bytes, proxied to tts-service)
+// @Tags     tts
+// @Accept   json
+// @Produce  audio/mpeg
+// @Param    request body map[string]any true "voiceId + text (<=200 chars)"
+// @Success  200 {string} string "audio/mpeg bytes"
+// @Failure  400 {object} map[string]any
+// @Router   /tts/preview [post]
 func PreviewTTS(serviceURL string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req previewTTSRequest

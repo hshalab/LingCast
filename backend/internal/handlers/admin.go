@@ -68,6 +68,15 @@ func adminSessionKey(token string) string {
 }
 
 // Login handles POST /api/admin/login.
+// Login handles POST /api/admin/login.
+// @Summary  Admin login (HttpOnly cookie session)
+// @Tags     admin
+// @Accept   json
+// @Produce  json
+// @Param    request body map[string]any true "username + password"
+// @Success  200 {object} map[string]any
+// @Failure  401 {object} map[string]any
+// @Router   /admin/login [post]
 func (h *AdminHandler) Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username"`
@@ -114,6 +123,12 @@ func randomToken() (string, error) {
 }
 
 // Me handles GET /api/admin/me — tells the frontend whether the session is valid.
+// Me handles GET /api/admin/me.
+// @Summary  Current admin profile
+// @Tags     admin
+// @Produce  json
+// @Success  200 {object} map[string]any
+// @Router   /admin/me [get]
 func (h *AdminHandler) Me(c *gin.Context) {
 	username, ok := h.sessionUser(c)
 	if !ok {
@@ -129,6 +144,12 @@ func (h *AdminHandler) Me(c *gin.Context) {
 }
 
 // Logout handles POST /api/admin/logout.
+// Logout handles POST /api/admin/logout.
+// @Summary  Admin logout
+// @Tags     admin
+// @Produce  json
+// @Success  200 {object} map[string]any
+// @Router   /admin/logout [post]
 func (h *AdminHandler) Logout(c *gin.Context) {
 	if token, err := c.Cookie("admin_token"); err == nil && token != "" {
 		_ = h.redis.Del(c.Request.Context(), adminSessionKey(token)).Err()
@@ -141,6 +162,14 @@ func (h *AdminHandler) Logout(c *gin.Context) {
 }
 
 // ChangeName handles POST /api/admin/change-name — updates the display name.
+// ChangeName handles POST /api/admin/change-name.
+// @Summary  Change the admin display name
+// @Tags     admin
+// @Accept   json
+// @Produce  json
+// @Param    request body map[string]any true "new display name"
+// @Success  200 {object} map[string]any
+// @Router   /admin/change-name [post]
 func (h *AdminHandler) ChangeName(c *gin.Context) {
 	username, ok := h.sessionUser(c)
 	if !ok {
@@ -169,6 +198,14 @@ func (h *AdminHandler) ChangeName(c *gin.Context) {
 }
 
 // ChangePassword handles POST /api/admin/change-password.
+// ChangePassword handles POST /api/admin/change-password.
+// @Summary  Change the admin password (current password required)
+// @Tags     admin
+// @Accept   json
+// @Produce  json
+// @Param    request body map[string]any true "currentPassword + newPassword"
+// @Success  200 {object} map[string]any
+// @Router   /admin/change-password [post]
 func (h *AdminHandler) ChangePassword(c *gin.Context) {
 	username, ok := h.sessionUser(c)
 	if !ok {

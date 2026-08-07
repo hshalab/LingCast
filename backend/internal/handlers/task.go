@@ -52,6 +52,15 @@ func NewTaskHandler(db *gorm.DB, q *queue.Queue, s3 *storage.Client) *TaskHandle
 
 // Create handles POST /api/tasks. It persists the task, pushes a JSON payload
 // (including S3 keys) to Redis and returns the task for polling.
+// Create handles POST /api/tasks.
+// @Summary  Create a broadcast (offline video) task
+// @Tags     tasks
+// @Accept   json
+// @Produce  json
+// @Param    request body map[string]any true "avatarId + scriptText"
+// @Success  201 {object} taskResponse
+// @Failure  400 {object} map[string]any
+// @Router   /tasks [post]
 func (h *TaskHandler) Create(c *gin.Context) {
 	var req createTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -113,6 +122,12 @@ func (h *TaskHandler) Create(c *gin.Context) {
 
 // List handles GET /api/tasks — returns all broadcast tasks (newest first)
 // with their avatar name, for the task-center UI.
+// List handles GET /api/tasks.
+// @Summary  List broadcast tasks (newest first)
+// @Tags     tasks
+// @Produce  json
+// @Success  200 {object} map[string]any
+// @Router   /tasks [get]
 func (h *TaskHandler) List(c *gin.Context) {
 	var tasks []models.BroadcastTask
 	if err := h.db.Preload("Avatar").Order("created_at DESC").Find(&tasks).Error; err != nil {
@@ -130,6 +145,13 @@ func (h *TaskHandler) List(c *gin.Context) {
 
 // Delete handles DELETE /api/tasks/:id — removes the task record and its
 // output video from S3 (best-effort).
+// Delete handles DELETE /api/tasks/:id.
+// @Summary  Delete a broadcast task
+// @Tags     tasks
+// @Produce  json
+// @Param    id path int true "Task ID"
+// @Success  200 {object} map[string]any
+// @Router   /tasks/{id} [delete]
 func (h *TaskHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -156,6 +178,13 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 }
 
 // Retry handles POST /api/tasks/:id/retry — re-queues a failed broadcast task.
+// Retry handles POST /api/tasks/:id/retry.
+// @Summary  Re-enqueue a failed task
+// @Tags     tasks
+// @Produce  json
+// @Param    id path int true "Task ID"
+// @Success  200 {object} taskResponse
+// @Router   /tasks/{id}/retry [post]
 func (h *TaskHandler) Retry(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -209,6 +238,14 @@ func (h *TaskHandler) Retry(c *gin.Context) {
 }
 
 // Get handles GET /api/tasks/:id, the endpoint the frontend polls.
+// Get handles GET /api/tasks/:id.
+// @Summary  Poll task status and output URL
+// @Tags     tasks
+// @Produce  json
+// @Param    id path int true "Task ID"
+// @Success  200 {object} taskResponse
+// @Failure  404 {object} map[string]any
+// @Router   /tasks/{id} [get]
 func (h *TaskHandler) Get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -230,6 +267,15 @@ func (h *TaskHandler) Get(c *gin.Context) {
 
 // UpdateStatus handles POST /api/tasks/:id/status, the webhook used by the
 // Python AI worker to report progress/completion/failure.
+// UpdateStatus handles POST /api/tasks/:id/status — the worker webhook.
+// @Summary  Worker webhook: task status callback
+// @Tags     worker
+// @Accept   json
+// @Produce  json
+// @Param    id path int true "Task ID"
+// @Param    request body map[string]any true "status + outputVideoS3Url + error"
+// @Success  200 {object} map[string]any
+// @Router   /tasks/{id}/status [post]
 func (h *TaskHandler) UpdateStatus(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {

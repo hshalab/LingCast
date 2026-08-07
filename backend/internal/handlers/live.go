@@ -221,6 +221,13 @@ func liveHistoryKey(avatarID uint) string {
 // Start handles POST /api/live/:avatarID/start. It upserts a LiveSession in
 // the database and tells the streaming worker to start the continuous FFmpeg
 // pipe (idle mode: base animation + silent audio) for this avatar.
+// Start handles POST /api/live/:avatarID/start.
+// @Summary  Start a live stream session
+// @Tags     live
+// @Produce  json
+// @Param    avatarID path int true "Avatar ID"
+// @Success  200 {object} map[string]any
+// @Router   /live/{avatarID}/start [post]
 func (h *LiveHandler) Start(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
 	if err != nil || avatarID == 0 {
@@ -299,6 +306,13 @@ func (h *LiveHandler) Start(c *gin.Context) {
 // Stop handles POST /api/live/:avatarID/stop — tells the worker to close the
 // FFmpeg pipe for this avatar's live session and removes the session record
 // (GET status then returns 404 until the stream is started again).
+// Stop handles POST /api/live/:avatarID/stop.
+// @Summary  Stop a live stream session
+// @Tags     live
+// @Produce  json
+// @Param    avatarID path int true "Avatar ID"
+// @Success  200 {object} map[string]any
+// @Router   /live/{avatarID}/stop [post]
 func (h *LiveHandler) Stop(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
 	if err != nil || avatarID == 0 {
@@ -334,6 +348,15 @@ func (h *LiveHandler) Stop(c *gin.Context) {
 
 // Push handles POST /api/live/:avatarID/push. It chunks the incoming text by
 // sentences and appends them to live_queue:<avatarID> for the worker.
+// Push handles POST /api/live/:avatarID/push.
+// @Summary  Push a sentence into the live queue (studio test)
+// @Tags     live
+// @Accept   json
+// @Produce  json
+// @Param    avatarID path int true "Avatar ID"
+// @Param    request body map[string]any true "text"
+// @Success  202 {object} map[string]any
+// @Router   /live/{avatarID}/push [post]
 func (h *LiveHandler) Push(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
 	if err != nil || avatarID == 0 {
@@ -381,6 +404,15 @@ func (h *LiveHandler) Push(c *gin.Context) {
 // round trip (memory + RAG + DeepSeek) and the queueing of the bot's reply
 // run in a background goroutine so the sender never blocks on model latency.
 // Without an API key the incoming text is spoken verbatim (test mode).
+// @Summary  Send a chat message (async: 202 + background LLM reply)
+// @Tags     live
+// @Accept   json
+// @Produce  json
+// @Param    avatarID path int true "Avatar ID"
+// @Param    request body map[string]any true "text + userId + username"
+// @Success  202 {object} map[string]any
+// @Failure  400 {object} map[string]any
+// @Router   /live/{avatarID}/message [post]
 func (h *LiveHandler) Message(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
 	if err != nil || avatarID == 0 {
@@ -496,6 +528,13 @@ func (h *LiveHandler) processChatReply(ctx context.Context, lang, userText strin
 // Client disconnects: the request context is honored everywhere (LLM stream,
 // TTS calls, Redis pushes); the loop bails out as soon as ctx is canceled,
 // so no goroutine is spawned and nothing leaks.
+// @Summary  Live-chat orchestrator (LLM -> TTS -> queue)
+// @Tags     live
+// @Accept   json
+// @Produce  json
+// @Param    request body map[string]any true "chat request (sessionId + text)"
+// @Success  200 {object} map[string]any
+// @Router   /live/chat [post]
 func (h *LiveHandler) Chat(c *gin.Context) {
 	var req liveChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.SessionID == 0 || strings.TrimSpace(req.Text) == "" {
@@ -921,6 +960,13 @@ func chatSystemPrompt(a models.Avatar, lang string, memory []models.ChatMessage,
 // Status handles GET /api/live/:avatarID/status. It returns the live session
 // state plus the pending text chunks (and queue length) so the frontend can
 // monitor what is waiting to be rendered.
+// Status handles GET /api/live/:avatarID/status.
+// @Summary  Live session status + queue
+// @Tags     live
+// @Produce  json
+// @Param    avatarID path int true "Avatar ID"
+// @Success  200 {object} map[string]any
+// @Router   /live/{avatarID}/status [get]
 func (h *LiveHandler) Status(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
 	if err != nil || avatarID == 0 {
@@ -965,6 +1011,12 @@ func (h *LiveHandler) Status(c *gin.Context) {
 
 // ListSessions handles GET /api/live — returns every active live session
 // with its avatar info, so the Live Studio can render a switching list.
+// ListSessions handles GET /api/live.
+// @Summary  List currently live bots
+// @Tags     live
+// @Produce  json
+// @Success  200 {object} map[string]any
+// @Router   /live [get]
 func (h *LiveHandler) ListSessions(c *gin.Context) {
 	var sessions []models.LiveSession
 	if err := h.db.Find(&sessions).Error; err != nil {

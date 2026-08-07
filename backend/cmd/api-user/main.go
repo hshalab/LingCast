@@ -6,6 +6,7 @@ import (
 	"talkingavatar/backend/internal/app"
 	"talkingavatar/backend/internal/config"
 	"talkingavatar/backend/internal/router"
+	_ "talkingavatar/backend/docs"
 )
 
 func main() {

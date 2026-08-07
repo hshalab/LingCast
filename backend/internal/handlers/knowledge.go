@@ -74,6 +74,14 @@ func toDocumentResponse(d models.KnowledgeDocument) documentResponse {
 // ListCollections handles GET /api/knowledge-collections — all knowledge
 // bases with optional ?avatarId=<id> and ?q=<name keyword> filters, including
 // the owning avatar name and document count.
+// ListCollections handles GET /api/knowledge-collections.
+// @Summary  List knowledge collections (filter avatarId / q)
+// @Tags     knowledge
+// @Produce  json
+// @Param    avatarId query int false "Filter by avatar"
+// @Param    q query string false "Keyword in collection name"
+// @Success  200 {object} map[string]any
+// @Router   /knowledge-collections [get]
 func (h *KnowledgeHandler) ListCollections(c *gin.Context) {
 	type row struct {
 		models.KnowledgeCollection
@@ -114,6 +122,15 @@ func (h *KnowledgeHandler) ListCollections(c *gin.Context) {
 
 // CreateCollection handles POST /api/avatars/:id/knowledge-collections
 // with {"name": "..."} — creates a named knowledge base for one avatar.
+// CreateCollection handles POST /api/avatars/:id/knowledge-collections.
+// @Summary  Create a knowledge collection for an avatar
+// @Tags     knowledge
+// @Accept   json
+// @Produce  json
+// @Param    id path int true "Avatar ID"
+// @Param    request body map[string]any true "name"
+// @Success  201 {object} map[string]any
+// @Router   /avatars/{id}/knowledge-collections [post]
 func (h *KnowledgeHandler) CreateCollection(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || avatarID == 0 {
@@ -159,6 +176,15 @@ func (h *KnowledgeHandler) CreateCollection(c *gin.Context) {
 }
 
 // RenameCollection handles PUT /api/knowledge-collections/:id with {"name": ...}.
+// RenameCollection handles PUT /api/knowledge-collections/:id.
+// @Summary  Rename a knowledge collection
+// @Tags     knowledge
+// @Accept   json
+// @Produce  json
+// @Param    id path int true "Collection ID"
+// @Param    request body map[string]any true "name"
+// @Success  200 {object} map[string]any
+// @Router   /knowledge-collections/{id} [put]
 func (h *KnowledgeHandler) RenameCollection(c *gin.Context) {
 	cid, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || cid == 0 {
@@ -203,6 +229,13 @@ func (h *KnowledgeHandler) RenameCollection(c *gin.Context) {
 
 // DeleteCollection handles DELETE /api/knowledge-collections/:id — removes the
 // collection, its documents (rows + S3 sources) and the rag-service chunks.
+// DeleteCollection handles DELETE /api/knowledge-collections/:id.
+// @Summary  Delete a collection (cascades documents + indexes)
+// @Tags     knowledge
+// @Produce  json
+// @Param    id path int true "Collection ID"
+// @Success  200 {object} map[string]any
+// @Router   /knowledge-collections/{id} [delete]
 func (h *KnowledgeHandler) DeleteCollection(c *gin.Context) {
 	cid, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || cid == 0 {
@@ -240,6 +273,13 @@ func (h *KnowledgeHandler) DeleteCollection(c *gin.Context) {
 // Documents
 // ------------------------------------------------------------------ #
 // ListDocuments handles GET /api/knowledge-collections/:id/documents.
+// ListDocuments handles GET /api/knowledge-collections/:id/documents.
+// @Summary  List documents of a collection
+// @Tags     knowledge
+// @Produce  json
+// @Param    id path int true "Collection ID"
+// @Success  200 {object} map[string]any
+// @Router   /knowledge-collections/{id}/documents [get]
 func (h *KnowledgeHandler) ListDocuments(c *gin.Context) {
 	cid, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || cid == 0 {
@@ -263,6 +303,16 @@ func (h *KnowledgeHandler) ListDocuments(c *gin.Context) {
 // multipart/form-data with either a `text` field (raw knowledge text) or a
 // `file` field (.txt/.pdf). The row is persisted, the source is uploaded to
 // S3, plain text is extracted and ingested synchronously into rag-service.
+// CreateDocument handles POST /api/knowledge-collections/:id/documents.
+// @Summary  Add a document (text or .txt/.pdf upload)
+// @Tags     knowledge
+// @Accept   multipart/form-data
+// @Produce  json
+// @Param    id path int true "Collection ID"
+// @Param    text formData string false "Plain text content"
+// @Param    file formData file false ".txt/.pdf source file"
+// @Success  201 {object} map[string]any
+// @Router   /knowledge-collections/{id}/documents [post]
 func (h *KnowledgeHandler) CreateDocument(c *gin.Context) {
 	cid, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || cid == 0 {
@@ -364,6 +414,14 @@ func (h *KnowledgeHandler) CreateDocument(c *gin.Context) {
 
 // DeleteDocument handles DELETE /api/knowledge-collections/:id/documents/:did —
 // removes the DB row, the S3 source and the rag-service chunks of that source.
+// DeleteDocument handles DELETE /api/knowledge-collections/:id/documents/:did.
+// @Summary  Delete a document (including its indexes)
+// @Tags     knowledge
+// @Produce  json
+// @Param    id path int true "Collection ID"
+// @Param    did path int true "Document ID"
+// @Success  200 {object} map[string]any
+// @Router   /knowledge-collections/{id}/documents/{did} [delete]
 func (h *KnowledgeHandler) DeleteDocument(c *gin.Context) {
 	cid, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || cid == 0 {
@@ -397,6 +455,14 @@ func (h *KnowledgeHandler) DeleteDocument(c *gin.Context) {
 // /api/knowledge-collections/:id/documents/:did/chunks — returns the actual
 // indexed chunks of one document (from rag-service) in original order, so the
 // management UI can show how the document was split.
+// ListDocumentChunks handles POST /api/knowledge-collections/:id/documents/:did/chunks.
+// @Summary  Inspect the indexed chunks of a document
+// @Tags     knowledge
+// @Produce  json
+// @Param    id path int true "Collection ID"
+// @Param    did path int true "Document ID"
+// @Success  200 {object} map[string]any
+// @Router   /knowledge-collections/{id}/documents/{did}/chunks [post]
 func (h *KnowledgeHandler) ListDocumentChunks(c *gin.Context) {
 	cid, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || cid == 0 {
@@ -455,6 +521,14 @@ func (h *KnowledgeHandler) ListDocumentChunks(c *gin.Context) {
 // SearchTest handles POST /api/knowledge/search — a live retrieval test that
 // proxies to the rag-service /v1/knowledge/search. Scope is either an avatar
 // (all of its collections) or one collection (management UI).
+// SearchTest handles POST /api/knowledge/search.
+// @Summary  Retrieval test (avatarId or collectionId, Top-3)
+// @Tags     knowledge
+// @Accept   json
+// @Produce  json
+// @Param    request body map[string]any true "query + avatarId/collectionId"
+// @Success  200 {object} map[string]any
+// @Router   /knowledge/search [post]
 func (h *KnowledgeHandler) SearchTest(c *gin.Context) {
 	var req struct {
 		AvatarID     uint `json:"avatarId"`

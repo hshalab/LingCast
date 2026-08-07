@@ -60,6 +60,24 @@ func NewAvatarHandler(db *gorm.DB, s3 *storage.Client, q *queue.Queue, avatarIni
 // `name`, `image` (required) and `voice_id` (optional) fields, uploads the
 // image to S3, stores the record as `initializing` and enqueues the
 // LivePortrait base-video pre-processing job.
+// Create handles POST /api/avatars.
+// @Summary  Create an avatar (multipart: name + image + optional persona fields)
+// @Tags     avatars
+// @Accept   multipart/form-data
+// @Produce  json
+// @Param    name formData string true "Avatar name"
+// @Param    image formData file true "Appearance image"
+// @Param    voice_id formData string false "Edge-TTS voice id"
+// @Param    category formData string false "Category (闲聊/知识/娱乐/游戏/带货/其他)"
+// @Param    age formData int false "Age"
+// @Param    height_cm formData int false "Height in cm"
+// @Param    weight_kg formData int false "Weight in kg"
+// @Param    ethnicity formData string false "Ethnicity"
+// @Param    relationship_status formData string false "Relationship status"
+// @Param    personality formData string false "Personality"
+// @Success  201 {object} avatarResponse
+// @Failure  400 {object} map[string]any
+// @Router   /avatars [post]
 func (h *AvatarHandler) Create(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("name"))
 	if name == "" {
@@ -124,6 +142,14 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 
 // Get handles GET /api/avatars/:id so the frontend can poll the avatar's
 // initialization status until it becomes "ready".
+// Get handles GET /api/avatars/:id.
+// @Summary  Get a single avatar (includes liveSettings)
+// @Tags     avatars
+// @Produce  json
+// @Param    id path int true "Avatar ID"
+// @Success  200 {object} avatarResponse
+// @Failure  404 {object} map[string]any
+// @Router   /avatars/{id} [get]
 func (h *AvatarHandler) Get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -157,6 +183,14 @@ type updateAvatarRequest struct {
 // Update handles PUT /api/avatars/:id — edits an existing avatar's metadata
 // (name / category / voice / persona profile). The image and base video stay
 // untouched; regenerate them separately via the retry endpoint.
+// Update handles PUT /api/avatars/:id.
+// @Summary  Edit an avatar (name/category/voice/persona profile)
+// @Tags     avatars
+// @Accept   multipart/form-data
+// @Produce  json
+// @Param    id path int true "Avatar ID"
+// @Success  200 {object} avatarResponse
+// @Router   /avatars/{id} [put]
 func (h *AvatarHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -206,6 +240,14 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 
 // UpdateBaseVideo handles POST /api/avatars/:id/base-video — an internal
 // webhook used by the worker to persist the pre-processed base video S3 key.
+// @Summary  Worker webhook: persist base video + status
+// @Tags     worker
+// @Accept   json
+// @Produce  json
+// @Param    id path int true "Avatar ID"
+// @Param    request body map[string]any true "baseVideoS3Key + status (+ coverS3Key)"
+// @Success  200 {object} avatarResponse
+// @Router   /avatars/{id}/base-video [post]
 func (h *AvatarHandler) UpdateBaseVideo(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -250,6 +292,12 @@ func (h *AvatarHandler) UpdateBaseVideo(c *gin.Context) {
 
 // List handles GET /api/avatars and returns all avatars (newest first) so the
 // frontend can pick an existing material set.
+// List handles GET /api/avatars.
+// @Summary  List all avatars
+// @Tags     avatars
+// @Produce  json
+// @Success  200 {object} map[string]any
+// @Router   /avatars [get]
 func (h *AvatarHandler) List(c *gin.Context) {
 	var avatars []models.Avatar
 	if err := h.db.Order("created_at DESC").Find(&avatars).Error; err != nil {
@@ -290,6 +338,13 @@ func (h *AvatarHandler) initQueuePositions(c *gin.Context) map[uint]int {
 
 // Delete handles DELETE /api/avatars/:id — removes the avatar record, its S3
 // objects and any pending queue entries (avatar init / live queue).
+// Delete handles DELETE /api/avatars/:id.
+// @Summary  Delete an avatar (cascades tasks/sessions/files)
+// @Tags     avatars
+// @Produce  json
+// @Param    id path int true "Avatar ID"
+// @Success  200 {object} map[string]any
+// @Router   /avatars/{id} [delete]
 func (h *AvatarHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -350,6 +405,13 @@ func (h *AvatarHandler) Delete(c *gin.Context) {
 
 // Retry handles POST /api/avatars/:id/retry — re-queues the LivePortrait
 // base-video pre-processing for failed/skipped avatars.
+// Retry handles POST /api/avatars/:id/retry.
+// @Summary  Regenerate the base driving video
+// @Tags     avatars
+// @Produce  json
+// @Param    id path int true "Avatar ID"
+// @Success  200 {object} map[string]any
+// @Router   /avatars/{id}/retry [post]
 func (h *AvatarHandler) Retry(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -386,6 +448,13 @@ func (h *AvatarHandler) Retry(c *gin.Context) {
 
 // Skip handles POST /api/avatars/:id/skip — marks an initializing avatar as
 // skipped (abandons base-video generation for it).
+// Skip handles POST /api/avatars/:id/skip.
+// @Summary  Skip base-video generation for an avatar
+// @Tags     avatars
+// @Produce  json
+// @Param    id path int true "Avatar ID"
+// @Success  200 {object} map[string]any
+// @Router   /avatars/{id}/skip [post]
 func (h *AvatarHandler) Skip(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -423,6 +492,15 @@ func (h *AvatarHandler) Skip(c *gin.Context) {
 // UpdateLiveSettings handles PUT /api/avatars/:id/live-settings — persists
 // the avatar's live-streaming configuration (subtitle on/off, font, position,
 // border, size) as a JSON string on the avatar row.
+// UpdateLiveSettings handles PUT /api/avatars/:id/live-settings.
+// @Summary  Save live settings (subtitles etc., JSON)
+// @Tags     avatars
+// @Accept   json
+// @Produce  json
+// @Param    id path int true "Avatar ID"
+// @Param    request body models.LiveSettings true "live settings"
+// @Success  200 {object} avatarResponse
+// @Router   /avatars/{id}/live-settings [put]
 func (h *AvatarHandler) UpdateLiveSettings(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
