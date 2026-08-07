@@ -23,8 +23,8 @@ export type LiveStatus = {
 }
 
 export type LiveMessageResponse = {
-  reply: string
-  chunkCount: number
+  accepted: boolean
+  messageId: number
 }
 
 export type ChatIdentity = {

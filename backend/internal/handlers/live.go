@@ -377,10 +377,10 @@ func (h *LiveHandler) Push(c *gin.Context) {
 }
 
 // Message handles POST /api/live/:avatarID/message — the audience-side chat
-// entry. The user text goes to the LLM (OpenAI-compatible, DeepSeek by
-// default), and the model's reply is sentence-chunked into the live queue so
-// the worker can speak it (TTS -> lip-sync -> push). Without an API key the
-// incoming text is spoken verbatim (test mode).
+// entry. It persists the viewer message and returns 202 immediately; the LLM
+// round trip (memory + RAG + DeepSeek) and the queueing of the bot's reply
+// run in a background goroutine so the sender never blocks on model latency.
+// Without an API key the incoming text is spoken verbatim (test mode).
 func (h *LiveHandler) Message(c *gin.Context) {
 	avatarID, err := strconv.ParseUint(c.Param("avatarID"), 10, 64)
 	if err != nil || avatarID == 0 {
@@ -409,48 +409,70 @@ func (h *LiveHandler) Message(c *gin.Context) {
 	if sender == "" {
 		sender = "游客"
 	}
-	_ = h.db.Create(&models.ChatMessage{
+	userMsg := models.ChatMessage{
 		AvatarID: avatar.ID,
 		UserID:   req.UserID,
 		Username: sender,
 		Role:     "user",
 		Content:  strings.TrimSpace(req.Text),
-	})
-
-	reply, ragFacts := h.llmChat(c, req.Text, avatar)
-	chunks := splitSentences(reply)
-	if len(chunks) == 0 {
-		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.Tc(c, "err.live.llm_empty_reply")})
+	}
+	if err := h.db.Create(&userMsg).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Persist the bot's full reply as one message (monitor shows the whole
-	// reply; the worker speaks it sentence by sentence).
+	// Background LLM + queueing: detached from the request (the client gets
+	// 202 immediately); bounded by a hard timeout so a slow/hung model can
+	// never stall the worker queue or leak goroutines indefinitely.
+	lang := i18n.Lang(c)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	go func() {
+		defer cancel()
+		h.processChatReply(ctx, lang, req.Text, avatar, req.UserID)
+	}()
+
+	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "messageId": userMsg.ID})
+}
+
+// processChatReply runs off-request: generate the bot reply (long-term memory
+// + RAG + LLM), persist it, then sentence-chunk it into the live queue. Any
+// failure is logged and degrades gracefully (the viewer still sees their own
+// message via history polling; the bot simply stays silent on this one).
+func (h *LiveHandler) processChatReply(ctx context.Context, lang, userText string, avatar models.Avatar, userID uint) {
+	reply, ragFacts := h.llmChat(ctx, lang, userText, avatar)
+	chunks := splitSentences(reply)
+	if len(chunks) == 0 {
+		log.Printf("[live] avatar %d empty LLM reply, skipping bot message", avatar.ID)
+		return
+	}
+
 	ragJSON := ""
 	if len(ragFacts) > 0 {
 		if b, err := json.Marshal(ragFacts); err == nil {
 			ragJSON = string(b)
 		}
 	}
-	_ = h.db.Create(&models.ChatMessage{
-		AvatarID: avatar.ID,
-		UserID:   req.UserID,
-		Username: avatar.Name,
-		Role:     "bot",
-		Content:  reply,
-		RAGHit:   len(ragFacts) > 0,
+	if err := h.db.Create(&models.ChatMessage{
+		AvatarID:   avatar.ID,
+		UserID:     userID,
+		Username:   avatar.Name,
+		Role:       "bot",
+		Content:    reply,
+		RAGHit:     len(ragFacts) > 0,
 		RAGSources: ragJSON,
-	})
+	}).Error; err != nil {
+		log.Printf("[live] avatar %d failed to persist bot reply: %v", avatar.ID, err)
+		return
+	}
 
 	key := liveQueueKey(avatar.ID)
 	historyKey := liveHistoryKey(avatar.ID)
 	for _, text := range chunks {
-		_ = h.q.RPushList(c.Request.Context(), key, text)
-		_ = h.q.RPushList(c.Request.Context(), historyKey, text)
+		_ = h.q.RPushList(ctx, key, text)
+		_ = h.q.RPushList(ctx, historyKey, text)
 	}
-	_ = h.q.TrimList(c.Request.Context(), historyKey, -200, -1)
-
-	c.JSON(http.StatusOK, liveMessageResponse{Reply: reply, ChunkCount: len(chunks)})
+	_ = h.q.TrimList(ctx, historyKey, -200, -1)
+	log.Printf("[live] avatar %d bot reply queued (%d chunks)", avatar.ID, len(chunks))
 }
 
 // Chat implements POST /api/live/chat — the live-chat orchestrator. It runs
@@ -681,8 +703,10 @@ func strPtrOrEmpty(p *string) string {
 
 // llmChat sends the user text to the LLM through the OpenAI SDK pointed at the
 // configured base URL (DeepSeek by default, Responses API) and returns the
-// assistant's reply. Without an API key the input is spoken verbatim (test).
-func (h *LiveHandler) llmChat(c *gin.Context, userText string, avatar models.Avatar) (string, []string) {
+// assistant's reply. `ctx`/`lang` are passed in so callers can run it
+// synchronously (orchestrator) or in a background goroutine (chat message).
+// Without an API key the input is spoken verbatim (test).
+func (h *LiveHandler) llmChat(ctx context.Context, lang, userText string, avatar models.Avatar) (string, []string) {
 	if strings.TrimSpace(h.openAIAPIKey) == "" {
 		log.Printf("[llm] OPENAI_API_KEY not set, speaking the input verbatim")
 		return userText, nil
@@ -692,13 +716,12 @@ func (h *LiveHandler) llmChat(c *gin.Context, userText string, avatar models.Ava
 		option.WithBaseURL(strings.TrimRight(h.openAIBaseURL, "/")),
 		option.WithAPIKey(h.openAIAPIKey),
 	)
-	lang := i18n.Lang(c)
 	memory := h.recentMessages(avatar.ID, 10)
-	ragFacts := h.retrieveKnowledge(c.Request.Context(), avatar.ID, userText, 500*time.Millisecond)
+	ragFacts := h.retrieveKnowledge(ctx, avatar.ID, userText, 500*time.Millisecond)
 	if len(ragFacts) > 0 {
 		log.Printf("[rag] avatar %d retrieved %d fact(s)", avatar.ID, len(ragFacts))
 	}
-	resp, err := client.Responses.New(c.Request.Context(), responses.ResponseNewParams{
+	resp, err := client.Responses.New(ctx, responses.ResponseNewParams{
 		Model:           h.openAIModel,
 		Instructions:    openai.String(chatSystemPrompt(avatar, lang, memory, ragFacts)),
 		Input:           responses.ResponseNewParamsInputUnion{OfString: openai.String(userText)},
