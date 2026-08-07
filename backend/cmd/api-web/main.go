@@ -14,10 +14,10 @@ func main() {
 	deps := app.Bootstrap(cfg)
 
 	r := router.Base(cfg)
-	router.RegisterLive(r, cfg, deps)
+	router.RegisterWeb(r, cfg, deps)
 
-	log.Printf("api-live server listening on :%s", cfg.LivePort)
-	if err := r.Run(":" + cfg.LivePort); err != nil {
+	log.Printf("api-web server listening on :%s", cfg.WebPort)
+	if err := r.Run(":" + cfg.WebPort); err != nil {
 		log.Fatalf("server exited: %v", err)
 	}
 }

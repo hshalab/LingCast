@@ -7,34 +7,22 @@ import (
 	"talkingavatar/backend/internal/config"
 		"talkingavatar/backend/internal/handlers/admin"
 	"talkingavatar/backend/internal/handlers/live"
-	"talkingavatar/backend/internal/handlers/telegram"
-	"talkingavatar/backend/internal/handlers/web"
 )
 
-// RegisterUser wires the audience-facing API (api-user service). All
+// RegisterLive wires the audience-facing API (api-user service). All
 // endpoints are public; this is where the viewer app and the live-chat
 // orchestrator live.
-func RegisterUser(r *gin.Engine, cfg config.Config, deps *app.Deps) {
+func RegisterLive(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 	avatarHandler := admin.NewAvatarHandler(deps.DB, deps.S3, deps.Queue, cfg.AvatarInitQueueKey)
-	chatHandler := web.NewChatHandler(deps.DB)
-	liveHandler := live.NewLiveHandler(
+		liveHandler := live.NewLiveHandler(
 		deps.DB, deps.Queue, deps.S3,
 		cfg.LiveControlQueueKey, cfg.TaskQueueKey,
 		cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel,
 		cfg.EmbedServerURL, cfg.TTSServiceURL,
 	)
-	tgAuthHandler := telegram.NewTelegramAuthHandler(deps.DB, cfg.TgBotToken)
-	tgWebhookHandler := telegram.NewTelegramWebhookHandler(
-		deps.DB, cfg.TgBotToken, cfg.NgrokAPIURL,
-		cfg.TgWebhookURL, cfg.TgMiniAppURL,
-	)
-
+		
 	api := r.Group("/api")
 	{
-		// Telegram Mini App login (initData HMAC validation, no passwords).
-		api.POST("/auth/telegram", tgAuthHandler.Login)
-		// Telegram update webhook (placeholder 200 OK).
-		api.POST("/telegram/webhook", tgWebhookHandler.Webhook)
 		// Public avatar detail (viewer room page).
 		api.GET("/avatars/:id", avatarHandler.Get)
 		// Public scene list (audience scene switcher).
@@ -45,10 +33,5 @@ func RegisterUser(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 		api.POST("/live/chat", liveHandler.Chat)
 		api.PUT("/live/session/:avatarID/scene", liveHandler.SwitchScene)
 		api.GET("/live/:avatarID/status", liveHandler.Status)
-		// Audience chat identity + persisted room history.
-		api.POST("/chat/guest", chatHandler.Guest)
-		api.POST("/chat/register", chatHandler.Register)
-		api.POST("/chat/login", chatHandler.Login)
-		api.GET("/chat/history", chatHandler.History)
 	}
 }

@@ -10,7 +10,9 @@ import (
 type Config struct {
 	ServerPort    string // legacy single-entry port (kept for tooling)
 	AdminPort     string
-	UserPort      string
+	LivePort      string
+	TelegramPort  string
+	WebPort       string
 	SchedulerPort string
 	GinMode       string
 
@@ -84,7 +86,9 @@ func Load() Config {
 	return Config{
 		ServerPort:    env("API_PORT", "8080"),
 		AdminPort:     env("API_ADMIN_PORT", "8081"),
-		UserPort:      env("API_USER_PORT", "8082"),
+		LivePort:      env("API_LIVE_PORT", "8082"),
+		TelegramPort:  env("API_TELEGRAM_PORT", "8084"),
+		WebPort:       env("API_WEB_PORT", "8085"),
 		SchedulerPort: env("API_SCHEDULER_PORT", "8083"),
 		GinMode:       env("GIN_MODE", "debug"),
 		MySQLDSN: env("MYSQL_DSN",
