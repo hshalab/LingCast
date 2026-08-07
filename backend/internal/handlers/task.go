@@ -26,12 +26,18 @@ type TaskHandler struct {
 type createTaskRequest struct {
 	AvatarID   uint   `json:"avatarId"`
 	ScriptText string `json:"scriptText"`
+	// VideoS3Key optionally selects one of the avatar's driving videos
+	// (uploaded style clip); empty means the avatar's default base video.
+	VideoS3Key string `json:"videoS3Key,omitempty"`
 }
 
 type updateTaskStatusRequest struct {
 	Status           string  `json:"status"`
 	OutputVideoS3URL *string `json:"outputVideoS3Url"`
 	Error            string  `json:"error"`
+	Progress         *int    `json:"progress,omitempty"`
+	Stage            string  `json:"stage,omitempty"`
+	TtsS3Key         string  `json:"ttsS3Key,omitempty"`
 }
 
 type taskResponse struct {
@@ -40,6 +46,9 @@ type taskResponse struct {
 	AvatarName       string    `json:"avatarName,omitempty"`
 	ScriptText       string    `json:"scriptText"`
 	Status           string    `json:"status"`
+	Progress         int       `json:"progress"`
+	Stage            string    `json:"stage,omitempty"`
+	TtsS3Key         *string   `json:"ttsS3Key,omitempty"`
 	OutputVideoS3URL *string   `json:"outputVideoS3Url,omitempty"`
 	ErrorMessage     *string   `json:"errorMessage,omitempty"`
 	CreatedAt        time.Time `json:"createdAt"`
@@ -102,13 +111,17 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		return
 	}
 
+	baseKey := *avatar.BaseVideoS3Key
+	if v := strings.TrimSpace(req.VideoS3Key); v != "" {
+		baseKey = v
+	}
 	payload := queue.TaskPayload{
 		TaskID:     task.ID,
 		AvatarID:   avatar.ID,
 		ScriptText: task.ScriptText,
 		ImageS3Key: avatar.ImageS3Key,
 	}
-	payload.BaseVideoS3Key = *avatar.BaseVideoS3Key
+	payload.BaseVideoS3Key = baseKey
 	payload.VoiceID = avatar.VoiceID
 
 	if err := h.q.Push(c.Request.Context(), payload); err != nil {
@@ -170,6 +183,9 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 	if task.OutputVideoS3URL != nil {
 		_ = h.s3.Delete(c.Request.Context(), *task.OutputVideoS3URL)
 	}
+	if task.TtsS3Key != nil {
+		_ = h.s3.Delete(c.Request.Context(), *task.TtsS3Key)
+	}
 	if err := h.db.Delete(&task).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -177,7 +193,8 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": task.ID})
 }
 
-// Retry handles POST /api/tasks/:id/retry — re-queues a failed broadcast task.
+// Retry handles POST /api/tasks/:id/retry — re-queues a failed or stuck
+// (worker died mid-processing) broadcast task.
 // Retry handles POST /api/tasks/:id/retry.
 // @Summary  Re-enqueue a failed task
 // @Tags     tasks
@@ -200,7 +217,7 @@ func (h *TaskHandler) Retry(c *gin.Context) {
 		}
 		return
 	}
-	if task.Status != models.TaskStatusFailed {
+	if task.Status != models.TaskStatusFailed && task.Status != models.TaskStatusProcessing {
 		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.task.only_failed_retry")})
 		return
 	}
@@ -217,6 +234,8 @@ func (h *TaskHandler) Retry(c *gin.Context) {
 	task.Status = models.TaskStatusPending
 	task.ErrorMessage = nil
 	task.OutputVideoS3URL = nil
+	task.Progress = 0
+	task.Stage = ""
 	if err := h.db.Save(&task).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -228,6 +247,9 @@ func (h *TaskHandler) Retry(c *gin.Context) {
 		ImageS3Key:     avatar.ImageS3Key,
 		BaseVideoS3Key: *avatar.BaseVideoS3Key,
 		VoiceID:        avatar.VoiceID,
+	}
+	if task.TtsS3Key != nil {
+		payload.TtsS3Key = *task.TtsS3Key
 	}
 	if err := h.q.Push(c.Request.Context(), payload); err != nil {
 		h.db.Model(&task).Update("status", models.TaskStatusFailed)
@@ -317,6 +339,22 @@ func (h *TaskHandler) UpdateStatus(c *gin.Context) {
 	if req.Error != "" {
 		updates["error_message"] = req.Error
 	}
+	if req.Progress != nil {
+		p := *req.Progress
+		if p < 0 {
+			p = 0
+		}
+		if p > 100 {
+			p = 100
+		}
+		updates["progress"] = p
+	}
+	if req.Stage != "" {
+		updates["stage"] = req.Stage
+	}
+	if req.TtsS3Key != "" {
+		updates["tts_s3_key"] = req.TtsS3Key
+	}
 	if err := h.db.Model(&task).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -331,6 +369,9 @@ func toTaskResponse(t models.BroadcastTask) taskResponse {
 		AvatarID:         t.AvatarID,
 		ScriptText:       t.ScriptText,
 		Status:           t.Status,
+		Progress:         t.Progress,
+		Stage:            t.Stage,
+		TtsS3Key:         t.TtsS3Key,
 		OutputVideoS3URL: t.OutputVideoS3URL,
 		ErrorMessage:     t.ErrorMessage,
 		CreatedAt:        t.CreatedAt,

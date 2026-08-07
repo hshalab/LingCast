@@ -550,6 +550,84 @@ const docTemplate = `{
                 }
             }
         },
+        "/avatars/{id}/videos": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "avatars"
+                ],
+                "summary": "List an avatar's driving videos (system default + uploads)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Avatar ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "avatars"
+                ],
+                "summary": "Upload a driving video for an avatar (other-AI style clips)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Avatar ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Display name",
+                        "name": "name",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "Video file (mp4/mov/webm/mkv/avi)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.avatarVideoItem"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/chat/guest": {
             "post": {
                 "produces": [
@@ -1509,6 +1587,35 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/videos/{id}": {
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "avatars"
+                ],
+                "summary": "Delete an uploaded driving video (system default is protected)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Video ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1571,6 +1678,33 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.avatarVideoItem": {
+            "type": "object",
+            "properties": {
+                "avatarId": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "isDefault": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "s3Key": {
+                    "type": "string"
+                },
+                "s3Url": {
+                    "type": "string"
+                },
+                "source": {
+                    "description": "system | upload",
+                    "type": "string"
+                }
+            }
+        },
         "handlers.taskResponse": {
             "type": "object",
             "properties": {
@@ -1592,10 +1726,19 @@ const docTemplate = `{
                 "outputVideoS3Url": {
                     "type": "string"
                 },
+                "progress": {
+                    "type": "integer"
+                },
                 "scriptText": {
                     "type": "string"
                 },
+                "stage": {
+                    "type": "string"
+                },
                 "status": {
+                    "type": "string"
+                },
+                "ttsS3Key": {
                     "type": "string"
                 },
                 "updatedAt": {

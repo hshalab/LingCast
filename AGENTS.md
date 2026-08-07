@@ -41,6 +41,12 @@
   默认 zh-CN-XiaoxiaoNeural）+ 人物设定（年龄/身高/体重/族裔/感情状态/性格），提交后
   轮询 `GET /api/avatars/:id` 直到 ready。
 - ✅ Broadcast（离线播报）页面：选数字人 + 脚本 → 任务轮询 → 播放成品。
+- ✅ 多驱动视频：一个数字人可有多个驱动视频（`avatar_videos` 表，含其他 AI
+  生成的风格视频）；播报页「选择数字人 → 选择视频（+上传）」，任务 payload
+  带 `videoS3Key`（缺省用 `avatars.base_video_s3_key` 系统默认）。
+- ✅ 任务进度 + TTS 复用：离线任务上报 `stage`（tts/lipsync/mux）+ `progress`
+  （1% 步进），前端任务中心/播报历史显示阶段与进度条；TTS 首次合成后存
+  `tts/tasks/{id}.wav`（S3），重试时直接复用、跳过 Edge-TTS。
 - ✅ 客户端直播间（观众端）：**独立 Next.js + TailwindCSS 项目**（`frontend-user/`，端口
   **3000**，不属于管理后台）——首页有导航头（身份/注册/登录/退出）与**分类筛选**
   （`GET /api/live` 携带 avatar 的 `category`），`app/rooms/[avatarId]/page.tsx`

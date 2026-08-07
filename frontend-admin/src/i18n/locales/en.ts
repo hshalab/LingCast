@@ -173,6 +173,13 @@ export const en = {
     configDesc:
       'The avatar must have a completed base video ("Ready"); check task status in the history below.',
     selectAvatar: 'Select avatar',
+    selectVideo: 'Select video',
+    uploadVideo: 'Upload video',
+    videoUploaded: 'Video uploaded',
+    videoUploadFailed: 'Failed to upload video',
+    defaultVideoName: 'System default (LivePortrait)',
+    videoHint:
+      'You can upload driving clips made with other AI tools to read the script in different styles.',
     script: 'Script',
     scriptPlaceholder: 'Enter the script, e.g. Hello everyone, welcome to today\'s news summary.',
     voice: 'Voice: {{voice}}',
@@ -220,6 +227,11 @@ export const en = {
     regenerate: 'Regenerate',
     retry: 'Retry',
     delete: 'Delete',
+    stage: {
+      tts: 'TTS',
+      lipsync: 'Lip-sync',
+      mux: 'Muxing',
+    },
     toastSkipped: 'Skipped "{{name}}"',
     toastRegenerating: '"{{name}}" started regenerating its base video',
     toastRequeued: 'Re-queued "{{name}}"',
@@ -228,6 +240,7 @@ export const en = {
     toastTaskDeleted: 'Task #{{id}} deleted',
     confirmDeleteAvatar: 'Delete avatar "{{name}}"?',
     confirmDeleteTask: 'Delete task #{{id}}?',
+    confirmDeleteTaskTitle: 'Delete task',
   },
   live: {
     title: 'Live Studio',

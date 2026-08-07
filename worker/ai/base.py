@@ -13,6 +13,7 @@ class TaskInputs:
     image_path: Path
     work_dir: Path
     base_video_path: Path | None = None
+    tts_path: Path | None = None
     voice_id: str = ""
 
 
@@ -21,7 +22,7 @@ class InferencePipeline(ABC):
     must return the path of the rendered MP4."""
 
     @abstractmethod
-    def run(self, inputs: TaskInputs) -> Path:
+    def run(self, inputs: TaskInputs, progress_cb=None) -> Path:
         """Run inference and return the output MP4 path."""
 
 

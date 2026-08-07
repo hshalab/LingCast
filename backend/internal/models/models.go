@@ -77,12 +77,31 @@ type Avatar struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
+// AvatarVideo is an extra driving video for an avatar (multiple styles).
+// The avatar's default base video (avatars.base_video_s3_key) is exposed as
+// a `system` entry by the API; rows here are user uploads (e.g. clips made
+// with other AI tools) that the broadcast page can pick instead.
+type AvatarVideo struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	AvatarID  uint      `gorm:"not null;index" json:"avatarId"`
+	Name      string    `gorm:"size:128" json:"name"`
+	S3Key     string    `gorm:"size:512;not null" json:"s3Key"`
+	Source    string    `gorm:"size:16;not null;default:upload" json:"source"` // upload
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 // BroadcastTask is an async synthesis task queued to the AI worker.
 type BroadcastTask struct {
 	ID               uint      `gorm:"primaryKey" json:"id"`
 	AvatarID         uint      `gorm:"not null;index" json:"avatarId"`
 	ScriptText       string    `gorm:"type:text;not null" json:"scriptText"`
 	Status           string    `gorm:"size:32;not null;default:pending;index" json:"status"`
+	// Progress is the worker-reported percentage (0-100) while processing.
+	Progress         int       `gorm:"not null;default:0" json:"progress"`
+	// Stage is the worker-reported pipeline step: tts | lipsync | mux.
+	Stage            string    `gorm:"size:16;not null;default:''" json:"stage,omitempty"`
+	// TtsS3Key caches the synthesized TTS wav (S3) so a retry can reuse it.
+	TtsS3Key         *string   `gorm:"size:512" json:"ttsS3Key,omitempty"`
 	OutputVideoS3URL *string   `gorm:"size:1024" json:"outputVideoS3Url,omitempty"`
 	ErrorMessage     *string   `gorm:"size:1024" json:"errorMessage,omitempty"`
 	CreatedAt        time.Time `json:"createdAt"`

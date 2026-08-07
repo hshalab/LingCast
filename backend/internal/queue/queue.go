@@ -17,6 +17,7 @@ type TaskPayload struct {
 	ScriptText     string `json:"scriptText"`
 	ImageS3Key     string `json:"imageS3Key"`
 	BaseVideoS3Key string `json:"baseVideoS3Key,omitempty"`
+	TtsS3Key       string `json:"ttsS3Key,omitempty"`
 	VoiceID        string `json:"voiceId,omitempty"`
 }
 

@@ -43,6 +43,7 @@ func Connect(dsn string) (*gorm.DB, error) {
 
 	if err := db.AutoMigrate(
 		&models.Avatar{},
+		&models.AvatarVideo{},
 		&models.BroadcastTask{},
 		&models.LiveSession{},
 		&models.ChatUser{},

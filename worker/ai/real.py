@@ -42,7 +42,7 @@ class RealPipeline(InferencePipeline):
                 self.lipsync.enhancer = self.enhancer
                 logger.info("offline pipeline face enhancer: %s", self.enhancer.kind)
 
-    def run(self, inputs: TaskInputs):
+    def run(self, inputs: TaskInputs, progress_cb=None):
         if inputs.base_video_path is None or not inputs.base_video_path.exists():
             raise RuntimeError(
                 "base driving video missing: run the avatar pre-processing step "
@@ -52,13 +52,27 @@ class RealPipeline(InferencePipeline):
             logger.info("real pipeline: sleeping %s seconds", self.sleep_seconds)
             time.sleep(self.sleep_seconds)
 
-        tts = self._build_tts(inputs)
-        tts_wav = tts.synthesize(
-            inputs.script_text,
-            None,
-            inputs.work_dir / "tts_out.wav",
+        # TTS reuse: when the caller already prepared a cached wav (retry of a
+        # task whose TTS was persisted to S3), skip synthesis entirely.
+        if inputs.tts_path is not None and inputs.tts_path.exists():
+            tts_wav = Path(inputs.tts_path)
+            if progress_cb is not None:
+                progress_cb("tts", 1, 1)
+        else:
+            if progress_cb is not None:
+                progress_cb("tts", 0, 1)
+            tts = self._build_tts(inputs)
+            tts_wav = tts.synthesize(
+                inputs.script_text,
+                None,
+                inputs.work_dir / "tts_out.wav",
+            )
+        final = self.lipsync.sync(
+            tts_wav,
+            inputs.base_video_path,
+            inputs.work_dir,
+            progress_cb=progress_cb,
         )
-        final = self.lipsync.sync(tts_wav, inputs.base_video_path, inputs.work_dir)
         logger.info("real pipeline rendered %s", final)
         return final
 

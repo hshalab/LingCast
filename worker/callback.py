@@ -20,6 +20,9 @@ class TaskCallback:
         status: str,
         output_url: str | None = None,
         error: str = "",
+        progress: int | None = None,
+        stage: str = "",
+        tts_s3_key: str = "",
     ) -> None:
         url = f"{self.api_base_url}/api/tasks/{task_id}/status"
         payload = {"status": status}
@@ -27,6 +30,12 @@ class TaskCallback:
             payload["outputVideoS3Url"] = output_url
         if error:
             payload["error"] = error
+        if progress is not None:
+            payload["progress"] = progress
+        if stage:
+            payload["stage"] = stage
+        if tts_s3_key:
+            payload["ttsS3Key"] = tts_s3_key
 
         last_exc: Exception | None = None
         for attempt in range(self.retries):

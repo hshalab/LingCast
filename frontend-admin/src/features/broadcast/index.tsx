@@ -1,6 +1,13 @@
 import axios from 'axios'
-import { Download, LoaderCircle, Play, Send } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { Download, LoaderCircle, Play, RotateCcw, Send, Trash2, Upload } from 'lucide-react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -18,6 +25,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { VideoPlayerDialog } from '@/components/video-player-dialog'
+import { TaskProgress } from '@/components/task-progress'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Table,
   TableBody,
@@ -35,7 +44,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { EDGE_TTS_VOICES } from '@/features/avatar-studio/voices'
-import { api, type Avatar, type BroadcastTask } from '@/lib/api'
+import { api, type Avatar, type AvatarVideo, type BroadcastTask } from '@/lib/api'
 
 function showApiError(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
@@ -63,6 +72,12 @@ const TASK_STATUS_VARIANT: Record<
   failed: 'destructive',
 }
 
+const TASK_STAGE_KEY: Record<string, string> = {
+  tts: 'task.stage.tts',
+  lipsync: 'task.stage.lipsync',
+  mux: 'task.stage.mux',
+}
+
 function statusVariant(status: BroadcastTask['status']) {
   return TASK_STATUS_VARIANT[status]
 }
@@ -84,9 +99,14 @@ export function Broadcast({
   const [avatars, setAvatars] = useState<Avatar[]>([])
   const [history, setHistory] = useState<BroadcastTask[]>([])
   const [selectedAvatarId, setSelectedAvatarId] = useState('')
+  const [videos, setVideos] = useState<AvatarVideo[]>([])
+  const [selectedVideoKey, setSelectedVideoKey] = useState('')
+  const [uploadingVideo, setUploadingVideo] = useState(false)
   const [script, setScript] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [playUrl, setPlayUrl] = useState<string | null>(null)
+  const [deleteTaskTarget, setDeleteTaskTarget] = useState<BroadcastTask | null>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
 
   const historyRef = useRef<HTMLDivElement>(null)
   const selectedAvatar = avatars.find((a) => String(a.id) === selectedAvatarId)
@@ -121,6 +141,63 @@ export function Broadcast({
     }
   }, [])
 
+  const loadVideos = useCallback(async (avatarId: string) => {
+    if (!avatarId) {
+      setVideos([])
+      setSelectedVideoKey('')
+      return
+    }
+    try {
+      const { data } = await api.get<{ data: AvatarVideo[] }>(
+        `/avatars/${avatarId}/videos`,
+      )
+      setVideos(data.data)
+      // Keep the current selection if it still exists; otherwise default to
+      // the avatar's system base video (first item).
+      setSelectedVideoKey((prev) =>
+        prev && data.data.some((v) => v.s3Key === prev)
+          ? prev
+          : (data.data[0]?.s3Key ?? ''),
+      )
+    } catch {
+      setVideos([])
+      setSelectedVideoKey('')
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadVideos(selectedAvatarId)
+  }, [selectedAvatarId, loadVideos])
+
+  const handleVideoFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !selectedAvatarId) return
+    setUploadingVideo(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('name', file.name)
+      await api.post(`/avatars/${selectedAvatarId}/videos`, form)
+      await loadVideos(selectedAvatarId)
+      toast.success(t('broadcast.videoUploaded'))
+    } catch (error) {
+      showApiError(error, t('broadcast.videoUploadFailed'))
+    } finally {
+      setUploadingVideo(false)
+    }
+  }
+
+  const handleRetry = async (task: BroadcastTask) => {
+    try {
+      await api.post(`/tasks/${task.id}/retry`)
+      toast.success(t('task.toastTaskRequeued', { id: task.id }))
+      void loadHistory()
+    } catch (error) {
+      showApiError(error, t('common.requestFailed'))
+    }
+  }
+
   useEffect(() => {
     void loadHistory()
     const timer = window.setInterval(() => void loadHistory(), 3000)
@@ -150,6 +227,7 @@ export function Broadcast({
       await api.post<BroadcastTask>('/tasks', {
         avatarId: Number(selectedAvatarId),
         scriptText: script.trim(),
+        videoS3Key: selectedVideoKey || undefined,
       })
       void loadHistory()
     } catch (error) {
@@ -232,6 +310,55 @@ export function Broadcast({
                         </div>
                       </div>
                     )}
+                    {/* 视频选择：系统默认 + 上传的其他 AI 驱动视频 */}
+                    <Label htmlFor='video-select' className='mt-2'>
+                      {t('broadcast.selectVideo')}
+                    </Label>
+                    <div className='flex items-center gap-2'>
+                      <Select
+                        value={selectedVideoKey}
+                        onValueChange={setSelectedVideoKey}
+                        disabled={videos.length === 0}
+                      >
+                        <SelectTrigger id='video-select' className='w-full'>
+                          <SelectValue placeholder={t('broadcast.selectVideo')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {videos.map((video) => (
+                            <SelectItem key={video.s3Key} value={video.s3Key}>
+                              {video.isDefault
+                                ? t('broadcast.defaultVideoName')
+                                : (video.name || video.s3Key.split('/').pop() || '')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type='button'
+                        variant='outline'
+                        size='icon'
+                        className='shrink-0'
+                        disabled={uploadingVideo || !selectedAvatarId}
+                        title={t('broadcast.uploadVideo')}
+                        onClick={() => videoInputRef.current?.click()}
+                      >
+                        {uploadingVideo ? (
+                          <LoaderCircle className='size-4 animate-spin' />
+                        ) : (
+                          <Upload className='size-4' />
+                        )}
+                      </Button>
+                      <input
+                        ref={videoInputRef}
+                        type='file'
+                        accept='video/*,.mp4,.mov,.webm,.mkv,.avi'
+                        className='hidden'
+                        onChange={handleVideoFile}
+                      />
+                    </div>
+                    <p className='text-xs text-muted-foreground'>
+                      {t('broadcast.videoHint')}
+                    </p>
                   </div>
 
                   <div className='flex flex-col gap-2'>
@@ -304,14 +431,22 @@ export function Broadcast({
                           {item.scriptText}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={statusVariant(item.status)}>{statusLabel}</Badge>
+                          {item.status === 'processing' && item.progress !== undefined ? (
+                            <TaskProgress
+                              value={item.progress}
+                              label={t(TASK_STAGE_KEY[item.stage ?? 'tts'])}
+                            />
+                          ) : (
+                            <Badge variant={statusVariant(item.status)}>{statusLabel}</Badge>
+                          )}
                         </TableCell>
                         <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
                           {formatTime(item.createdAt, locale)}
                         </TableCell>
                         <TableCell className='text-right'>
-                          {item.status === 'completed' && item.outputVideoS3Url ? (
-                            <div className='flex items-center justify-end gap-1'>
+                          <div className='flex items-center justify-end gap-1'>
+                            {item.status === 'completed' && item.outputVideoS3Url ? (
+                              <>
                               <Button
                                 variant='outline'
                                 size='sm'
@@ -331,10 +466,30 @@ export function Broadcast({
                                   {t('common.download')}
                                 </a>
                               </Button>
-                            </div>
-                          ) : (
-                            <span className='text-xs text-muted-foreground'>-</span>
-                          )}
+                              </>
+                            ) : (
+                              <span className='text-xs text-muted-foreground'>-</span>
+                            )}
+                            {(item.status === 'failed' || item.status === 'processing') && (
+                              <Button
+                                variant='outline'
+                                size='sm'
+                                onClick={() => void handleRetry(item)}
+                              >
+                                <RotateCcw className='size-3.5' />
+                                {t('common.retry')}
+                              </Button>
+                            )}
+                            <Button
+                              variant='ghost'
+                              size='sm'
+                              className='text-destructive'
+                              onClick={() => setDeleteTaskTarget(item)}
+                            >
+                              <Trash2 className='size-3.5' />
+                              {t('common.delete')}
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )
@@ -350,6 +505,31 @@ export function Broadcast({
           url={playUrl ?? undefined}
           title={t('broadcast.resultTitle')}
           onClose={() => setPlayUrl(null)}
+        />
+        <ConfirmDialog
+          open={Boolean(deleteTaskTarget)}
+          onOpenChange={(open) => !open && setDeleteTaskTarget(null)}
+          title={t('task.confirmDeleteTaskTitle')}
+          desc={
+            deleteTaskTarget
+              ? t('task.confirmDeleteTask', { id: deleteTaskTarget.id })
+              : ''
+          }
+          destructive
+          confirmText={t('common.delete')}
+          cancelBtnText={t('common.cancel')}
+          handleConfirm={async () => {
+            const target = deleteTaskTarget
+            setDeleteTaskTarget(null)
+            if (!target) return
+            try {
+              await api.delete(`/tasks/${target.id}`)
+              toast.success(t('task.toastTaskDeleted', { id: target.id }))
+              void loadHistory()
+            } catch (error) {
+              showApiError(error, t('common.requestFailed'))
+            }
+          }}
         />
       </Main>
     </>

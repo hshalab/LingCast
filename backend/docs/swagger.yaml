@@ -39,6 +39,24 @@ definitions:
       weightKg:
         type: integer
     type: object
+  handlers.avatarVideoItem:
+    properties:
+      avatarId:
+        type: integer
+      id:
+        type: integer
+      isDefault:
+        type: boolean
+      name:
+        type: string
+      s3Key:
+        type: string
+      s3Url:
+        type: string
+      source:
+        description: system | upload
+        type: string
+    type: object
   handlers.taskResponse:
     properties:
       avatarId:
@@ -53,9 +71,15 @@ definitions:
         type: integer
       outputVideoS3Url:
         type: string
+      progress:
+        type: integer
       scriptText:
         type: string
+      stage:
+        type: string
       status:
+        type: string
+      ttsS3Key:
         type: string
       updatedAt:
         type: string
@@ -436,6 +460,58 @@ paths:
             additionalProperties: true
             type: object
       summary: Skip base-video generation for an avatar
+      tags:
+      - avatars
+  /avatars/{id}/videos:
+    get:
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List an avatar's driving videos (system default + uploads)
+      tags:
+      - avatars
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Avatar ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Display name
+        in: formData
+        name: name
+        type: string
+      - description: Video file (mp4/mov/webm/mkv/avi)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.avatarVideoItem'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Upload a driving video for an avatar (other-AI style clips)
       tags:
       - avatars
   /chat/guest:
@@ -1071,4 +1147,23 @@ paths:
       summary: User list (guests/accounts + message counts)
       tags:
       - admin
+  /videos/{id}:
+    delete:
+      parameters:
+      - description: Video ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete an uploaded driving video (system default is protected)
+      tags:
+      - avatars
 swagger: "2.0"

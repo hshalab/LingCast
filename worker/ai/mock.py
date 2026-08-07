@@ -22,7 +22,9 @@ class MockPipeline(InferencePipeline):
         self.tts = tts or MockTTS()
         self.renderer = renderer or MockRenderer()
 
-    def run(self, inputs: TaskInputs):
+    def run(self, inputs: TaskInputs, progress_cb=None):
+        if progress_cb is not None:
+            progress_cb("mock", 1, 1)
         logger.info("mock inference: sleeping %s seconds", self.sleep_seconds)
         time.sleep(self.sleep_seconds)
 

@@ -258,7 +258,40 @@ def process_task(
             base_video_path = work_dir / "base_video.mp4"
             storage.download(payload["baseVideoS3Key"], base_video_path)
 
-        callback.update(task_id, "processing")
+        # TTS reuse: a retried task whose TTS was persisted to S3 skips
+        # Edge-TTS synthesis entirely.
+        tts_s3_key = payload.get("ttsS3Key") or ""
+        tts_path = work_dir / "tts_out.wav"
+        tts_reused = False
+        if tts_s3_key:
+            try:
+                storage.download(tts_s3_key, tts_path)
+                tts_reused = True
+                logger.info("task %s reusing cached TTS: %s", task_id, tts_s3_key)
+            except Exception:
+                logger.warning(
+                    "task %s cached TTS download failed, re-synthesizing", task_id
+                )
+
+        callback.update(task_id, "processing", stage="tts", progress=0)
+
+        # Throttled stage/progress reporting: tell the API every 1% (and on
+        # every stage change) so the task center shows live steps + percentage.
+        last_progress = {"stage": "", "pct": -1}
+
+        def report_progress(stage: str, done: int, total: int) -> None:
+            pct = int(100.0 * done / total) if total > 0 else 100
+            if (
+                stage != last_progress["stage"]
+                or pct - last_progress["pct"] >= 1
+                or pct >= 100
+            ):
+                last_progress["stage"] = stage
+                last_progress["pct"] = pct
+                try:
+                    callback.update(task_id, "processing", stage=stage, progress=pct)
+                except Exception:
+                    pass  # progress reports are best-effort
 
         inputs = TaskInputs(
             task_id=task_id,
@@ -266,10 +299,30 @@ def process_task(
             script_text=payload["scriptText"],
             image_path=image_path,
             base_video_path=base_video_path,
+            tts_path=tts_path if tts_reused else None,
             work_dir=work_dir,
             voice_id=payload.get("voiceId", ""),
         )
-        output = pipeline.run(inputs)
+        output = pipeline.run(inputs, progress_cb=report_progress)
+
+        # Persist the freshly synthesized TTS so a retry can skip synthesis.
+        if not tts_reused and tts_path.exists():
+            cache_key = f"tts/tasks/{task_id}.wav"
+            try:
+                storage.upload(cache_key, tts_path)
+                callback.update(
+                    task_id,
+                    "processing",
+                    stage="tts",
+                    progress=100,
+                    tts_s3_key=cache_key,
+                )
+                logger.info("task %s TTS cached: %s", task_id, cache_key)
+            except Exception:
+                logger.warning(
+                    "task %s TTS cache upload failed (retry will re-synthesize)",
+                    task_id,
+                )
 
         output_key = f"videos/{task_id}.mp4"
         storage.upload(output_key, output)

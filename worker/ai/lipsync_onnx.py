@@ -91,8 +91,18 @@ class Wav2LipOnnxLipSync:
     # ------------------------------------------------------------------ #
     # Public API
     # ------------------------------------------------------------------ #
-    def sync(self, tts_wav: Path, base_video: Path, work_dir: Path) -> Path:
-        """Lip-sync `base_video` to `tts_wav` and write final_avatar.mp4."""
+    def sync(
+        self,
+        tts_wav: Path,
+        base_video: Path,
+        work_dir: Path,
+        progress_cb=None,
+    ) -> Path:
+        """Lip-sync `base_video` to `tts_wav` and write final_avatar.mp4.
+
+        `progress_cb(stage, done, total)` is an optional hook invoked per
+        inference batch and before muxing (used to report task progress/stage).
+        """
         tts_wav = Path(tts_wav)
         base_video = Path(base_video)
         if not tts_wav.exists():
@@ -147,6 +157,8 @@ class Wav2LipOnnxLipSync:
                     total_batches,
                     100.0 * batch_no / total_batches,
                 )
+                if progress_cb is not None:
+                    progress_cb("lipsync", batch_no, total_batches)
                 self._run_batch(
                     img_batch, mel_batch, frame_batch, coords_batch, writer
                 )
@@ -155,9 +167,13 @@ class Wav2LipOnnxLipSync:
         if img_batch:
             batch_no += 1
             logger.info("Wav2Lip(onnx): final batch %d/%d", batch_no, total_batches)
+            if progress_cb is not None:
+                progress_cb("lipsync", batch_no, total_batches)
             self._run_batch(img_batch, mel_batch, frame_batch, coords_batch, writer)
         writer.release()
 
+        if progress_cb is not None:
+            progress_cb("mux", 0, 1)
         final = work_dir / "final_avatar.mp4"
         self._mux_audio(raw_video, tts_wav, final)
         logger.info("Wav2Lip(onnx) wrote %s", final)

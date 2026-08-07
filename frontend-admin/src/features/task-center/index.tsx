@@ -27,6 +27,8 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api, type Avatar, type BroadcastTask } from '@/lib/api'
+import { TaskProgress } from '@/components/task-progress'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 
 function showApiError(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
@@ -71,6 +73,12 @@ const TASK_STATUS_VARIANT: Record<
   failed: 'destructive',
 }
 
+const TASK_STAGE_KEY: Record<string, string> = {
+  tts: 'task.stage.tts',
+  lipsync: 'task.stage.lipsync',
+  mux: 'task.stage.mux',
+}
+
 function formatTime(iso: string, locale: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
@@ -84,6 +92,7 @@ export function TaskCenter() {
   const [loading, setLoading] = useState(true)
   const [selectedAvatars, setSelectedAvatars] = useState<Set<number>>(new Set())
   const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set())
+  const [deleteTaskTarget, setDeleteTaskTarget] = useState<BroadcastTask | null>(null)
   const locale = i18n.language === 'en' ? 'en-US' : 'zh-CN'
 
   const load = useCallback(async () => {
@@ -523,9 +532,17 @@ export function TaskCenter() {
                               {task.scriptText}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={TASK_STATUS_VARIANT[task.status]}>
-                                {statusLabel}
-                              </Badge>
+                              {task.status === 'processing' &&
+                              task.progress !== undefined ? (
+                                <TaskProgress
+                                  value={task.progress}
+                                  label={t(TASK_STAGE_KEY[task.stage ?? 'tts'])}
+                                />
+                              ) : (
+                                <Badge variant={TASK_STATUS_VARIANT[task.status]}>
+                                  {statusLabel}
+                                </Badge>
+                              )}
                             </TableCell>
                             <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
                               {formatTime(task.createdAt, locale)}
@@ -544,7 +561,7 @@ export function TaskCenter() {
                                     {t('task.view')}
                                   </Link>
                                 </Button>
-                                {task.status === 'failed' && (
+                                {(task.status === 'failed' || task.status === 'processing') && (
                                   <Button
                                     variant='outline'
                                     size='sm'
@@ -563,14 +580,7 @@ export function TaskCenter() {
                                   variant='ghost'
                                   size='sm'
                                   className='text-destructive'
-                                  onClick={() => {
-                                    if (window.confirm(t('task.confirmDeleteTask', { id: task.id }))) {
-                                      void runAction(
-                                        () => api.delete(`/tasks/${task.id}`),
-                                        t('task.toastTaskDeleted', { id: task.id }),
-                                      )
-                                    }
-                                  }}
+                                  onClick={() => setDeleteTaskTarget(task)}
                                 >
                                   <Trash2 className='size-3.5' />
                                   {t('task.delete')}
@@ -589,6 +599,29 @@ export function TaskCenter() {
             </Card>
           </TabsContent>
         </Tabs>
+        <ConfirmDialog
+          open={Boolean(deleteTaskTarget)}
+          onOpenChange={(open) => !open && setDeleteTaskTarget(null)}
+          title={t('task.confirmDeleteTaskTitle')}
+          desc={
+            deleteTaskTarget
+              ? t('task.confirmDeleteTask', { id: deleteTaskTarget.id })
+              : ''
+          }
+          destructive
+          confirmText={t('common.delete')}
+          cancelBtnText={t('common.cancel')}
+          handleConfirm={() => {
+            const target = deleteTaskTarget
+            setDeleteTaskTarget(null)
+            if (target) {
+              void runAction(
+                () => api.delete(`/tasks/${target.id}`),
+                t('task.toastTaskDeleted', { id: target.id }),
+              )
+            }
+          }}
+        />
       </Main>
     </>
   )

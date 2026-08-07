@@ -21,6 +21,16 @@ export type Avatar = {
   createdAt: string
 }
 
+export type AvatarVideo = {
+  id: number
+  avatarId: number
+  name: string
+  s3Key: string
+  s3Url: string
+  source: 'system' | 'upload'
+  isDefault?: boolean
+}
+
 export type LiveSettings = {
   subtitleEnabled: boolean
   subtitleFont: string
@@ -36,6 +46,8 @@ export type BroadcastTask = {
   avatarId: number
   scriptText: string
   status: TaskStatus
+  progress?: number
+  stage?: string
   outputVideoS3Url?: string
   errorMessage?: string
   avatarName?: string

@@ -195,6 +195,13 @@ AMD GPUs using ROCm.
   重启后按 DB 恢复直播会话。
 - ✅ **前端容器加固**：frontend-admin nginx 设 Asia/Shanghai 时区；
   frontend-user 改为非 root（node）运行（chown 在 COPY 之后，`/app` 可写）。
+- ✅ **多驱动视频（数字人 → 多视频）**：新增 `avatar_videos` 表 +
+  `GET/POST /api/avatars/:id/videos`、`DELETE /api/videos/:id`（系统默认视频
+  受保护）；播报页在数字人下方增加「选择视频（+上传）」，任务创建支持
+  `videoS3Key` 指定驱动视频，缺省回落系统默认 base。
+- ✅ **任务进度分阶段 + TTS 复用**：worker 按 `tts/lipsync/mux` 上报 stage、
+  每 1% 上报 progress（前端进度条 + 阶段标签）；TTS 首次合成后缓存到 S3
+  （`tts/tasks/{id}.wav`），重试直接复用不再合成；删除任务时一并清理。
 
 ## Strict Rules for Execution
 
