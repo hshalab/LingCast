@@ -330,6 +330,7 @@ services:
       LIVEPORTRAIT_DRIVING_MULTIPLIER: "0.7"
       WAV2LIP_PROVIDER: rocm
       FACE_ENHANCER: "gfpgan"
+      ENHANCER_MAX_FPS: "6"
       TTS_ENGINE: edge
     volumes:
       - ./worker/models:/app/models
