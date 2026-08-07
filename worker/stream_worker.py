@@ -152,6 +152,10 @@ class LiveAvatarSession:
         self._dead = False
         self._subtitle = None
         self._subtitle_text = ""
+        # Profiling/health telemetry (diagnostics only; does not affect pacing).
+        self._last_health_log = 0.0
+        self._last_watchdog_warn = 0.0
+        self._last_write_warn = 0.0
 
     # ------------------------------------------------------------------ #
     # Setup
@@ -228,14 +232,27 @@ class LiveAvatarSession:
                     raise RuntimeError(
                         "tts_s3_key provided but session has no S3 storage"
                     )
+                t_dl = time.perf_counter()
                 self.storage.download(tts_s3_key, out)
+                logger.info(
+                    "[PRODUCER] avatar %s S3 Download took %.1fms (%s)",
+                    self.avatar_id,
+                    (time.perf_counter() - t_dl) * 1000.0,
+                    tts_s3_key,
+                )
                 logger.info(
                     "avatar %s TTS downloaded from S3: %s",
                     self.avatar_id,
                     tts_s3_key,
                 )
             else:
+                t_syn = time.perf_counter()
                 self._get_tts().synthesize(text, None, out)
+                logger.info(
+                    "[PRODUCER] avatar %s edge-tts synthesize took %.1fms",
+                    self.avatar_id,
+                    (time.perf_counter() - t_syn) * 1000.0,
+                )
             wav = out
             logger.info("avatar %s TTS ready (%.1fs): %s", self.avatar_id, _wav_duration(wav), text)
             self._tts_results.put((text, wav))
@@ -296,10 +313,13 @@ class LiveAvatarSession:
             while self._running:
                 t0 = time.perf_counter()
 
+                # Probe: how long does the ready-frame queue block us?
+                t_get = time.perf_counter()
                 try:
                     kind, payload = self._talk_queue.get_nowait()
                 except queue_mod.Empty:
                     kind, payload = None, None
+                get_ms = (time.perf_counter() - t_get) * 1000.0
 
                 if kind == "seg" and payload is not None:
                     cur_seg = payload
@@ -348,9 +368,28 @@ class LiveAvatarSession:
                         self.pipe.write_audio(silence_slice)
                     self._write_frame(self._idle_frame())
 
-                delay = interval - (time.perf_counter() - t0)
+                # Probe: actual work (pipe writes + subtitle overlay) and the
+                # real sleep; a loop over 45ms means we miss the 24fps cadence.
+                elapsed_work = time.perf_counter() - t0  # seconds, incl. queue get
+                work_ms = elapsed_work * 1000.0 - get_ms
+                delay = interval - elapsed_work
+                sleep_ms = 0.0
                 if delay > 0:
+                    t_sleep = time.perf_counter()
                     time.sleep(delay)
+                    sleep_ms = (time.perf_counter() - t_sleep) * 1000.0
+                total_ms = (time.perf_counter() - t0) * 1000.0
+                if total_ms > 45.0 and time.monotonic() - self._last_watchdog_warn >= 1.0:
+                    self._last_watchdog_warn = time.monotonic()
+                    logger.warning(
+                        "[WATCHDOG WARNING] avatar %s loop took %.1fms (>45ms)! "
+                        "queue_get=%.1fms write/work=%.1fms sleep=%.1fms",
+                        self.avatar_id,
+                        total_ms,
+                        get_ms,
+                        work_ms,
+                        sleep_ms,
+                    )
         except FFmpegPipeClosedError as exc:
             logger.error(
                 "session %s pipe closed: %s — stopping watchdog writer; "
@@ -379,6 +418,28 @@ class LiveAvatarSession:
     # ------------------------------------------------------------------ #
     def tick(self, r: redis.Redis) -> None:
         """Pop text, hand finished TTS to the producer, keep queues fed."""
+        # 0) Every 5s: queue health + process CPU (diagnostics only).
+        now = time.monotonic()
+        if now - self._last_health_log >= 5.0:
+            self._last_health_log = now
+            cpu: float | None = None
+            try:
+                import psutil
+
+                cpu = psutil.Process().cpu_percent(interval=None)
+            except Exception:
+                pass
+            logger.info(
+                "[HEALTH] avatar %s ready_frames=%d pending=%d tts_results=%d "
+                "tts_alive=%s cpu=%s%%",
+                self.avatar_id,
+                self._talk_queue.qsize(),
+                self._pending.qsize(),
+                self._tts_results.qsize(),
+                self._tts_thread is not None and self._tts_thread.is_alive(),
+                "%.1f" % cpu if cpu is not None else "n/a",
+            )
+
         # 1) Pull new text when no TTS is in flight and pending has room.
         if (
             self._tts_thread is None or not self._tts_thread.is_alive()
@@ -455,16 +516,49 @@ class LiveAvatarSession:
             logger.warning("avatar %s chunk skipped (TTS failed)", self.avatar_id)
             return
         try:
+            # Probe: NumPy/SciPy audio + mel pre-processing (before ONNX).
+            t_pre = time.perf_counter()
             audio = self.lipsync.audio_pcm16(wav)
             n_frames = len(self.lipsync._mel_chunks(wav, self.fps))
             seg = _TalkingSegment(text, audio, n_frames)
             self._talk_queue.put(("seg", seg))
             base_slice = self._slice_base(n_frames)
-            frames = self.lipsync.iter_frames(wav, base_slice, self.fps)
+            pre_ms = (time.perf_counter() - t_pre) * 1000.0
+            logger.info(
+                "[PRODUCER] avatar %s preprocessing took %.1fms "
+                "(audio+mel+base, %d frames)",
+                self.avatar_id,
+                pre_ms,
+                n_frames,
+            )
+
+            # Probe: face detection + OpenCV pre-processing + ONNX inference,
+            # broken down via the iter_frames timing hook.
+            stage_ms: dict[str, float] = {}
+
+            def _timing(stage: str, ms: float) -> None:
+                stage_ms[stage] = stage_ms.get(stage, 0.0) + ms
+
+            t_inf = time.perf_counter()
+            frames = self.lipsync.iter_frames(
+                wav, base_slice, self.fps, timing=_timing
+            )
             pushed = 0
             for frame in frames:
                 self._talk_queue.put(("frame", frame))
                 pushed += 1
+            inf_ms = (time.perf_counter() - t_inf) * 1000.0
+            logger.info(
+                "[PRODUCER] avatar %s Wav2Lip Inference took %.1fms "
+                "for %d frames (face_detect=%.1fms opencv_preprocess=%.1fms "
+                "onnx=%.1fms)",
+                self.avatar_id,
+                inf_ms,
+                pushed,
+                stage_ms.get("face_detect", 0.0),
+                stage_ms.get("preprocess", 0.0),
+                stage_ms.get("onnx_batch", 0.0),
+            )
             logger.info(
                 "avatar %s talking segment queued: %d frames (%.1fs speech)",
                 self.avatar_id,
@@ -495,7 +589,17 @@ class LiveAvatarSession:
 
                 self._subtitle = self._make_subtitle_renderer()
             frame = self._subtitle.draw(frame, self._subtitle_text)
+        t_write = time.perf_counter()
         self.pipe.write_frame(frame)
+        write_ms = (time.perf_counter() - t_write) * 1000.0
+        if write_ms > 20.0 and time.monotonic() - self._last_write_warn >= 5.0:
+            self._last_write_warn = time.monotonic()
+            logger.warning(
+                "[WATCHDOG] avatar %s pipe.write_frame took %.1fms "
+                "(ffmpeg backpressure?)",
+                self.avatar_id,
+                write_ms,
+            )
 
     def _subtitle_enabled(self) -> bool:
         return bool(self.subtitle_settings.get("subtitleEnabled", True))
@@ -630,6 +734,10 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> 
         session.setup()
         sessions[avatar_id] = session
         session.start(r)
+    except SystemExit:
+        # Interpreter shutdown interrupted a mid-flight setup thread; this is
+        # benign (the process is exiting anyway) — keep the log clean.
+        pass
     except Exception:
         logger.exception("failed to set up live session for %s", payload.get("streamId"))
 

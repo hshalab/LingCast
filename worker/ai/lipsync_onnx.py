@@ -14,6 +14,7 @@ Model layout (created by download_models.py):
 import logging
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import cv2
@@ -169,8 +170,15 @@ class Wav2LipOnnxLipSync:
         for frame in self._run_batch_frames(img_batch, mel_batch, frame_batch, coords_batch):
             writer.write(frame)
 
-    def _run_batch_frames(self, img_batch, mel_batch, frame_batch, coords_batch) -> list:
-        """Run one Wav2Lip inference batch and return the patched BGR frames."""
+    def _run_batch_frames(
+        self, img_batch, mel_batch, frame_batch, coords_batch, timing=None
+    ) -> list:
+        """Run one Wav2Lip inference batch and return the patched BGR frames.
+
+        `timing(stage, ms)` is an optional diagnostics callback (profiling only;
+        never changes inference behavior).
+        """
+        t0 = time.perf_counter()
         session = self._session or self._load_model()
         img_batch = np.asarray(img_batch)
         mel_batch = np.asarray(mel_batch)
@@ -194,9 +202,17 @@ class Wav2LipOnnxLipSync:
             if self.enhancer is not None:
                 f = self.enhancer.enhance_frame(f, (x1, y1, x2, y2))
             out_frames.append(f)
+        if timing is not None:
+            timing("onnx_batch", (time.perf_counter() - t0) * 1000.0)
         return out_frames
 
-    def iter_frames(self, tts_wav: Path, base_frames: list, fps: float | None = None):
+    def iter_frames(
+        self,
+        tts_wav: Path,
+        base_frames: list,
+        fps: float | None = None,
+        timing=None,
+    ):
         """Yield lip-synced BGR frames for `base_frames` + TTS audio (streaming).
 
         Unlike :meth:`sync`, nothing is written to disk: frames are generated
@@ -208,24 +224,30 @@ class Wav2LipOnnxLipSync:
         frames = list(base_frames[: len(mel_chunks)])
         if not frames:
             return
+        t_fd = time.perf_counter()
         face_det_results = self._face_detect(frames)
+        if timing is not None:
+            timing("face_detect", (time.perf_counter() - t_fd) * 1000.0)
 
         img_batch, mel_batch, frame_batch, coords_batch = [], [], [], []
         for i, m in enumerate(mel_chunks):
+            t_pre = time.perf_counter()
             idx = i % len(frames)
             face, coords = face_det_results[idx]
             img_batch.append(cv2.resize(face, (IMG_SIZE, IMG_SIZE)))
             mel_batch.append(m)
             frame_batch.append(frames[idx].copy())
             coords_batch.append(coords)
+            if timing is not None:
+                timing("preprocess", (time.perf_counter() - t_pre) * 1000.0)
             if len(img_batch) >= self.wav2lip_batch_size:
                 yield from self._run_batch_frames(
-                    img_batch, mel_batch, frame_batch, coords_batch
+                    img_batch, mel_batch, frame_batch, coords_batch, timing=timing
                 )
                 img_batch, mel_batch, frame_batch, coords_batch = [], [], [], []
         if img_batch:
             yield from self._run_batch_frames(
-                img_batch, mel_batch, frame_batch, coords_batch
+                img_batch, mel_batch, frame_batch, coords_batch, timing=timing
             )
 
     @staticmethod
