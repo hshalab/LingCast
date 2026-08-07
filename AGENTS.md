@@ -108,12 +108,18 @@
   （xgplayer 封装），9:16 竖版最大 720×1080，模态窗播放。
 - ✅ 人脸修复（Wav2Lip 口型变形）：`worker/ai/enhancer.py` 双轨 ONNX 增强器——
   离线 CodeFormer（`w` 输入保真度，默认 0.6）、直播 GFPGANv1.4（人脸 ROI + 羽化
-  遮罩）；接入 `lipsync_onnx._run_batch_frames`（offline `real.py` 默认 codeformer；
-  **直播管线完全不用人脸增强**——Watchdog 架构要求恒定 24fps，见下方直播条目）；
+  遮罩）；接入 `lipsync_onnx._run_batch_frames`（offline `real.py` 默认 codeformer）；
   模型放 `worker/models/restoration/`，
   `uv run python download_models.py --models restoration` 下载；缺模型自动降级为
   no-op 不中断管线。离线效果已验收，对比视频在 `docs/videos/`
   （`noCodeFormer.mp4` vs `CodeFormer.mp4`）。
+- ⚠️ **直播增强实测（2026-08 记录，勿再忘）**：直播管线已接线但**默认关闭**
+  （`stream_worker.py setup()` 里 `create_enhancer(pipeline="live")`，由
+  `FACE_ENHANCER` / `ENHANCER_MAX_FPS` 环境变量控制）。实测本机（Apple
+  Silicon MPS/CoreML）：CodeFormer ≈ **1.4s/帧**、GFPGAN ≈ **2.5s/帧**
+  （GFPGAN ONNX 在 CoreML 分区效率差，反而更慢），一句话要等 ~1 分钟才开口，
+  **直播不可用**——Watchdog 保证不转圈但说话严重滞后。增强只适合离线管线，
+  或等 Linux CUDA/ROCm 机器再试（GPU 上 GFPGAN ROI 才划算）。
 - ✅ 直播 **Watchdog 架构**（`stream_worker.py`）：独立写帧线程以恒定
   `fps`（默认 24）向 ffmpeg 写帧，读 `Ready_Frames_Queue`；队列空时**立即回退**
   base 动画帧 + 静音音频，玩家永不转圈。推理线程异步 Edge-TTS → Wav2Lip 小批量
@@ -241,6 +247,8 @@ uv run python -u worker.py          # 真实管线，AI_MODE=real
   `--no-group cuda`；反之亦然，二者都提供 `onnxruntime` 包。
 - **口型别用 torch 后端**：`WAV2LIP_BACKEND` 默认 onnx；torch 版在 Apple Silicon
   上要 8 分钟且打满 CPU，仅作对照。
+- **直播别开人脸增强**：本机实测 CodeFormer ~1.4s/帧、GFPGAN ~2.5s/帧，开了
+  说话滞后约 1 分钟；`stream_worker` 默认关闭（`FACE_ENHANCER` 勿设）。
 - **ROCm 上口型走 CPU 兜底**：`WAV2LIP_PROVIDER=rocm` 时若 LSTM 算子不在 ROCm EP
   支持集内会自动逐节点回退 CPU，不影响结果。
 - **Edge-TTS 需要外网**：语音合成走微软在线服务（默认引擎）；离线环境不可用。

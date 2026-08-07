@@ -175,6 +175,18 @@ class LiveAvatarSession:
         if not self.base_video_path.exists():
             raise RuntimeError(f"base video not found: {self.base_video_path}")
         self.lipsync = Wav2LipOnnxLipSync()
+        # Optional face restoration fixes Wav2Lip lip deformation (口型变形).
+        # Live follows the same FACE_ENHANCER env as offline
+        # (gfpgan|codeformer|off); the auto default stays disabled because
+        # full restoration is ~1s/frame and would stall the 24fps watchdog.
+        # ENHANCER_MAX_FPS throttles how many frames are enhanced (e.g. 6 =
+        # every ~4th frame), keeping the producer ahead of real-time.
+        from ai.enhancer import create_enhancer
+
+        self.enhancer = create_enhancer(pipeline="live")
+        if self.enhancer is not None:
+            self.lipsync.enhancer = self.enhancer
+            logger.info("live pipeline face enhancer: %s", self.enhancer.kind)
         self.base_frames, base_fps = Wav2LipOnnxLipSync._read_frames(self.base_video_path)
         # Preload the Wav2Lip session + face detector so the FIRST sentence
         # starts as soon as TTS lands (lazy load would add 2-4s at talk time).

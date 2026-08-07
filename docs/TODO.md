@@ -113,6 +113,9 @@ AMD GPUs using ROCm.
 - ✅ 管线接入：`lipsync_onnx` 帧级增强钩子（有 enhancer 才生效）；`real.py`
   （离线）默认 codeformer（`FACE_ENHANCER=off` 可关）；**直播管线不使用人脸
   增强**（Watchdog 需恒定 24fps），缺模型自动降级 no-op。
+- ✅ 直播增强实测结论（2026-08）：本机 CoreML 下 CodeFormer ≈1.4s/帧、
+  GFPGAN ≈2.5s/帧，直播开启会滞后 ~1 分钟，**维持默认关闭**；增强留待
+  Linux CUDA/ROCm 机器（GPU 上 GFPGAN ROI）再评估。
 - ✅ 实机画质验收：离线成品对比视频已放 `docs/videos/`
   （`noCodeFormer.mp4` vs `CodeFormer.mp4`），观感提升明显；后续可在不同
   形象/语速下微调 `roi_padding`/`feather_ratio`/`CODEFORMER_FIDELITY_WEIGHT`。
