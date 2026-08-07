@@ -25,9 +25,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: docs/pnpm-lock.yaml
-      - run: corepack enable
+      - run: npm install -g pnpm@10.25.0
       - name: Install & build VitePress
         working-directory: docs
         run: |
