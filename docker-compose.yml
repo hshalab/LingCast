@@ -329,7 +329,7 @@ services:
       LIVEPORTRAIT_DRIVING_SPEED: "0.2"
       LIVEPORTRAIT_DRIVING_MULTIPLIER: "0.7"
       WAV2LIP_PROVIDER: rocm
-      FACE_ENHANCER: "off"
+      FACE_ENHANCER: "gfpgan"
       TTS_ENGINE: edge
     volumes:
       - ./worker/models:/app/models
