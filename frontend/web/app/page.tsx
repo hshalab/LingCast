@@ -1,4 +1,5 @@
 import PayPalCheckout from '@/components/paypal-button'
+import AuthHeader from '@/components/auth-header'
 
 export default function HomePage() {
   return (
@@ -8,6 +9,10 @@ export default function HomePage() {
         <p className="mt-3 text-zinc-400">
           与数字人一对一视频聊天，按分钟付费体验。
         </p>
+      </section>
+
+      <section className="w-full">
+        <AuthHeader />
       </section>
 
       <section className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
