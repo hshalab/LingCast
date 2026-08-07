@@ -13,7 +13,7 @@
 
 - 前端：React + TypeScript + Vite + Tailwind + shadcn/ui（基于 satnaing/shadcn-admin），
   pnpm 10.25.0 管理，`frontend/admin/`（BFF 多客户端矩阵：`admin/live/web/telegram`）。
-- 后端：Go + Gin + GORM，`backend/`（模型、S3、Redis、handlers）。
+- 后端：Go + Gin + GORM，`backend/`（模型、S3、Redis、handlers 分为 admin/live/telegram/web）。
 - AI Worker：Python **3.11**（`worker/.python-version`），uv 管理依赖（`pyproject.toml`
   + `uv.lock`），**不要使用 requirements.txt**。
 - 存储：S3 兼容对象存储（RustFS，Docker Compose 内运行）；Go 用 `aws-sdk-go-v2`，
@@ -28,7 +28,7 @@
   在宿主机原生运行**：macOS Apple Silicon（MPS/CoreML）、Linux NVIDIA CUDA、
   Linux **AMD ROCm**（RX 6800 XT 等 RDNA2，见 README 对应章节）。宿主机仅开放
   必要端口：3000（观众端）/ 8080（管理端）/ 1935（RTMP 推流）/ 6379（Redis）/
-  9000（RustFS）；`api-admin`/`api-live`/`api-scheduler`、`service-rag`、
+  9000（RustFS）；`api-admin`/`api-live`/`api-telegram`/`api-web`/`api-scheduler`、`service-rag`、
   `service-tts` 均在内网，不发布端口。
 - 依赖组（`worker/pyproject.toml`）：`models`（macOS 默认）、`cuda`、
   `rocm`（仅 `onnxruntime-rocm`，torch 用官方 ROCm 镜像或手动装）——cuda/rocm
@@ -57,7 +57,7 @@
   与 `app/live/[...path]` 路由处理器在**服务端**代理（`API_ORIGIN` / `LIVE_ORIGIN`
   运行时读取，docker 内为 `http://api-live:8082` / `http://srs:8080`，本地默认
   `http://localhost:8080`）。
-- ✅ 聊天身份与记录持久化：`chat_users`（游客/账号，bcrypt）与 `chat_messages`
+- ✅ 聊天身份与记录持久化：`live_users/telegram_users`（游客/账号，bcrypt）与 `live_messages`
   （user/bot）两张表；`POST /api/chat/guest` 发临时身份，`register` 原地升级游客行
   （同一 userId 保住历史），`login` 把当前游客的消息合并进账号，退出后重新取新游客
   ID；`GET /api/chat/history?avatarId=` 拉持久化聊天记录；客户端身份存
@@ -75,7 +75,7 @@
 - ✅ **Telegram Mini App 登录**：`POST /api/auth/telegram`（api-telegram）用
   `TG_BOT_TOKEN` 校验 `initData`（HMAC-SHA-256：`secret=HMAC("WebAppData", token)`，
   对除 `hash` 外按字典序的 `key=value` 串签名，24h 新鲜度检查），通过后按
-  `telegram_id` upsert `chat_users`（非游客，用户名优先 TG username、冲突回退
+  `telegram_id` upsert `live_users/telegram_users`（非游客，用户名优先 TG username、冲突回退
   `tg_<id>`），设置 HttpOnly `tg_uid` cookie 并返回 `{userId,username,...}`；
   `frontend/admin/nginx.conf` 单独把 `/api/auth/telegram` 路由到 api-telegram（TMA
   走同一网关）。前端 `frontend/telegram` 初始化 `WebApp.ready()` 后把

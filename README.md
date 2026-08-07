@@ -80,7 +80,7 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   (`POST /api/chat/guest`); registering upgrades the current guest identity in place (chat
   history is preserved); logging in merges guest messages into the account; logging out
   issues a fresh guest identity. User messages and bot replies are all stored
-  (`chat_users` / `chat_messages`); `GET /api/chat/history` serves history to both apps.
+  (`live_users/telegram_users` / `live_messages`); `GET /api/chat/history` serves history to both apps.
 - [x] **Live subtitle settings**: each digital human can configure in Live Studio "Subtitle
   settings" whether subtitles are shown, the font (file name under `worker/fonts/`), position
   (top/bottom), stroke width, and font size; persisted as the Avatar's JSON field
@@ -463,7 +463,7 @@ dedicated `docs` gateway (nginx entry `http://localhost:8080/doc/`):
 
 ```text
 LingCast/
-├── backend/        Go module — three microservices: cmd/api-admin, cmd/api-live,
+├── backend/        Go module — three microservices: cmd/api-admin, cmd/api-live, cmd/api-telegram, cmd/api-web,
 │                   cmd/api-scheduler (shared internal/ packages)
 ├── services/       Python microservices
 │   ├── rag/        Local RAG microservice (FastAPI + uv + zvec FTS/Jieba, :8001)

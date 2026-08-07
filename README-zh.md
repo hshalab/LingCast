@@ -66,8 +66,8 @@
   输入框、点赞爱心动画；聊天支持智能滚动（上翻历史不抢滚动，出现「有新消息」按钮）。
 - [x] **聊天身份与记录持久化**：游客自动分配临时 ID+用户名（`POST /api/chat/guest`）；
   注册把当前游客身份原地升级为账号（聊天记录不丢），登录把游客消息合并进账号，
-  退出后重新获取新游客身份。用户消息与机器人回复全部入库（`chat_users` /
-  `chat_messages`），`GET /api/chat/history` 供两端拉取历史。
+  退出后重新获取新游客身份。用户消息与机器人回复全部入库（`live_users/telegram_users` /
+  `live_messages`），`GET /api/chat/history` 供两端拉取历史。
 - [x] **直播字幕配置**：每个数字人可在 Live Studio「字幕设置」里配置是否显示字幕、
   字体（`worker/fonts/` 下的文件名）、位置（顶部/底部）、描边宽度与字号，持久化为
   Avatar 的 JSON 字段 `live_settings`；保存后自动重启直播生效。
@@ -420,7 +420,7 @@ curl http://localhost:8080/api/live/9/status
 
 ```text
 LingCast/
-├── backend/        Go module — 三个微服务：cmd/api-admin、cmd/api-live、
+├── backend/        Go module — 三个微服务：cmd/api-admin、cmd/api-live、cmd/api-telegram、cmd/api-web、
 │                   cmd/api-scheduler（共享 internal/ 包）
 ├── services/       Python 微服务
 │   ├── rag/        本地 RAG 微服务（FastAPI + uv + zvec FTS/Jieba，:8001）

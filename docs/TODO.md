@@ -31,12 +31,10 @@ AMD GPUs using ROCm.
 
 ### Tasks
 
-1. **Worker Dockerfile Update (AMD ROCm)** — [ ]
-   - Create an alternative Dockerfile (e.g., `worker/Dockerfile.rocm`).
-   - Use the official ROCm PyTorch image as the base
-     (`rocm/pytorch:rocm7.14_ubuntu24.04_py3.13_pytorch_release_2.12.0` 或类似).
-   - Ensure `uv` installs the correct ROCm dependencies
-     (`--all-groups --no-group cuda --inexact`，保留镜像预装 torch).
+1. **Worker Dockerfile Update (AMD ROCm)** — ✅
+   - Official ROCm PyTorch image is now the default in `worker/Dockerfile`.
+   - Base image: `rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0`.
+   - `uv sync --inexact` is used to preserve the PyTorch GPU build.
    - 接入 `docker-compose.yml`（`worker-rocm` 服务，profile: rocm，透传
      `/dev/kfd` + `/dev/dri`）。
 2. **ONNX Runtime Adjustments** — ✅
@@ -134,7 +132,7 @@ AMD GPUs using ROCm.
 ### Task 4.3 长期记忆（Long-term Memory）— ✅
 
 - ✅ 已实现：Go `llmChat` 每次回复前取该数字人最近 10 条房间消息
-  （`chat_messages`，按 avatar_id 作为会话）注入 System Prompt
+  （`live_messages`，按 avatar_id 作为会话）注入 System Prompt
   （user/assistant 格式），支持多轮连续对话；窗口外旧消息直接丢弃控 Token。
 
 ### Task 4.4 私有知识库（RAG）— ✅
@@ -227,7 +225,7 @@ AMD GPUs using ROCm.
   闲置视频池（不打断 Watchdog），动作句按需 S3 加载（LRU 缓存）；观众端
   `SceneSwitcher` 胶囊条 + 切换反馈。
 - ✅ **Telegram Mini App 登录 + Ngrok 隧道**：`POST /api/auth/telegram`（api-telegram）
-  校验 `initData`（HMAC-SHA-256 + 24h 时效）并 upsert `chat_users`（按
+  校验 `initData`（HMAC-SHA-256 + 24h 时效）并 upsert `live_users/telegram_users`（按
   `telegram_id`，非游客，HttpOnly `tg_uid` cookie）；`frontend/telegram` 用
   `@twa-dev/sdk` 取 `WebApp.initData` 调该接口（`VITE_API_ORIGIN` 可指向 ngrok
   api-gateway）；根 `ngrok.yml` 双隧道 + compose `ngrok` 服务，`TG_BOT_TOKEN`/
