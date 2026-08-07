@@ -200,10 +200,19 @@ func (h *AvatarHandler) Get(c *gin.Context) {
 }
 
 type updateAvatarRequest struct {
-	Name     string                `json:"name"`
-	Category string                `json:"category"`
-	VoiceID  string                `json:"voiceId"`
-	Persona  models.PersonaProfile `json:"persona"`
+	Name               string                `json:"name"`
+	Category           string                `json:"category"`
+	VoiceID            string                `json:"voiceId"`
+	Persona            models.PersonaProfile `json:"persona"`
+	// Legacy flat fields: old admin clients sent the persona profile at the
+	// top level; keep accepting them so an outdated build cannot wipe the
+	// stored persona with an empty object.
+	Age                *int   `json:"age"`
+	HeightCm           *int   `json:"heightCm"`
+	WeightKg           *int   `json:"weightKg"`
+	Ethnicity          string `json:"ethnicity"`
+	RelationshipStatus string `json:"relationshipStatus"`
+	Personality        string `json:"personality"`
 }
 
 // Update handles PUT /api/avatars/:id — edits an existing avatar's metadata
@@ -251,7 +260,26 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 	avatar.Name = name
 	avatar.Category = normalizeCategory(req.Category)
 	avatar.VoiceID = voiceID
-	if b, err := json.Marshal(req.Persona); err == nil {
+	persona := req.Persona
+	if persona.Age == nil {
+		persona.Age = req.Age
+	}
+	if persona.HeightCm == nil {
+		persona.HeightCm = req.HeightCm
+	}
+	if persona.WeightKg == nil {
+		persona.WeightKg = req.WeightKg
+	}
+	if persona.Ethnicity == "" {
+		persona.Ethnicity = strings.TrimSpace(req.Ethnicity)
+	}
+	if persona.RelationshipStatus == "" {
+		persona.RelationshipStatus = req.RelationshipStatus
+	}
+	if persona.Personality == "" {
+		persona.Personality = strings.TrimSpace(req.Personality)
+	}
+	if b, err := json.Marshal(persona); err == nil {
 		avatar.Persona = string(b)
 	}
 	if err := h.db.Save(&avatar).Error; err != nil {

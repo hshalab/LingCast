@@ -217,12 +217,14 @@ export function AvatarStudio() {
         name: name.trim(),
         category,
         voiceId,
-        age: age ? Number(age) : null,
-        heightCm: heightCm ? Number(heightCm) : null,
-        weightKg: weightKg ? Number(weightKg) : null,
-        ethnicity: ethnicity.trim(),
-        relationshipStatus,
-        personality: personality.trim(),
+        persona: {
+          age: age ? Number(age) : null,
+          heightCm: heightCm ? Number(heightCm) : null,
+          weightKg: weightKg ? Number(weightKg) : null,
+          ethnicity: ethnicity.trim(),
+          relationshipStatus,
+          personality: personality.trim(),
+        },
       }
       if (editing && editId) {
         await api.put<Avatar>(`/avatars/${editId}`, profile)
