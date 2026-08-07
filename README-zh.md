@@ -134,10 +134,10 @@
   「我的消息」（跨房间）；首页增加 Hero CTA、卡片悬停进入直播间、页脚账号入口。
 - [x] **Telegram Mini App 登录**：`frontend/telegram`（React + Vite + Tailwind +
   `@twa-dev/sdk`，:3002）把 `WebApp.initData` 提交到 `POST /api/auth/telegram`
-  （api-user）；后端用 `TG_BOT_TOKEN` 做 HMAC-SHA-256 签名校验（24h 时效），
+  （api-telegram）；后端用 `TG_BOT_TOKEN` 做 HMAC-SHA-256 签名校验（24h 时效），
   通过后按 `telegram_id` 自动注册/登录（HttpOnly cookie）。本地联调用根目录
   `ngrok.yml` 双隧道（TMA + API 网关），`docker compose up ngrok` 即可。
-  启动时 api-user 会自动注册 Telegram：`setWebhook` + `setChatMenuButton`
+  启动时 api-telegram 会自动注册 Telegram：`setWebhook` + `setChatMenuButton`
   （Mini App 入口），地址优先取 `TG_WEBHOOK_URL`/`TG_MINIAPP_URL`（生产固定
   域名），缺失时回退 ngrok 隧道发现（`api-gateway`/`tg-app`）；两者都设置时
   不再查询 ngrok。
@@ -178,7 +178,7 @@
   └── webhooks ──> api-scheduler（Worker 任务/基础视频回调）
   └── /media  ──> RustFS (S3 兼容)
 
-观众端 :3000 ──> Next.js（服务端代理 /api、/live）──> api-user / SRS
+观众端 :3000 ──> Next.js（服务端代理 /api、/live）──> api-live / SRS
 
 Python AI Worker ──> Redis 队列 / boto3 下载素材
                   ──> 创建: LivePortrait 生成 base 视频（一次性预处理）
@@ -197,7 +197,7 @@ service-tts ──> async edge-tts → 16kHz PCM WAV → S3（RustFS）
 - 观众端前端：独立 Next.js 16 + TailwindCSS 4（`frontend/live/`，亮/暗双主题可切换，
   无需登录）。
 - 后端：Go + Gin + GORM，拆分为三个微服务（同一 module 共享 internal 包）——
-  `api-admin`（管理端，:8081）、`api-user`（观众端/直播聊天，:8082）、
+  `api-admin`（管理端，:8081）、`api-live`（观众端/直播聊天，:8082）、
   `api-scheduler`（Worker 回调，:8083）；标准 AWS S3 SDK v2。
 - AI Worker：Python 3.11，uv 管理依赖，boto3 + Redis。
 - 知识库微服务：`service-rag`（FastAPI + uv + zvec FTS，Jieba 分词，零模型依赖，
@@ -207,7 +207,7 @@ service-tts ──> async edge-tts → 16kHz PCM WAV → S3（RustFS）
   （macOS Apple Silicon 用 MPS/CoreML，Linux 用 NVIDIA CUDA 或 AMD ROCm），
   宿主机仅开放必要端口：**3000**（观众端）、**8080**（管理端/API）、**1935**
   （RTMP 推流）、**6379**（Redis）与 **9000**（RustFS）；`api-admin`、
-  `api-user`、`api-scheduler`、`service-rag`、`service-tts` 均在内网，不开放
+  `api-live`、`api-scheduler`、`service-rag`、`service-tts` 均在内网，不开放
   宿主端口。
 
 ## 快速开始
@@ -411,7 +411,7 @@ curl http://localhost:8080/api/live/9/status
 经 nginx 入口 `http://localhost:8080/doc/` 访问：
 
 - `/doc/api-admin/` — 管理端 API（gin-swagger）
-- `/doc/api-user/` — 观众端 / 直播聊天 API（gin-swagger）
+- `/doc/api-live/` — 观众端 / 直播聊天 API（gin-swagger）
 - `/doc/api-scheduler/` — Worker Webhook（gin-swagger）
 - `/doc/service-rag/` — 知识库服务（FastAPI /docs）
 - `/doc/service-tts/` — 语音服务（FastAPI /docs）
@@ -420,7 +420,7 @@ curl http://localhost:8080/api/live/9/status
 
 ```text
 LingCast/
-├── backend/        Go module — 三个微服务：cmd/api-admin、cmd/api-user、
+├── backend/        Go module — 三个微服务：cmd/api-admin、cmd/api-live、
 │                   cmd/api-scheduler（共享 internal/ 包）
 ├── services/       Python 微服务
 │   ├── rag/        本地 RAG 微服务（FastAPI + uv + zvec FTS/Jieba，:8001）

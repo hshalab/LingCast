@@ -29,7 +29,7 @@ features:
   - title: 知识库 RAG + 长期记忆
     details: service-rag（zvec 全文索引）按数字人隔离检索 Top-3，注入 DeepSeek 回复，支持多轮上下文。
   - title: 微服务化
-    details: api-admin / api-user / api-scheduler + service-rag / service-tts + RustFS 共享存储，文档经 Swagger 网关聚合。
+    details: api-admin / api-live / api-scheduler + service-rag / service-tts + RustFS 共享存储，文档经 Swagger 网关聚合。
   - title: 多硬件支持
     details: macOS Apple Silicon（MPS/CoreML）实测；Linux NVIDIA CUDA 与 AMD ROCm 路径已预留。
 ---

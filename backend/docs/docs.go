@@ -2040,7 +2040,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api",
 	Schemes:          []string{},
 	Title:            "LingCast API",
-	Description:      "LingCast 数字人直播平台 API（api-admin / api-user / api-scheduler 共用一份 OpenAPI 文档；管理端写操作与 /users、/admin/* 需登录会话，观众端与 Worker Webhook 公开）。",
+	Description:      "LingCast 数字人直播平台 API（api-admin / api-live / api-scheduler 共用一份 OpenAPI 文档；管理端写操作与 /users、/admin/* 需登录会话，观众端与 Worker Webhook 公开）。",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

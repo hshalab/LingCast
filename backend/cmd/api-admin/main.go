@@ -1,7 +1,7 @@
 // LingCast API — admin console microservice.
 // @title LingCast API
 // @version 1.0.0
-// @description LingCast 数字人直播平台 API（api-admin / api-user / api-scheduler 共用一份 OpenAPI 文档；管理端写操作与 /users、/admin/* 需登录会话，观众端与 Worker Webhook 公开）。
+// @description LingCast 数字人直播平台 API（api-admin / api-live / api-scheduler 共用一份 OpenAPI 文档；管理端写操作与 /users、/admin/* 需登录会话，观众端与 Worker Webhook 公开）。
 // @host localhost:8080
 // @BasePath /api
 package main

@@ -9,7 +9,7 @@ import (
 	"talkingavatar/backend/internal/handlers/live"
 )
 
-// RegisterLive wires the audience-facing API (api-user service). All
+// RegisterLive wires the audience-facing API (api-live service). All
 // endpoints are public; this is where the viewer app and the live-chat
 // orchestrator live.
 func RegisterLive(r *gin.Engine, cfg config.Config, deps *app.Deps) {

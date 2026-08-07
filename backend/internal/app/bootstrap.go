@@ -1,5 +1,5 @@
 // Package app holds the shared dependency bootstrap used by the three API
-// microservices (api-admin, api-user, api-scheduler). They all share the same
+// microservices (api-admin, api-live, api-scheduler). They all share the same
 // MariaDB / Redis / RustFS / queue configuration from environment variables.
 package app
 

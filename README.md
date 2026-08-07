@@ -166,9 +166,9 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   the home page got a hero CTA, card hover overlays and a footer account link.
 - [x] **Telegram Mini App login**: `frontend/telegram` (React + Vite + Tailwind +
   `@twa-dev/sdk`, :3002) sends `WebApp.initData` to `POST /api/auth/telegram`
-  (api-user); the backend validates the HMAC-SHA-256 signature against
+  (api-telegram); the backend validates the HMAC-SHA-256 signature against
   `TG_BOT_TOKEN` (24h freshness) and upserts a chat identity (HttpOnly cookie).
-  At startup api-user auto-registers with Telegram: `setWebhook` +
+  At startup api-telegram auto-registers with Telegram: `setWebhook` +
   `setChatMenuButton` (Mini App entry), resolved environment-first from
   `TG_WEBHOOK_URL` / `TG_MINIAPP_URL` (production fixed domains) and falling
   back to ngrok tunnel discovery (`api-gateway` / `tg-app`); when both env
@@ -212,7 +212,7 @@ Admin console :8080 ──> Nginx (frontend)
   └── webhooks ──> api-scheduler (worker task/base-video callbacks)
   └── /media  ──> RustFS (S3-compatible)
 
-Viewer app :3000 ──> Next.js (server-side proxy for /api, /live) ──> api-user / SRS
+Viewer app :3000 ──> Next.js (server-side proxy for /api, /live) ──> api-live / SRS
 
 Python AI Worker ──> Redis queue / boto3 downloads assets
                  ──> Create: LivePortrait generates base video (one-time preprocessing)
@@ -231,7 +231,7 @@ service-tts ──> async edge-tts → 16kHz PCM WAV → S3 (RustFS)
 - Viewer frontend: standalone Next.js 16 + TailwindCSS 4 (`frontend/live/`, light/dark themes,
   no login required).
 - Backend: Go + Gin + GORM split into three microservices sharing one module —
-  `api-admin` (management console, :8081), `api-user` (audience/live chat,
+  `api-admin` (management console, :8081), `api-live` (audience/live chat,
   :8082) and `api-scheduler` (worker webhooks, :8083); standard AWS S3 SDK v2.
 - AI Worker: Python 3.11, uv-managed dependencies, boto3 + Redis.
 - Knowledge microservice: `service-rag` (FastAPI + uv + zvec FTS, Jieba tokenizer,
@@ -241,7 +241,7 @@ service-tts ──> async edge-tts → 16kHz PCM WAV → S3 (RustFS)
   Worker runs natively on the host** (MPS/CoreML on macOS Apple Silicon, NVIDIA CUDA or AMD
   ROCm on Linux). Host-published ports are limited to what the host worker and
   the web apps need: **3000** (viewer), **8080** (admin/API), **1935** (RTMP ingest),
-  **6379** (Redis) and **9000** (RustFS). `api-admin`, `api-user`,
+  **6379** (Redis) and **9000** (RustFS). `api-admin`, `api-live`,
   `api-scheduler`, `service-rag` and `service-tts` stay on the internal network.
 
 ## Quick Start
@@ -454,7 +454,7 @@ All HTTP microservices expose interactive OpenAPI/Swagger docs through a
 dedicated `docs` gateway (nginx entry `http://localhost:8080/doc/`):
 
 - `/doc/api-admin/` — admin console API (gin-swagger)
-- `/doc/api-user/` — viewer / live-chat API (gin-swagger)
+- `/doc/api-live/` — viewer / live-chat API (gin-swagger)
 - `/doc/api-scheduler/` — worker webhooks (gin-swagger)
 - `/doc/service-rag/` — knowledge-base service (FastAPI /docs)
 - `/doc/service-tts/` — TTS service (FastAPI /docs)
@@ -463,7 +463,7 @@ dedicated `docs` gateway (nginx entry `http://localhost:8080/doc/`):
 
 ```text
 LingCast/
-├── backend/        Go module — three microservices: cmd/api-admin, cmd/api-user,
+├── backend/        Go module — three microservices: cmd/api-admin, cmd/api-live,
 │                   cmd/api-scheduler (shared internal/ packages)
 ├── services/       Python microservices
 │   ├── rag/        Local RAG microservice (FastAPI + uv + zvec FTS/Jieba, :8001)

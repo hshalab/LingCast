@@ -94,7 +94,7 @@ services:
   # ---- Application services (internal network only) ----
   # API split into three microservices sharing the same Go module:
   #   api-admin     management console (:8081, behind nginx /api)
-  #   api-user      audience / live chat (:8082, behind Next.js proxy)
+  #   api-live      audience / live chat (:8082, behind Next.js proxy)
   #   api-scheduler worker callbacks  (:8083, behind nginx webhook routes)
   api-admin:
     build:
@@ -131,11 +131,11 @@ services:
       rustfs:
         condition: service_healthy
 
-  api-user:
+  api-live:
     build:
       context: ./backend
       args:
-        SERVICE: api-user
+        SERVICE: api-live
     restart: unless-stopped
     environment:
       API_USER_PORT: "8082"
@@ -169,6 +169,48 @@ services:
       redis:
         condition: service_healthy
       rustfs:
+        condition: service_healthy
+
+  api-telegram:
+    build:
+      context: ./backend
+      args:
+        SERVICE: api-telegram
+    restart: unless-stopped
+    environment:
+      API_TELEGRAM_PORT: "8084"
+      GIN_MODE: release
+      MYSQL_DSN: "${MYSQL_USER:-talking}:${MYSQL_PASSWORD:-talking123}@tcp(mysql:3306)/${MYSQL_DATABASE:-talking_avatar}?charset=utf8mb4&parseTime=True&loc=Local"
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "0"
+      TG_BOT_TOKEN: ${TG_BOT_TOKEN:-}
+      NGROK_API_URL: ${NGROK_API_URL:-http://ngrok:4040}
+      TG_WEBHOOK_URL: ${TG_WEBHOOK_URL:-}
+      TG_MINIAPP_URL: ${TG_MINIAPP_URL:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  api-web:
+    build:
+      context: ./backend
+      args:
+        SERVICE: api-web
+    restart: unless-stopped
+    environment:
+      API_WEB_PORT: "8085"
+      GIN_MODE: release
+      MYSQL_DSN: "${MYSQL_USER:-talking}:${MYSQL_PASSWORD:-talking123}@tcp(mysql:3306)/${MYSQL_DATABASE:-talking_avatar}?charset=utf8mb4&parseTime=True&loc=Local"
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "0"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   api-scheduler:
@@ -229,7 +271,7 @@ services:
 
   # API documentation gateway (docs): aggregates every HTTP microservice's
   # Swagger / OpenAPI docs behind one entry, exposed by nginx at
-  # /doc/<prefix>: /doc/api-admin, /doc/api-user, /doc/api-scheduler,
+  # /doc/<prefix>: /doc/api-admin, /doc/api-live, /doc/api-scheduler,
   # /doc/service-rag, /doc/service-tts
   docs:
     build:
@@ -238,7 +280,11 @@ services:
     depends_on:
       api-admin:
         condition: service_started
-      api-user:
+      api-live:
+        condition: service_started
+      api-telegram:
+        condition: service_started
+      api-web:
         condition: service_started
       api-scheduler:
         condition: service_started
@@ -331,10 +377,10 @@ services:
       # Override Docker's injected HOSTNAME (container id) which Next.js
       # standalone otherwise tries to resolve as its listen address.
       HOSTNAME: "0.0.0.0"
-      API_ORIGIN: http://api-user:8082
+      API_ORIGIN: http://api-live:8082
       LIVE_ORIGIN: http://srs:8080
     depends_on:
-      - api-user
+      - api-live
 
   # ---- 1v1 网站（BFF，Next.js + PayPal，容器内 3000） ----
   frontend-web:

@@ -28,7 +28,7 @@
   在宿主机原生运行**：macOS Apple Silicon（MPS/CoreML）、Linux NVIDIA CUDA、
   Linux **AMD ROCm**（RX 6800 XT 等 RDNA2，见 README 对应章节）。宿主机仅开放
   必要端口：3000（观众端）/ 8080（管理端）/ 1935（RTMP 推流）/ 6379（Redis）/
-  9000（RustFS）；`api-admin`/`api-user`/`api-scheduler`、`service-rag`、
+  9000（RustFS）；`api-admin`/`api-live`/`api-scheduler`、`service-rag`、
   `service-tts` 均在内网，不发布端口。
 - 依赖组（`worker/pyproject.toml`）：`models`（macOS 默认）、`cuda`、
   `rocm`（仅 `onnxruntime-rocm`，torch 用官方 ROCm 镜像或手动装）——cuda/rocm
@@ -55,7 +55,7 @@
   （`GET /api/live` 携带 avatar 的 `category`），`app/rooms/[avatarId]/page.tsx`
   用 xgplayer 拉 HTTP-FLV + 聊天输入 `POST /api/live/:id/message`；`app/api/[...path]`
   与 `app/live/[...path]` 路由处理器在**服务端**代理（`API_ORIGIN` / `LIVE_ORIGIN`
-  运行时读取，docker 内为 `http://api-user:8082` / `http://srs:8080`，本地默认
+  运行时读取，docker 内为 `http://api-live:8082` / `http://srs:8080`，本地默认
   `http://localhost:8080`）。
 - ✅ 聊天身份与记录持久化：`chat_users`（游客/账号，bcrypt）与 `chat_messages`
   （user/bot）两张表；`POST /api/chat/guest` 发临时身份，`register` 原地升级游客行
@@ -72,12 +72,12 @@
   默认）；Live Studio「字幕设置」与「默认推流视频」卡片保存后自动重启直播生效。
 - ✅ 管理端用户列表：`GET /api/users`（游客+账号，含消息数），侧边栏「用户相关 →
   用户列表」（/users）展示真实数据。
-- ✅ **Telegram Mini App 登录**：`POST /api/auth/telegram`（api-user）用
+- ✅ **Telegram Mini App 登录**：`POST /api/auth/telegram`（api-telegram）用
   `TG_BOT_TOKEN` 校验 `initData`（HMAC-SHA-256：`secret=HMAC("WebAppData", token)`，
   对除 `hash` 外按字典序的 `key=value` 串签名，24h 新鲜度检查），通过后按
   `telegram_id` upsert `chat_users`（非游客，用户名优先 TG username、冲突回退
   `tg_<id>`），设置 HttpOnly `tg_uid` cookie 并返回 `{userId,username,...}`；
-  `frontend/admin/nginx.conf` 单独把 `/api/auth/telegram` 路由到 api-user（TMA
+  `frontend/admin/nginx.conf` 单独把 `/api/auth/telegram` 路由到 api-telegram（TMA
   走同一网关）。前端 `frontend/telegram` 初始化 `WebApp.ready()` 后把
   `WebApp.initData` POST 到 `${VITE_API_ORIGIN}/api/auth/telegram`，含加载中/
   成功/失败三态。
@@ -86,13 +86,13 @@
   （`ngrok/ngrok:latest`，`start --all`，4040 检查台，`host.docker.internal`
   已映射 host-gateway）；`.env(.example)` 需填 `NGROK_AUTHTOKEN`/`TG_BOT_TOKEN`/
   `VITE_API_ORIGIN`（TMA 构建期注入 api-gateway 的 https 地址）。
-- ✅ **Telegram Webhook 自动注册**：api-user 启动后在后台 goroutine 轮询
+- ✅ **Telegram Webhook 自动注册**：api-telegram 启动后在后台 goroutine 轮询
   `http://ngrok:4040/api/tunnels`（`NGROK_API_URL`，2s × 10 次重试），找到
   `api-gateway` 隧道的 `public_url` 后 POST
   `https://api.telegram.org/bot{token}/setWebhook` 注册
   `{public_url}/api/telegram/webhook`（不阻塞 Gin 启动）；占位端点
   `POST /api/telegram/webhook` 返回 200，管理端 nginx 将其与
-  `/api/auth/telegram` 一起路由到 api-user。
+  `/api/auth/telegram` 一起路由到 api-telegram。
 - ✅ **Telegram 注册环境变量优先**：`TG_WEBHOOK_URL` / `TG_MINIAPP_URL` 设置后
   直接使用（生产固定域名），缺失时才轮询 ngrok 对应隧道（webhook→api-gateway，
   菜单按钮→tg-app）；两者都设置时完全不查询 ngrok；`setWebhook` +

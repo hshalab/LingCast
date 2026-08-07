@@ -6,7 +6,7 @@
 | 前缀 | 服务 | 文档入口（本地） |
 | --- | --- | --- |
 | `/api-admin` | 管理端 API（gin-swagger） | [http://localhost:8080/doc/api-admin/swagger/index.html](http://localhost:8080/doc/api-admin/swagger/index.html) |
-| `/api-user` | 观众端 / 直播聊天 API | [http://localhost:8080/doc/api-user/swagger/index.html](http://localhost:8080/doc/api-user/swagger/index.html) |
+| `/api-live` | 观众端 / 直播聊天 API | [http://localhost:8080/doc/api-live/swagger/index.html](http://localhost:8080/doc/api-live/swagger/index.html) |
 | `/api-scheduler` | Worker Webhook | [http://localhost:8080/doc/api-scheduler/swagger/index.html](http://localhost:8080/doc/api-scheduler/swagger/index.html) |
 | `/service-rag` | 知识库服务（FastAPI /docs） | [http://localhost:8080/doc/service-rag/docs](http://localhost:8080/doc/service-rag/docs) |
 | `/service-tts` | 语音服务（FastAPI /docs） | [http://localhost:8080/doc/service-tts/docs](http://localhost:8080/doc/service-tts/docs) |
