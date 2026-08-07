@@ -341,17 +341,16 @@ export function ScenesPage() {
                               >
                                 <Pencil className='size-3.5' />
                               </Button>
-                              {!scene.isDefault && (
-                                <Button
-                                  size='icon'
-                                  variant='ghost'
-                                  className='h-8 w-8 text-destructive'
-                                  title={t('common.delete')}
-                                  onClick={() => setDeleteSceneTarget(scene)}
-                                >
-                                  <Trash2 className='size-3.5' />
-                                </Button>
-                              )}
+                              <Button
+                                size='icon'
+                                variant='ghost'
+                                className='h-8 w-8 text-destructive'
+                                title={t('common.delete')}
+                                disabled={scene.isDefault}
+                                onClick={() => setDeleteSceneTarget(scene)}
+                              >
+                                <Trash2 className='size-3.5' />
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -404,17 +403,16 @@ export function ScenesPage() {
                                             >
                                               <Play className='size-3.5' />
                                             </Button>
-                                            {!video.isDefault && (
-                                              <Button
-                                                size='icon'
-                                                variant='ghost'
-                                                className='h-7 w-7 text-destructive'
-                                                title={t('common.delete')}
-                                                onClick={() => setDeleteVideoTarget(video)}
-                                              >
-                                                <Trash2 className='size-3.5' />
-                                              </Button>
-                                            )}
+                                            <Button
+                                              size='icon'
+                                              variant='ghost'
+                                              className='h-7 w-7 text-destructive'
+                                              title={t('common.delete')}
+                                              disabled={video.isDefault}
+                                              onClick={() => setDeleteVideoTarget(video)}
+                                            >
+                                              <Trash2 className='size-3.5' />
+                                            </Button>
                                           </div>
                                         </TableCell>
                                       </TableRow>
