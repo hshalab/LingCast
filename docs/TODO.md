@@ -232,6 +232,10 @@ AMD GPUs using ROCm.
   `@twa-dev/sdk` 取 `WebApp.initData` 调该接口（`VITE_API_ORIGIN` 可指向 ngrok
   api-gateway）；根 `ngrok.yml` 双隧道 + compose `ngrok` 服务，`TG_BOT_TOKEN`/
   `NGROK_AUTHTOKEN`/`VITE_API_ORIGIN` 见 `.env.example`。
+- ✅ **Telegram Webhook 自动发现与注册**：api-user 启动时后台 goroutine 轮询
+  `NGROK_API_URL`（`http://ngrok:4040/api/tunnels`，2s × 10 重试）取
+  `api-gateway` 公网地址 → `setWebhook` 注册 `/api/telegram/webhook`（占位
+  200 OK）；单测覆盖发现/未就绪/注册/重试四类场景。
 
 ## Strict Rules for Execution
 

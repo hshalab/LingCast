@@ -21,11 +21,16 @@ func RegisterUser(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 		cfg.EmbedServerURL, cfg.TTSServiceURL,
 	)
 	tgAuthHandler := handlers.NewTelegramAuthHandler(deps.DB, cfg.TgBotToken)
+	tgWebhookHandler := handlers.NewTelegramWebhookHandler(
+		deps.DB, cfg.TgBotToken, cfg.NgrokAPIURL,
+	)
 
 	api := r.Group("/api")
 	{
 		// Telegram Mini App login (initData HMAC validation, no passwords).
 		api.POST("/auth/telegram", tgAuthHandler.Login)
+		// Telegram update webhook (placeholder 200 OK).
+		api.POST("/telegram/webhook", tgWebhookHandler.Webhook)
 		// Public avatar detail (viewer room page).
 		api.GET("/avatars/:id", avatarHandler.Get)
 		// Public scene list (audience scene switcher).

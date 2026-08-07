@@ -86,6 +86,13 @@
   （`ngrok/ngrok:latest`，`start --all`，4040 检查台，`host.docker.internal`
   已映射 host-gateway）；`.env(.example)` 需填 `NGROK_AUTHTOKEN`/`TG_BOT_TOKEN`/
   `VITE_API_ORIGIN`（TMA 构建期注入 api-gateway 的 https 地址）。
+- ✅ **Telegram Webhook 自动注册**：api-user 启动后在后台 goroutine 轮询
+  `http://ngrok:4040/api/tunnels`（`NGROK_API_URL`，2s × 10 次重试），找到
+  `api-gateway` 隧道的 `public_url` 后 POST
+  `https://api.telegram.org/bot{token}/setWebhook` 注册
+  `{public_url}/api/telegram/webhook`（不阻塞 Gin 启动）；占位端点
+  `POST /api/telegram/webhook` 返回 200，管理端 nginx 将其与
+  `/api/auth/telegram` 一起路由到 api-user。
 - ✅ 国际化（中/英）：管理端（react-i18next，`frontend/admin/src/i18n/`）与观众端
   （`frontend/live/lib/i18n.tsx` 轻量 provider）均有语言切换（localStorage 记忆 +
   浏览器语言自动检测）；后端按 `Accept-Language` 本地化错误消息

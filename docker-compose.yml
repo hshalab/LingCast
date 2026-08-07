@@ -151,6 +151,7 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.deepseek.com}
       OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-flash}
       TG_BOT_TOKEN: ${TG_BOT_TOKEN:-}
+      NGROK_API_URL: ${NGROK_API_URL:-http://ngrok:4040}
       EMBED_SERVER_URL: ${EMBED_SERVER_URL:-http://service-rag:8001}
       TTS_SERVICE_URL: ${TTS_SERVICE_URL:-http://service-tts:8002}
       S3_ENDPOINT: http://rustfs:9000

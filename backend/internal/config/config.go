@@ -30,6 +30,7 @@ type Config struct {
 	AdminUsername       string
 	AdminPassword       string
 	TgBotToken          string
+	NgrokAPIURL         string
 
 	S3Endpoint      string
 	S3AccessKey     string
@@ -101,6 +102,7 @@ func Load() Config {
 		AdminUsername:       env("ADMIN_USERNAME", "admin"),
 		AdminPassword:       env("ADMIN_PASSWORD", "admin123"),
 		TgBotToken:          os.Getenv("TG_BOT_TOKEN"),
+		NgrokAPIURL:         env("NGROK_API_URL", "http://ngrok:4040"),
 
 		S3Endpoint:      env("S3_ENDPOINT", "http://127.0.0.1:9000"),
 		S3AccessKey:     env("S3_ACCESS_KEY", "rustfsadmin"),
