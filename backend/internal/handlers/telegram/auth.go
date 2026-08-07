@@ -177,7 +177,6 @@ func (h *TelegramAuthHandler) upsertUser(tgID int64, tgUsername string) (*models
 	createUser := func(name string) error {
 		return h.db.Model(&models.TelegramUser{}).Create(map[string]any{
 			"username":    name,
-			"is_guest":    false,
 			"telegram_id": tgID,
 		}).Error
 	}
