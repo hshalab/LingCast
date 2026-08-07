@@ -484,7 +484,7 @@ export function Broadcast({
                         </TableCell>
                         <TableCell className='text-right'>
                           <div className='flex items-center justify-end gap-1'>
-                            {item.status === 'completed' && item.outputVideoS3Url ? (
+                            {item.status === 'completed' && item.outputVideoS3Url && (
                               <>
                               <Button
                                 variant='outline'
