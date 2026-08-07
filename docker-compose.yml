@@ -199,6 +199,8 @@ services:
       context: ./backend
       args:
         SERVICE: api-web
+    ports:
+      - "8085:8085"
     restart: unless-stopped
     environment:
       API_WEB_PORT: "8085"
@@ -326,8 +328,6 @@ services:
       LIVEPORTRAIT_HALF: "false"
       WAV2LIP_PROVIDER: rocm
       TTS_ENGINE: edge
-      MIOPEN_DISABLE_CACHE: "1"
-      MIOPEN_FIND_ENFORCE: "3"
     volumes:
       - ./worker/models:/app/models
       - ./worker/external:/app/external
