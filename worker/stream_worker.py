@@ -36,6 +36,7 @@ import requests
 import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -56,6 +57,12 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger("stream_worker")
+
+# Seconds of busy-wait at the end of each frame slot: time.sleep() alone
+# overshoots by the GIL switch interval (~5ms by default), which drops the
+# watchdog from 24fps to ~21.5fps and makes the player buffer. Sleeping the
+# bulk then spinning the last few ms holds the deadline precisely.
+PACING_BUSY_TAIL = 0.004
 
 
 def parse_live_message(raw: str) -> tuple[str, str | None]:
@@ -308,9 +315,15 @@ class LiveAvatarSession:
         silence_slice = b"\x00\x00" * (half_sec_bytes // 2)
         idle_count = 0
         cur_seg: _TalkingSegment | None = None
+        next_tick = time.perf_counter()
         logger.info("avatar %s watchdog writer started @ %.3fs/frame", self.avatar_id, interval)
         try:
             while self._running:
+                next_tick += interval
+                # After a long stall (ffmpeg backpressure), resync instead of
+                # bursting missed frames into a still-congested pipe.
+                if next_tick < time.perf_counter() - interval:
+                    next_tick = time.perf_counter()
                 t0 = time.perf_counter()
 
                 # Probe: how long does the ready-frame queue block us?
@@ -372,12 +385,15 @@ class LiveAvatarSession:
                 # real sleep; a loop over 45ms means we miss the 24fps cadence.
                 elapsed_work = time.perf_counter() - t0  # seconds, incl. queue get
                 work_ms = elapsed_work * 1000.0 - get_ms
-                delay = interval - elapsed_work
+                # Pace to the deadline: sleep the bulk, busy-wait the tail.
+                delay = next_tick - time.perf_counter()
                 sleep_ms = 0.0
-                if delay > 0:
+                if delay > PACING_BUSY_TAIL:
                     t_sleep = time.perf_counter()
-                    time.sleep(delay)
+                    time.sleep(delay - PACING_BUSY_TAIL)
                     sleep_ms = (time.perf_counter() - t_sleep) * 1000.0
+                while time.perf_counter() < next_tick:
+                    pass
                 total_ms = (time.perf_counter() - t0) * 1000.0
                 if total_ms > 45.0 and time.monotonic() - self._last_watchdog_warn >= 1.0:
                     self._last_watchdog_warn = time.monotonic()
@@ -791,6 +807,16 @@ def _restore_sessions(api_base_url, sessions, storage, work_root, fps, r) -> Non
 def main() -> None:
     _load_local_env()
     _check_required_env()
+    # Reduce GIL handoff latency so the watchdog's time.sleep() reacquires the
+    # GIL quickly and the 24fps deadline is met (default 5ms switch interval
+    # alone drops the effective frame rate below 24fps).
+    sys.setswitchinterval(0.001)
+    # Diagnostics: STREAM_FAULTHANDLER=1 dumps all thread stacks to stderr
+    # every 15s (used to catch silent hangs/deaths).
+    if os.environ.get("STREAM_FAULTHANDLER"):
+        import faulthandler
+
+        faulthandler.dump_traceback_later(15, repeat=True)
     if os.environ.get("TTS_ENGINE", "edge") == "gpt-sovits":
         _ensure_nltk_resources()
     cfg = load_config()
