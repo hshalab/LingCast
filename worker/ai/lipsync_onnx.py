@@ -211,10 +211,18 @@ class Wav2LipOnnxLipSync:
         pred = session.run(None, feed)[0]
         pred = pred.transpose(0, 2, 3, 1) * 255.0
         out_frames = []
+        from .enhancer import _feathered_mask, _blend
+
         for p, f, c in zip(pred, frame_batch, coords_batch):
             y1, y2, x1, x2 = c
-            p = cv2.resize(p.astype(np.uint8), (x2 - x1, y2 - y1))
-            f[y1:y2, x1:x2] = p
+            roi_h, roi_w = y2 - y1, x2 - x1
+            p = cv2.resize(p.astype(np.uint8), (roi_w, roi_h))
+            
+            # Feather the edges so the bounding box isn't a hard visible square
+            roi = f[y1:y2, x1:x2]
+            mask = _feathered_mask(roi_h, roi_w, 0.15)
+            f[y1:y2, x1:x2] = _blend(roi, p, mask)
+            
             if self.enhancer is not None:
                 f = self.enhancer.enhance_frame(f, (x1, y1, x2, y2))
             out_frames.append(f)
