@@ -92,6 +92,10 @@ class LivePortraitParams:
         self.output_width = _int(s, "outputWidth", 720)
         self.output_height = _int(s, "outputHeight", 1280)
         self.driving_template = (s.get("drivingTemplate") or "").strip()
+        # Freeze the eye expression channels when slowing a .pkl template so
+        # the base video never blinks; a blink-idle preset (wink.pkl) sets
+        # freezeEyes=false to keep the eyes animated.
+        self.freeze_eyes = bool(s.get("freezeEyes", True))
 
 
 class LivePortraitRenderer:
@@ -334,7 +338,7 @@ class LivePortraitRenderer:
         """Apply the temporal speed knob to a .pkl driving template."""
         driving = self.driving
         if self.driving_speed == 1.0:
-            return driving
+            return self._ensure_template_crops(driving, work_dir)
         if driving.suffix != ".pkl" or not driving.exists():
             logger.warning(
                 "LIVEPORTRAIT_DRIVING_SPEED only applies to .pkl templates; "
@@ -342,10 +346,52 @@ class LivePortraitRenderer:
                 driving,
             )
             return driving
-        return self._slow_template(driving, self.driving_speed, work_dir)
+        return self._ensure_template_crops(
+            self._slow_template(driving, self.driving_speed, work_dir), work_dir
+        )
 
-    @staticmethod
-    def _slow_template(driving: Path, speed: float, work_dir: Path) -> Path:
+    def _ensure_template_crops(self, driving: Path, work_dir: Path) -> Path:
+        """Patch .pkl templates that lack the eye/lip crop keys.
+
+        Older templates (wink.pkl, shy.pkl, ...) only carry `motion`, but the
+        LivePortrait pipeline requires c_d_eyes_lst / c_d_lip_lst (or the
+        c_*_lst aliases) when loading from a template — even though they are
+        only dereferenced when eye/lip retargeting is enabled. We write a
+        patched copy with placeholder crops so these templates work, and
+        refuse loudly when retargeting is requested without real crops.
+        """
+        if driving.suffix != ".pkl" or not driving.exists():
+            return driving
+        from src.utils.io import dump, load
+
+        dct = load(str(driving))
+        missing = []
+        for old_key, alias in (("c_d_eyes_lst", "c_eyes_lst"), ("c_d_lip_lst", "c_lip_lst")):
+            if old_key not in dct and alias not in dct:
+                missing.append(old_key)
+        if not missing:
+            return driving
+        if self.params.flag_eye_retargeting or self.params.flag_lip_retargeting:
+            raise ValueError(
+                f"driving template {driving.name} has no eye/lip crops "
+                f"({', '.join(missing)}); disable eye/lip retargeting or use "
+                "a full template"
+            )
+        n = int(dct.get("n_frames", 1))
+        patched = dict(dct)
+        for key in missing:
+            patched[key] = [None] * n
+        out = work_dir / f"{driving.stem}_crops.pkl"
+        dump(str(out), patched)
+        logger.warning(
+            "driving template %s has no eye/lip crops; patched placeholder "
+            "crops (retargeting off) -> %s",
+            driving.name,
+            out.name,
+        )
+        return out
+
+    def _slow_template(self, driving: Path, speed: float, work_dir: Path) -> Path:
         """Stretch a motion template in time by interpolating its features.
 
         LivePortrait replays the template at a fixed fps, so a short template
@@ -405,22 +451,33 @@ class LivePortraitRenderer:
             new_motion.append(item)
 
         # Freeze the eye expression channels (LivePortrait eye region indices)
-        # to their first-frame values so the base video never blinks — only the
-        # shoulder/body motion from the template remains.
-        EYE_EXP_DIMS = (11, 13, 15, 16, 18)
-        first_exp = motion[0]["exp"]
-        for item in new_motion:
-            if "exp" in item:
-                item["exp"] = item["exp"].copy()
-                item["exp"][0, EYE_EXP_DIMS, :] = first_exp[0, EYE_EXP_DIMS, :]
+        # to their first-frame values so the base video never blinks — only
+        # the shoulder/body motion from the template remains. Blink-idle
+        # presets (wink.pkl + freezeEyes=false) skip this so the eyes animate.
+        if self.params.freeze_eyes:
+            EYE_EXP_DIMS = (11, 13, 15, 16, 18)
+            first_exp = motion[0]["exp"]
+            for item in new_motion:
+                if "exp" in item:
+                    item["exp"] = item["exp"].copy()
+                    item["exp"][0, EYE_EXP_DIMS, :] = first_exp[0, EYE_EXP_DIMS, :]
 
         slowed = dict(dct)
         slowed["n_frames"] = new_n
         slowed["motion"] = new_motion
         for key in ("c_d_eyes_lst", "c_eyes_lst"):
             if key in slowed:
-                first = slowed[key][0]
-                slowed[key] = [first.copy() for _ in range(new_n)]
+                if self.params.freeze_eyes:
+                    first = slowed[key][0]
+                    slowed[key] = [first.copy() for _ in range(new_n)]
+                else:
+                    seq = slowed[key]
+                    slowed[key] = [
+                        (
+                            (1.0 - frac[j]) * seq[i0[j]] + frac[j] * seq[i1[j]]
+                        ).astype(np.float32)
+                        for j in range(new_n)
+                    ]
         for key in ("c_d_lip_lst", "c_lip_lst"):
             if key in slowed:
                 seq = slowed[key]

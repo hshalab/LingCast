@@ -163,6 +163,11 @@ export const zh = {
     liveportraitTitle: 'LivePortrait 参数',
     liveportraitDesc: '基础驱动视频的生成参数，保存在数字人业务数据中随任务下发。',
     liveportraitHint: '修改后需重新生成基础视频（任务中心里对该数字人重试）才会生效。',
+    lpPresets: '预设：',
+    lpPresetDefault: '常规 idle（默认）',
+    lpPresetBlinkIdle: '低频眨眼 idle（wink 慢放）',
+    lpPresetHint:
+      '「低频眨眼」用 wink.pkl 慢放约 2.6 倍（约 6 秒一次眨眼）、幅度减半并保留眼睛动画；生成结果放在默认推流场景下即自动进入闲置视频池。',
     lpGroupMotion: '动作 / 推理',
     lpGroupCrop: '人脸裁剪',
     lpGroupOutput: '输出 / 项目',
@@ -186,6 +191,7 @@ export const zh = {
     lpSmoothVariance: '时序平滑系数',
     lpFlag: {
       useHalfPrecision: '半精度推理 (FP16)',
+      freezeEyes: '冻结眨眼（基础视频不眨眼）',
       flagNormalizeLip: '动画前合拢嘴唇',
       flagRelativeMotion: '相对运动',
       flagStitching: '缝合贴回',
@@ -237,7 +243,7 @@ export const zh = {
     },
     lpFieldDesc: {
       drivingSpeed:
-        '驱动模板播放速度：1.0=原速，越小动作越慢（眨眼/摇头频率越低）；设为 <1 时眨眼会被完全冻结。',
+        '驱动模板播放速度：1.0=原速，越小动作越慢（眨眼/摇头频率越低）；设为 <1 时默认冻结眨眼（可关闭「冻结眨眼」保留眼睛动画）。',
       drivingMultiplier:
         '动作幅度缩放：1.0=原始幅度，0.7 更含蓄；设为 0 则几乎不动。',
       drivingOption:
@@ -279,6 +285,8 @@ export const zh = {
       baseSeconds: '基础视频时长，播报/直播兜底循环的长度。',
       outputWidth: '输出宽度（9:16 竖屏建议 720）。',
       outputHeight: '输出高度（9:16 竖屏建议 1280）。',
+      freezeEyes:
+        '慢放 .pkl 模板时把眼睛表情通道冻结到首帧，基础视频因此不眨眼；低频眨眼预设会关闭它，让 wink.pkl 的眨眼动作生效。',
       drivingTemplate:
         'LivePortrait 仓库 assets/examples/driving 下的模板文件名（输入框可下拉选择内置模板）。.pkl 决定眨眼/摇头等动作（d1 短循环、d5 更自然）；.mp4 驱动视频也可直接用，首次运行自动生成同名 .pkl。更多模板：把任意真人视频用官方 inference.py 跑一次即可生成，或搜索社区（HuggingFace/GitHub「LivePortrait driving template」）下载后放入该目录。',
     },
@@ -412,6 +420,16 @@ export const zh = {
     switchRandom: '随机切换',
     idleSwitchSeconds: '切换间隔（秒）',
     idleStreamHint: '定时：按顺序每 N 秒切换一个视频；随机：随机间隔（5-30 秒）随机切换。',
+    idleMotionTitle: 'Idle 动画',
+    idleMotionDesc: '闲置画面的过渡与微动效果：视频切换淡入淡出、呼吸与轻微上下漂移；保存后重启直播生效。',
+    idleFadeSeconds: '切换淡入淡出（秒）',
+    idleFadeHint: '0 = 硬切换；建议 0.3~0.5 秒。',
+    idleMotionEnabled: '过程化微动',
+    idleMotionEnabledHint: '呼吸缩放 + 轻微上下漂移，让静止画面更自然。',
+    idleBreatheAmplitude: '呼吸幅度',
+    idleBreathePeriod: '呼吸周期（秒）',
+    idleDriftAmplitude: '垂直漂移幅度',
+    idleMotionHint: '幅度以比例计（0.006 ≈ 0.6%）；数值过大反而显得机械，建议保持默认。',
     monitor: '画面监看',
     openMonitor: '开启画面监看',
     closeMonitor: '关闭画面监看',

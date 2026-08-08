@@ -755,6 +755,17 @@ func (h *AvatarHandler) UpdateLiveSettings(c *gin.Context) {
 	if settings.IdleSwitchSeconds < 3 || settings.IdleSwitchSeconds > 600 {
 		settings.IdleSwitchSeconds = models.DefaultLiveSettings().IdleSwitchSeconds
 	}
+	if settings.IdleFadeSeconds < 0 || settings.IdleFadeSeconds > 5 {
+		settings.IdleFadeSeconds = models.DefaultLiveSettings().IdleFadeSeconds
+	}
+	if settings.IdleMotion.BreatheAmplitude == 0 &&
+		settings.IdleMotion.BreathePeriod == 0 &&
+		settings.IdleMotion.DriftAmplitude == 0 {
+		settings.IdleMotion = models.DefaultLiveSettings().IdleMotion
+	}
+	settings.IdleMotion.BreatheAmplitude = clampFloat(settings.IdleMotion.BreatheAmplitude, 0, 0.1)
+	settings.IdleMotion.BreathePeriod = clampFloat(settings.IdleMotion.BreathePeriod, 0.5, 30)
+	settings.IdleMotion.DriftAmplitude = clampFloat(settings.IdleMotion.DriftAmplitude, 0, 0.05)
 
 	data, err := json.Marshal(settings)
 	if err != nil {
@@ -860,7 +871,28 @@ func ParseLiveSettings(raw string) models.LiveSettings {
 	if settings.IdleSwitchSeconds <= 0 {
 		settings.IdleSwitchSeconds = models.DefaultLiveSettings().IdleSwitchSeconds
 	}
+	if settings.IdleFadeSeconds < 0 || settings.IdleFadeSeconds > 5 {
+		settings.IdleFadeSeconds = models.DefaultLiveSettings().IdleFadeSeconds
+	}
+	if settings.IdleMotion.BreatheAmplitude == 0 &&
+		settings.IdleMotion.BreathePeriod == 0 &&
+		settings.IdleMotion.DriftAmplitude == 0 {
+		settings.IdleMotion = models.DefaultLiveSettings().IdleMotion
+	}
+	settings.IdleMotion.BreatheAmplitude = clampFloat(settings.IdleMotion.BreatheAmplitude, 0, 0.1)
+	settings.IdleMotion.BreathePeriod = clampFloat(settings.IdleMotion.BreathePeriod, 0.5, 30)
+	settings.IdleMotion.DriftAmplitude = clampFloat(settings.IdleMotion.DriftAmplitude, 0, 0.05)
 	return settings
+}
+
+func clampFloat(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 func newObjectKey(prefix, filename string) string {

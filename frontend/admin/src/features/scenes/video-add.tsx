@@ -22,6 +22,7 @@ import {
   type Scene,
 } from '@/lib/api'
 import {
+  BLINK_IDLE_SETTINGS,
   DEFAULT_LIVEPORTRAIT_SETTINGS,
   LivePortraitSettingsPanel,
 } from '@/components/liveportrait-settings'
@@ -331,6 +332,32 @@ function SceneVideoAddPageInner() {
                   </div>
 
                   {/* LivePortrait 参数：默认隐藏，开关展开 */}
+                  <div className='flex flex-wrap items-center gap-2 rounded-md border p-2.5'>
+                    <span className='text-sm font-medium'>{t('studio.lpPresets')}</span>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      disabled={generating}
+                      onClick={() =>
+                        setLpSettings({ ...DEFAULT_LIVEPORTRAIT_SETTINGS })
+                      }
+                    >
+                      {t('studio.lpPresetDefault')}
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      disabled={generating}
+                      onClick={() => setLpSettings({ ...BLINK_IDLE_SETTINGS })}
+                    >
+                      {t('studio.lpPresetBlinkIdle')}
+                    </Button>
+                    <p className='w-full text-xs text-muted-foreground'>
+                      {t('studio.lpPresetHint')}
+                    </p>
+                  </div>
                   <div className='flex items-center justify-between rounded-md border p-3'>
                     <div>
                       <p className='text-sm font-medium'>

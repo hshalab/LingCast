@@ -48,6 +48,13 @@ function showApiError(error: unknown, fallback: string) {
   toast.error(fallback)
 }
 
+const DEFAULT_IDLE_MOTION = {
+  enabled: true,
+  breatheAmplitude: 0.006,
+  breathePeriod: 4,
+  driftAmplitude: 0.0015,
+}
+
 export function LiveStudio({ avatarId }: { avatarId: string }) {
   const { t, i18n } = useTranslation()
   const id = Number(avatarId)
@@ -71,6 +78,8 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
     idleSceneId: 0,
     idleSwitchMode: 'interval',
     idleSwitchSeconds: 15,
+    idleFadeSeconds: 0.4,
+    idleMotion: DEFAULT_IDLE_MOTION,
   })
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
@@ -109,6 +118,8 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
             idleSceneId: s.idleSceneId ?? 0,
             idleSwitchMode: s.idleSwitchMode === 'random' ? 'random' : 'interval',
             idleSwitchSeconds: s.idleSwitchSeconds || 15,
+            idleFadeSeconds: s.idleFadeSeconds ?? 0.4,
+            idleMotion: s.idleMotion ?? DEFAULT_IDLE_MOTION,
           })
         }
       })
@@ -698,6 +709,134 @@ export function LiveStudio({ avatarId }: { avatarId: string }) {
                   {t('live.save')}
                 </Button>
                 <p className='text-xs text-muted-foreground'>{t('live.idleStreamHint')}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className='gap-1'>
+                <CardTitle>{t('live.idleMotionTitle')}</CardTitle>
+                <CardDescription>{t('live.idleMotionDesc')}</CardDescription>
+              </CardHeader>
+              <CardContent className='flex flex-col gap-3'>
+                <div className='flex flex-col gap-1.5'>
+                  <Label htmlFor='idle-fade-seconds'>
+                    {t('live.idleFadeSeconds')}
+                  </Label>
+                  <Input
+                    id='idle-fade-seconds'
+                    type='number'
+                    min={0}
+                    max={5}
+                    step={0.1}
+                    value={liveSettings.idleFadeSeconds ?? 0.4}
+                    onChange={(e) =>
+                      setLiveSettings((s) => ({
+                        ...s,
+                        idleFadeSeconds: Number(e.target.value),
+                      }))
+                    }
+                    disabled={settingsLoading}
+                  />
+                  <p className='text-xs text-muted-foreground'>
+                    {t('live.idleFadeHint')}
+                  </p>
+                </div>
+
+                <label className='flex cursor-pointer items-center justify-between gap-2 text-sm'>
+                  <span className='flex flex-col'>
+                    <span>{t('live.idleMotionEnabled')}</span>
+                    <span className='text-xs text-muted-foreground'>
+                      {t('live.idleMotionEnabledHint')}
+                    </span>
+                  </span>
+                  <Switch
+                    checked={Boolean(liveSettings.idleMotion?.enabled)}
+                    onCheckedChange={(v) =>
+                      setLiveSettings((s) => ({
+                        ...s,
+                        idleMotion: {
+                          ...(s.idleMotion ?? DEFAULT_IDLE_MOTION),
+                          enabled: v,
+                        },
+                      }))
+                    }
+                    disabled={settingsLoading}
+                  />
+                </label>
+
+                <div className='grid grid-cols-2 gap-3'>
+                  <div className='flex flex-col gap-1.5'>
+                    <Label>{t('live.idleBreatheAmplitude')}</Label>
+                    <Input
+                      type='number'
+                      min={0}
+                      max={0.05}
+                      step={0.001}
+                      value={liveSettings.idleMotion?.breatheAmplitude ?? 0.006}
+                      onChange={(e) =>
+                        setLiveSettings((s) => ({
+                          ...s,
+                          idleMotion: {
+                            ...(s.idleMotion ?? DEFAULT_IDLE_MOTION),
+                            breatheAmplitude: Number(e.target.value),
+                          },
+                        }))
+                      }
+                      disabled={settingsLoading}
+                    />
+                  </div>
+                  <div className='flex flex-col gap-1.5'>
+                    <Label>{t('live.idleBreathePeriod')}</Label>
+                    <Input
+                      type='number'
+                      min={0.5}
+                      max={30}
+                      step={0.5}
+                      value={liveSettings.idleMotion?.breathePeriod ?? 4}
+                      onChange={(e) =>
+                        setLiveSettings((s) => ({
+                          ...s,
+                          idleMotion: {
+                            ...(s.idleMotion ?? DEFAULT_IDLE_MOTION),
+                            breathePeriod: Number(e.target.value),
+                          },
+                        }))
+                      }
+                      disabled={settingsLoading}
+                    />
+                  </div>
+                  <div className='col-span-2 flex flex-col gap-1.5'>
+                    <Label>{t('live.idleDriftAmplitude')}</Label>
+                    <Input
+                      type='number'
+                      min={0}
+                      max={0.02}
+                      step={0.0005}
+                      value={liveSettings.idleMotion?.driftAmplitude ?? 0.0015}
+                      onChange={(e) =>
+                        setLiveSettings((s) => ({
+                          ...s,
+                          idleMotion: {
+                            ...(s.idleMotion ?? DEFAULT_IDLE_MOTION),
+                            driftAmplitude: Number(e.target.value),
+                          },
+                        }))
+                      }
+                      disabled={settingsLoading}
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  onClick={() => void saveSettings()}
+                  disabled={savingSettings || settingsLoading}
+                >
+                  {savingSettings ? <LoaderCircle className='size-4 animate-spin' /> : null}
+                  {t('live.save')}
+                </Button>
+                <p className='text-xs text-muted-foreground'>
+                  {t('live.idleMotionHint')}
+                </p>
               </CardContent>
             </Card>
           </div>

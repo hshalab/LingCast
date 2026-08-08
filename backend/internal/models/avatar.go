@@ -26,9 +26,21 @@ type LiveSettings struct {
 	SubtitlePosition string `json:"subtitlePosition"`
 	SubtitleBorder   int    `json:"subtitleBorder"`
 	SubtitleSize     int    `json:"subtitleSize"`
-	IdleSceneID uint `json:"idleSceneId,omitempty"`
+	IdleSceneID       uint   `json:"idleSceneId,omitempty"`
 	IdleSwitchMode    string `json:"idleSwitchMode,omitempty"`
 	IdleSwitchSeconds int    `json:"idleSwitchSeconds,omitempty"`
+	// Idle polish: clip crossfade seconds (0 = hard switch) and procedural
+	// micro-motion (breathing scale + vertical drift) applied by the worker.
+	IdleFadeSeconds float64          `json:"idleFadeSeconds,omitempty"`
+	IdleMotion      IdleMotionSettings `json:"idleMotion,omitempty"`
+}
+
+// IdleMotionSettings mirrors the worker's procedural idle micro-motion knobs.
+type IdleMotionSettings struct {
+	Enabled          bool    `json:"enabled"`
+	BreatheAmplitude float64 `json:"breatheAmplitude"`
+	BreathePeriod    float64 `json:"breathePeriod"`
+	DriftAmplitude   float64 `json:"driftAmplitude"`
 }
 
 func DefaultLiveSettings() LiveSettings {
@@ -39,6 +51,13 @@ func DefaultLiveSettings() LiveSettings {
 		SubtitleSize:      46,
 		IdleSwitchMode:    "interval",
 		IdleSwitchSeconds: 15,
+		IdleFadeSeconds:   0.4,
+		IdleMotion: IdleMotionSettings{
+			Enabled:          true,
+			BreatheAmplitude: 0.006,
+			BreathePeriod:    4.0,
+			DriftAmplitude:   0.0015,
+		},
 	}
 }
 
@@ -90,6 +109,9 @@ type LivePortraitSettings struct {
 	OutputWidth     int     `json:"outputWidth"`
 	OutputHeight    int     `json:"outputHeight"`
 	DrivingTemplate string  `json:"drivingTemplate"` // .pkl filename under LivePortrait assets/examples/driving
+	// FreezeEyes keeps slowed .pkl templates from blinking (base-video
+	// default). A blink-idle preset sets it false so wink.pkl animates eyes.
+	FreezeEyes bool `json:"freezeEyes"`
 }
 
 // DefaultLivePortraitSettings returns the current effective defaults (they
@@ -129,6 +151,7 @@ func DefaultLivePortraitSettings() LivePortraitSettings {
 		OutputWidth:     720,
 		OutputHeight:    1280,
 		DrivingTemplate: "d1.pkl",
+		FreezeEyes:      true,
 	}
 }
 

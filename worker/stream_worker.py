@@ -26,10 +26,17 @@ could. Idle silence uses the same 0.5s slice cadence.
 
 Face restoration (GFPGAN/CodeFormer) is intentionally OFF in the live pipeline:
 it is ~1s/frame on Apple Silicon CoreML and cannot sustain 24fps.
+
+Idle polish (2026-08): idle clips crossfade over ~0.4s instead of hard
+cutting, and each idle frame gets a procedural breathing scale + tiny
+vertical drift (pure CPU numpy/OpenCV, far inside the 24fps budget) so the
+standing pose never reads as a frozen loop. Tune per-avatar via
+liveSettings.idleFadeSeconds / idleMotion, or the IDLE_* env overrides.
 """
 
 import json
 import logging
+import math
 import os
 import queue as queue_mod
 import random
@@ -58,6 +65,21 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger("stream_worker")
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
 
 # Seconds of busy-wait at the end of each frame slot: time.sleep() alone
 # overshoots by the GIL switch interval (~5ms by default), which drops the
@@ -142,6 +164,8 @@ class LiveAvatarSession:
         idle_video_paths: list[Path] | None = None,
         idle_switch_mode: str = "interval",
         idle_switch_seconds: int = 15,
+        idle_fade_seconds: float | None = None,
+        idle_motion: dict | None = None,
     ):
         self.avatar_id = avatar_id
         self.stream_id = stream_id
@@ -157,6 +181,41 @@ class LiveAvatarSession:
         self.idle_video_paths = idle_video_paths or []
         self.idle_switch_mode = idle_switch_mode or "interval"
         self.idle_switch_seconds = max(1, int(idle_switch_seconds or 15))
+        # Idle polish: crossfade between clips + procedural micro-motion
+        # (breathing scale, tiny vertical drift). Per-avatar values arrive via
+        # liveSettings (idleFadeSeconds / idleMotion), else env, else defaults.
+        self.idle_fade_seconds = float(
+            idle_fade_seconds
+            if idle_fade_seconds is not None
+            else _env_float("IDLE_FADE_SECONDS", 0.4)
+        )
+        self._idle_fade_frames = int(round(self.idle_fade_seconds * self.fps))
+        idle_motion = idle_motion or {}
+        self._idle_motion_enabled = bool(
+            idle_motion.get("enabled", _env_bool("IDLE_MOTION_ENABLED", True))
+        )
+        self._breathe_amplitude = float(
+            idle_motion.get(
+                "breatheAmplitude", _env_float("IDLE_BREATHE_AMPLITUDE", 0.006)
+            )
+        )
+        self._breathe_period = float(
+            idle_motion.get("breathePeriod", _env_float("IDLE_BREATHE_PERIOD", 4.0))
+        )
+        self._drift_amplitude = float(
+            idle_motion.get(
+                "driftAmplitude", _env_float("IDLE_DRIFT_AMPLITUDE", 0.0015)
+            )
+        )
+        self._idle_motion_time = 0.0
+        # Crossfade state: 0 = no fade in progress. On a clip switch we keep
+        # rendering the outgoing clip while blending toward the new one over
+        # `_idle_fade_frames` frames (0 disables the fade = hard switch).
+        self._fade_from_idx = 0
+        self._fade_from_frame = 0
+        self._fade_to_idx = 0
+        self._fade_to_frame = 0
+        self._fade_remaining = 0
         self.pipe = None
         self.base_frames: list | None = None
         # Idle clips: every pre-processed driving video pushed while the
@@ -551,6 +610,9 @@ class LiveAvatarSession:
                         # continuing where the talking loop left off. Action
                         # sentences leave the idle pool untouched.
                         if not self._talk_is_action:
+                            # Cancel any in-flight idle crossfade: speech
+                            # resumes at the exact clip/frame that was talking.
+                            self._fade_remaining = 0
                             self._idle_clip_idx = self._talk_base_clip
                             self._idle_frame_idx = self._talk_base_end
                             self._idle_elapsed_frames = 0
@@ -608,20 +670,81 @@ class LiveAvatarSession:
     def _idle_frame(self):
         with self._idle_lock:
             clips = self.idle_clips or [self.base_frames]
-            clip = clips[self._idle_clip_idx % len(clips)]
-            frame = clip[self._idle_frame_idx % len(clip)]
-            self._idle_frame_idx += 1
-            self._idle_elapsed_frames += 1
-            if (
-                len(clips) > 1
-                and self._idle_elapsed_frames >= self._idle_switch_frames
-            ):
-                self._switch_idle_clip()
+            if self._fade_remaining > 0:
+                frame = self._idle_fade_frame(clips)
+            else:
+                clip = clips[self._idle_clip_idx % len(clips)]
+                frame = clip[self._idle_frame_idx % len(clip)]
+                self._idle_frame_idx += 1
+                self._idle_elapsed_frames += 1
+                if (
+                    len(clips) > 1
+                    and self._idle_elapsed_frames >= self._idle_switch_frames
+                ):
+                    self._switch_idle_clip()
+        return self._apply_idle_motion(frame)
+
+    def _idle_fade_frame(self, clips):
+        """One blended frame between the outgoing and incoming idle clips.
+        Caller must hold `self._idle_lock`."""
+        import numpy as np
+
+        from_clip = clips[self._fade_from_idx % len(clips)]
+        to_clip = clips[self._fade_to_idx % len(clips)]
+        f0 = from_clip[self._fade_from_frame % len(from_clip)]
+        f1 = to_clip[self._fade_to_frame % len(to_clip)]
+        total = max(1, self._idle_fade_frames)
+        alpha = 1.0 - self._fade_remaining / total
+        frame = (
+            f0.astype(np.float32) * (1.0 - alpha)
+            + f1.astype(np.float32) * alpha
+        ).astype(np.uint8)
+        self._fade_from_frame += 1
+        self._fade_to_frame += 1
+        self._fade_remaining -= 1
+        # Keep the mirrored index on the outgoing clip so a sentence that
+        # starts mid-fade lip-syncs from the clip actually on screen.
+        self._idle_frame_idx = self._fade_from_frame
+        self._idle_elapsed_frames += 1
+        if self._fade_remaining <= 0:
+            self._idle_clip_idx = self._fade_to_idx
+            self._idle_frame_idx = self._fade_to_frame
+            self._fade_remaining = 0
         return frame
+
+    def _apply_idle_motion(self, frame):
+        """Procedural micro-motion on an idle frame: a slow breathing scale
+        plus a tiny vertical drift, both sine-modulated on a continuous
+        per-session clock so the motion survives clip switches. Pure CPU
+        (numpy + OpenCV warp) and well under the 24fps frame budget."""
+        self._idle_motion_time += 1.0 / self.fps
+        if not self._idle_motion_enabled:
+            return frame
+        if self._breathe_amplitude <= 0.0 and self._drift_amplitude <= 0.0:
+            return frame
+        import cv2
+        import numpy as np
+
+        h, w = frame.shape[:2]
+        t = self._idle_motion_time
+        period = max(0.5, self._breathe_period)
+        scale = 1.0 + self._breathe_amplitude * math.sin(2.0 * math.pi * t / period)
+        dy = self._drift_amplitude * h * math.sin(
+            2.0 * math.pi * t / (period * 0.7) + 1.3
+        )
+        cx, cy = w / 2.0, h / 2.0
+        m = np.array(
+            [[scale, 0.0, cx * (1.0 - scale)], [0.0, scale, cy * (1.0 - scale) + dy]],
+            dtype=np.float32,
+        )
+        return cv2.warpAffine(
+            frame, m, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE
+        )
 
     def _switch_idle_clip(self) -> None:
         """Switch to the next (interval) or a random (random) idle clip and
         schedule the next switch: fixed N seconds, or a random 5-30s window.
+        The visual switch is a short crossfade when enabled, never a hard cut.
         Caller must hold `self._idle_lock`."""
         n = len(self.idle_clips)
         if n <= 1:
@@ -629,7 +752,7 @@ class LiveAvatarSession:
             return
         if self.idle_switch_mode == "random":
             candidates = [i for i in range(n) if i != self._idle_clip_idx] or [0]
-            self._idle_clip_idx = random.choice(candidates)
+            to_idx = random.choice(candidates)
             lo = max(5, self.idle_switch_seconds // 2)
             hi = max(30, self.idle_switch_seconds * 2)
             self._idle_switch_frames = max(
@@ -638,24 +761,41 @@ class LiveAvatarSession:
             logger.info(
                 "avatar %s idle -> random clip %d/%d (next switch in %.1fs)",
                 self.avatar_id,
-                self._idle_clip_idx + 1,
+                to_idx + 1,
                 n,
                 self._idle_switch_frames / self.fps,
             )
         else:
-            self._idle_clip_idx = (self._idle_clip_idx + 1) % n
+            to_idx = (self._idle_clip_idx + 1) % n
             self._idle_switch_frames = max(
                 1, int(self.idle_switch_seconds * self.fps)
             )
             logger.info(
                 "avatar %s idle -> clip %d/%d (switch every %ds)",
                 self.avatar_id,
-                self._idle_clip_idx + 1,
+                to_idx + 1,
                 n,
                 self.idle_switch_seconds,
             )
-        self._idle_frame_idx = 0
         self._idle_elapsed_frames = 0
+        if self._idle_fade_frames <= 0:
+            # Fade disabled: hard switch, same as the pre-crossfade behaviour.
+            self._idle_clip_idx = to_idx
+            self._idle_frame_idx = 0
+            self._fade_remaining = 0
+            return
+        self._fade_from_idx = self._idle_clip_idx
+        self._fade_from_frame = self._idle_frame_idx
+        self._fade_to_idx = to_idx
+        self._fade_to_frame = 0
+        self._fade_remaining = self._idle_fade_frames
+        logger.info(
+            "avatar %s idle crossfade clip %d -> %d (%.2fs)",
+            self.avatar_id,
+            self._fade_from_idx + 1,
+            to_idx + 1,
+            self._fade_remaining / self.fps,
+        )
 
     # ------------------------------------------------------------------ #
     # Queue management loop (lightweight; no pipe I/O)
@@ -982,6 +1122,7 @@ class LiveAvatarSession:
             self._idle_clip_idx = 0
             self._idle_frame_idx = 0
             self._idle_elapsed_frames = 0
+            self._fade_remaining = 0
             self._idle_switch_frames = max(1, int(self.idle_switch_seconds * self.fps))
         logger.info(
             "avatar %s idle pool switched to %d video(s): %s",
@@ -1105,6 +1246,7 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> 
                 stream_id,
             )
             return
+        live_settings = payload.get("liveSettings") or {}
         base_video_path = work_dir / "base_video.mp4"
         storage.download(idle_keys[0], base_video_path)
         idle_paths = []
@@ -1124,12 +1266,14 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> 
             work_dir=work_dir,
             fps=fps,
             queue_key=f"live_queue:{avatar_id}",
-            subtitle_settings=payload.get("liveSettings") or {},
+            subtitle_settings=live_settings,
             storage=storage,
             idle_video_paths=idle_paths,
             idle_switch_mode=payload.get("idleSwitchMode") or "interval",
             idle_switch_seconds=int(payload.get("idleSwitchSeconds") or 15),
             idle_video_keys=idle_keys,
+            idle_fade_seconds=live_settings.get("idleFadeSeconds"),
+            idle_motion=live_settings.get("idleMotion") or {},
         )
         session.setup()
         # Stash what is needed to auto-rebuild the session if the pipe stalls.

@@ -66,6 +66,15 @@ export type LiveSettings = {
   idleSceneId?: number
   idleSwitchMode?: 'interval' | 'random'
   idleSwitchSeconds?: number
+  idleFadeSeconds?: number
+  idleMotion?: IdleMotionSettings
+}
+
+export type IdleMotionSettings = {
+  enabled: boolean
+  breatheAmplitude: number
+  breathePeriod: number
+  driftAmplitude: number
 }
 
 export type LivePortraitSettings = {
@@ -101,6 +110,7 @@ export type LivePortraitSettings = {
   outputWidth: number
   outputHeight: number
   drivingTemplate: string
+  freezeEyes: boolean
 }
 
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed'

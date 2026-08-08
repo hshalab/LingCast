@@ -173,6 +173,11 @@ export const en = {
       'Base driving-video generation settings, stored as avatar business data and shipped with the task.',
     liveportraitHint:
       'Changes take effect after regenerating the base video (retry this avatar in the task center).',
+    lpPresets: 'Presets:',
+    lpPresetDefault: 'Normal idle (default)',
+    lpPresetBlinkIdle: 'Low-frequency blink idle (slow wink)',
+    lpPresetHint:
+      '“Low-frequency blink” plays wink.pkl ~2.6× slower (a blink about every 6s), halves the amplitude and keeps the eye animation. Generate it into the default stream scene and it automatically joins the idle video pool.',
     lpGroupMotion: 'Motion / inference',
     lpGroupCrop: 'Face crop',
     lpGroupOutput: 'Output / project',
@@ -196,6 +201,7 @@ export const en = {
     lpSmoothVariance: 'Smoothing variance',
     lpFlag: {
       useHalfPrecision: 'Half precision (FP16)',
+      freezeEyes: 'Freeze blinking (base video never blinks)',
       flagNormalizeLip: 'Close lips before animation',
       flagRelativeMotion: 'Relative motion',
       flagStitching: 'Stitching',
@@ -290,6 +296,8 @@ export const en = {
       baseSeconds: 'Base video length; the fallback loop used by broadcast/live.',
       outputWidth: 'Output width (720 recommended for 9:16 portrait).',
       outputHeight: 'Output height (1280 recommended for 9:16 portrait).',
+      freezeEyes:
+        'When slowing a .pkl template, freeze the eye expression channels to the first frame so the base video never blinks. The low-frequency blink preset turns this off so wink.pkl animates the eyes.',
       drivingTemplate:
         'A template filename under LivePortrait assets/examples/driving (dropdown shows built-in ones). .pkl defines blinks/head shakes (d1 = short loop, d5 = more natural); .mp4 driving clips work too and generate a same-name .pkl on first run. For more, generate one from any real-person video via the official inference.py, or search HuggingFace/GitHub for “LivePortrait driving template” and drop the file into that directory.',
     },
@@ -431,6 +439,18 @@ export const en = {
     idleSwitchSeconds: 'Switch interval (seconds)',
     idleStreamHint:
       'Fixed: cycles videos every N seconds in order. Random: random interval (5-30s) and random next video.',
+    idleMotionTitle: 'Idle animation',
+    idleMotionDesc:
+      'Transitions and micro-motion for the idle picture: clip crossfade, breathing scale and a slight vertical drift; saving restarts the live.',
+    idleFadeSeconds: 'Clip crossfade (seconds)',
+    idleFadeHint: '0 = hard cut; 0.3–0.5s is recommended.',
+    idleMotionEnabled: 'Procedural micro-motion',
+    idleMotionEnabledHint: 'Breathing scale + slight vertical drift, so a still pose never looks frozen.',
+    idleBreatheAmplitude: 'Breathing amplitude',
+    idleBreathePeriod: 'Breathing period (seconds)',
+    idleDriftAmplitude: 'Vertical drift amplitude',
+    idleMotionHint:
+      'Amplitudes are ratios (0.006 ≈ 0.6%); values too large look mechanical — keep the defaults.',
     monitor: 'Monitor',
     openMonitor: 'Open monitor',
     closeMonitor: 'Close monitor',

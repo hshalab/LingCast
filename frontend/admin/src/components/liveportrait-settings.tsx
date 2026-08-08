@@ -46,6 +46,18 @@ export const DEFAULT_LIVEPORTRAIT_SETTINGS: LivePortraitSettings = {
   outputWidth: 720,
   outputHeight: 1280,
   drivingTemplate: 'd1.pkl',
+  freezeEyes: true,
+}
+
+// 低频眨眼 idle 预设：wink.pkl 慢放 2.63 倍（约 6s 一次眨眼），幅度减半，
+// 眼睛不禁用。生成结果放在 idle 场景里即自动进入闲置推流池。
+export const BLINK_IDLE_SETTINGS: LivePortraitSettings = {
+  ...DEFAULT_LIVEPORTRAIT_SETTINGS,
+  drivingTemplate: 'wink.pkl',
+  drivingSpeed: 0.38,
+  drivingMultiplier: 0.5,
+  freezeEyes: false,
+  baseSeconds: 12,
 }
 
 type Props = {
@@ -102,6 +114,7 @@ const OUTPUT_NUMBERS: FieldSpec[] = [
 
 const MOTION_FLAGS: FieldSpec[] = [
   { key: 'useHalfPrecision', labelKey: 'studio.lpFlag.useHalfPrecision' },
+  { key: 'freezeEyes', labelKey: 'studio.lpFlag.freezeEyes' },
   { key: 'flagNormalizeLip', labelKey: 'studio.lpFlag.flagNormalizeLip' },
   { key: 'flagRelativeMotion', labelKey: 'studio.lpFlag.flagRelativeMotion' },
   { key: 'flagStitching', labelKey: 'studio.lpFlag.flagStitching' },
