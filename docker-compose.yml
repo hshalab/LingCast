@@ -297,121 +297,121 @@ services:
 
   # 离线任务处理器 (Offline Task Worker)
   # 负责处理创建数字人时的基础视频生成（LivePortrait）等耗时离线任务
-  worker:
-    build:
-      context: ./worker
-      dockerfile: Dockerfile.rocm
-    restart: unless-stopped
-    ipc: host
-    security_opt:
-      - "seccomp:unconfined"
-    devices:
-      - "/dev/kfd:/dev/kfd" # AMD ROCm 显卡设备映射
-      - "/dev/dri:/dev/dri" # AMD ROCm 显卡设备映射
-    group_add:
-      - video
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-    environment:
-      # Redis 相关配置
-      REDIS_ADDR: redis:6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      REDIS_DB: "0"
+  # worker:
+  #   build:
+  #     context: ./worker
+  #     dockerfile: Dockerfile.rocm
+  #   restart: unless-stopped
+  #   ipc: host
+  #   security_opt:
+  #     - "seccomp:unconfined"
+  #   devices:
+  #     - "/dev/kfd:/dev/kfd" # AMD ROCm 显卡设备映射
+  #     - "/dev/dri:/dev/dri" # AMD ROCm 显卡设备映射
+  #   group_add:
+  #     - video
+  #   ulimits:
+  #     nofile:
+  #       soft: 65536
+  #       hard: 65536
+  #   environment:
+  #     # Redis 相关配置
+  #     REDIS_ADDR: redis:6379
+  #     REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+  #     REDIS_DB: "0"
       
-      # 队列与通信相关的 Key
-      TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks} # 离线渲染任务队列
-      LIVE_CONTROL_QUEUE_KEY: ${LIVE_CONTROL_QUEUE_KEY:-talking_avatar:live_control} # 直播控制消息队列
-      AVATAR_INIT_QUEUE_KEY: ${AVATAR_INIT_QUEUE_KEY:-talking_avatar:avatar_init} # 数字人初始化任务队列
-      API_BASE_URL: http://api-scheduler:8083 # Scheduler 微服务地址，用于向后端上报任务进度
+  #     # 队列与通信相关的 Key
+  #     TASK_QUEUE_KEY: ${TASK_QUEUE_KEY:-talking_avatar:tasks} # 离线渲染任务队列
+  #     LIVE_CONTROL_QUEUE_KEY: ${LIVE_CONTROL_QUEUE_KEY:-talking_avatar:live_control} # 直播控制消息队列
+  #     AVATAR_INIT_QUEUE_KEY: ${AVATAR_INIT_QUEUE_KEY:-talking_avatar:avatar_init} # 数字人初始化任务队列
+  #     API_BASE_URL: http://api-scheduler:8083 # Scheduler 微服务地址，用于向后端上报任务进度
       
-      # S3 对象存储配置 (RustFS)
-      S3_ENDPOINT: http://rustfs:9000
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
-      S3_BUCKET: ${S3_BUCKET:-talking-avatar}
-      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
+  #     # S3 对象存储配置 (RustFS)
+  #     S3_ENDPOINT: http://rustfs:9000
+  #     S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+  #     S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+  #     S3_BUCKET: ${S3_BUCKET:-talking-avatar}
+  #     S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
       
-      # AI 模型参数与行为控制
-      AI_MODE: real # real: 跑真实模型推理 / mock: 模拟模式（跳过推理直接返回结果，用于开发前端）
-      LIVEPORTRAIT_HALF: "false" # LivePortrait 是否启用半精度 (FP16) 推理
-      LIVEPORTRAIT_DRIVING_SPEED: "0.2" # LivePortrait 基础视频的耸肩/动作驱动速度
-      LIVEPORTRAIT_DRIVING_MULTIPLIER: "0.7" # LivePortrait 表情动作的幅度倍率
-      WAV2LIP_PROVIDER: rocm # Wav2Lip ONNX 推理后端（rocm, cuda, coreml, cpu 等）
-      # FACE_ENHANCER: "gfpgan" # 人脸高清化与羽化增强（gfpgan / codeformer / off），直播为了降延迟建议关闭
-      ENHANCER_MAX_FPS: "6" # 人脸增强器的最大处理帧率（可选限流）
-      TTS_ENGINE: edge # 语音合成引擎（edge: 微软Edge-TTS / gpt-sovits: 本地克隆音色）
-    volumes:
-      - ./worker/models:/app/models
-      - ./worker/external:/app/external
-      - ./worker/fonts:/app/fonts
-      - ${HOME}/.cache/torch:/root/.cache/torch
-      - ${HOME}/.cache/onnxruntime:/root/.cache/onnxruntime
-      - ${HOME}/.cache/miopen:/root/.cache/miopen
-    depends_on:
-      api-scheduler:
-        condition: service_started
-      redis:
-        condition: service_healthy
-      rustfs:
-        condition: service_healthy
+  #     # AI 模型参数与行为控制
+  #     AI_MODE: real # real: 跑真实模型推理 / mock: 模拟模式（跳过推理直接返回结果，用于开发前端）
+  #     LIVEPORTRAIT_HALF: "false" # LivePortrait 是否启用半精度 (FP16) 推理
+  #     LIVEPORTRAIT_DRIVING_SPEED: "0.2" # LivePortrait 基础视频的耸肩/动作驱动速度
+  #     LIVEPORTRAIT_DRIVING_MULTIPLIER: "0.7" # LivePortrait 表情动作的幅度倍率
+  #     WAV2LIP_PROVIDER: rocm # Wav2Lip ONNX 推理后端（rocm, cuda, coreml, cpu 等）
+  #     # FACE_ENHANCER: "gfpgan" # 人脸高清化与羽化增强（gfpgan / codeformer / off），直播为了降延迟建议关闭
+  #     ENHANCER_MAX_FPS: "6" # 人脸增强器的最大处理帧率（可选限流）
+  #     TTS_ENGINE: edge # 语音合成引擎（edge: 微软Edge-TTS / gpt-sovits: 本地克隆音色）
+  #   volumes:
+  #     - ./worker/models:/app/models
+  #     - ./worker/external:/app/external
+  #     - ./worker/fonts:/app/fonts
+  #     - ${HOME}/.cache/torch:/root/.cache/torch
+  #     - ${HOME}/.cache/onnxruntime:/root/.cache/onnxruntime
+  #     - ${HOME}/.cache/miopen:/root/.cache/miopen
+  #   depends_on:
+  #     api-scheduler:
+  #       condition: service_started
+  #     redis:
+  #       condition: service_healthy
+  #     rustfs:
+  #       condition: service_healthy
 
-  stream-worker:
-    build:
-      context: ./worker
-      dockerfile: Dockerfile.rocm
-    command: python -u stream_worker.py
-    restart: unless-stopped
-    ipc: host
-    security_opt:
-      - "seccomp:unconfined"
-    devices:
-      - "/dev/kfd:/dev/kfd"
-      - "/dev/dri:/dev/dri"
-    group_add:
-      - video
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-    environment:
-      REDIS_ADDR: redis:6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      REDIS_DB: "0"
-      LIVE_CONTROL_QUEUE_KEY: ${LIVE_CONTROL_QUEUE_KEY:-talking_avatar:live_control}
-      API_BASE_URL: http://api-scheduler:8083
-      S3_ENDPOINT: http://rustfs:9000
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
-      S3_BUCKET: ${S3_BUCKET:-talking-avatar}
-      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
-      RTMP_BASE_URL: ${RTMP_BASE_URL:-rtmp://srs:1935/live}
-      STREAM_RTMP_URL: rtmp://srs:1935/live/{stream_id}
-      AI_MODE: real
-      LIVEPORTRAIT_HALF: "false"
-      LIVEPORTRAIT_DRIVING_SPEED: "0.2"
-      LIVEPORTRAIT_DRIVING_MULTIPLIER: "0.7"
-      WAV2LIP_PROVIDER: rocm
-      # FACE_ENHANCER: "gfpgan"
-      ENHANCER_MAX_FPS: "6"
-      TTS_ENGINE: edge
-    volumes:
-      - ./worker/models:/app/models
-      - ./worker/external:/app/external
-      - ./worker/fonts:/app/fonts
-      - ${HOME}/.cache/torch:/root/.cache/torch
-      - ${HOME}/.cache/onnxruntime:/root/.cache/onnxruntime
-      - ${HOME}/.cache/miopen:/root/.cache/miopen
-    depends_on:
-      api-scheduler:
-        condition: service_started
-      redis:
-        condition: service_healthy
-      rustfs:
-        condition: service_healthy
-      srs:
-        condition: service_started
+  # stream-worker:
+  #   build:
+  #     context: ./worker
+  #     dockerfile: Dockerfile.rocm
+  #   command: python -u stream_worker.py
+  #   restart: unless-stopped
+  #   ipc: host
+  #   security_opt:
+  #     - "seccomp:unconfined"
+  #   devices:
+  #     - "/dev/kfd:/dev/kfd"
+  #     - "/dev/dri:/dev/dri"
+  #   group_add:
+  #     - video
+  #   ulimits:
+  #     nofile:
+  #       soft: 65536
+  #       hard: 65536
+  #   environment:
+  #     REDIS_ADDR: redis:6379
+  #     REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+  #     REDIS_DB: "0"
+  #     LIVE_CONTROL_QUEUE_KEY: ${LIVE_CONTROL_QUEUE_KEY:-talking_avatar:live_control}
+  #     API_BASE_URL: http://api-scheduler:8083
+  #     S3_ENDPOINT: http://rustfs:9000
+  #     S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+  #     S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+  #     S3_BUCKET: ${S3_BUCKET:-talking-avatar}
+  #     S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:8080/media}
+  #     RTMP_BASE_URL: ${RTMP_BASE_URL:-rtmp://srs:1935/live}
+  #     STREAM_RTMP_URL: rtmp://srs:1935/live/{stream_id}
+  #     AI_MODE: real
+  #     LIVEPORTRAIT_HALF: "false"
+  #     LIVEPORTRAIT_DRIVING_SPEED: "0.2"
+  #     LIVEPORTRAIT_DRIVING_MULTIPLIER: "0.7"
+  #     WAV2LIP_PROVIDER: rocm
+  #     # FACE_ENHANCER: "gfpgan"
+  #     ENHANCER_MAX_FPS: "6"
+  #     TTS_ENGINE: edge
+  #   volumes:
+  #     - ./worker/models:/app/models
+  #     - ./worker/external:/app/external
+  #     - ./worker/fonts:/app/fonts
+  #     - ${HOME}/.cache/torch:/root/.cache/torch
+  #     - ${HOME}/.cache/onnxruntime:/root/.cache/onnxruntime
+  #     - ${HOME}/.cache/miopen:/root/.cache/miopen
+  #   depends_on:
+  #     api-scheduler:
+  #       condition: service_started
+  #     redis:
+  #       condition: service_healthy
+  #     rustfs:
+  #       condition: service_healthy
+  #     srs:
+  #       condition: service_started
 
 
   # Real-time streaming gateway (SRS v5). The host-native AI worker pushes
