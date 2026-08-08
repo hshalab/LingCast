@@ -29,6 +29,7 @@ type AvatarHandler struct {
 	s3                 *storage.Client
 	q                  *queue.Queue
 	avatarInitQueueKey string
+	videoGenServiceURL string
 }
 
 type avatarResponse struct {
@@ -42,13 +43,18 @@ type avatarResponse struct {
 	Status            string                `json:"status"`
 	InitQueuePos      *int                  `json:"initQueuePos,omitempty"`
 	LiveSettings      models.LiveSettings   `json:"liveSettings"`
-	LivePortraitSettings models.LivePortraitSettings `json:"livePortraitSettings"`
 	DefaultVideoS3URL *string               `json:"defaultVideoS3Url,omitempty"`
 	CreatedAt         time.Time             `json:"createdAt"`
 }
 
-func NewAvatarHandler(db *gorm.DB, s3 *storage.Client, q *queue.Queue, avatarInitQueueKey string) *AvatarHandler {
-	return &AvatarHandler{db: db, s3: s3, q: q, avatarInitQueueKey: avatarInitQueueKey}
+func NewAvatarHandler(db *gorm.DB, s3 *storage.Client, q *queue.Queue, avatarInitQueueKey, videoGenServiceURL string) *AvatarHandler {
+	return &AvatarHandler{
+		db:                 db,
+		s3:                 s3,
+		q:                  q,
+		avatarInitQueueKey: avatarInitQueueKey,
+		videoGenServiceURL: videoGenServiceURL,
+	}
 }
 
 // personaFromForm reads the persona profile from multipart form fields and
@@ -164,9 +170,8 @@ func ParseLivePortraitSettings(raw string) models.LivePortraitSettings {
 	return normalizeLivePortraitSettings(s)
 }
 
-// marshalLivePortraitSettings serializes normalized settings for storage and
-// for the avatar_init queue payload (identity must be stable so Skip/Delete
-// can LRem the exact queued string).
+// marshalLivePortraitSettings serializes normalized settings for storage on a
+// scene video's generation metadata.
 func marshalLivePortraitSettings(s models.LivePortraitSettings) (string, error) {
 	b, err := json.Marshal(normalizeLivePortraitSettings(s))
 	if err != nil {
@@ -175,14 +180,10 @@ func marshalLivePortraitSettings(s models.LivePortraitSettings) (string, error) 
 	return string(b), nil
 }
 
-// avatarInitPayload builds the exact queue payload for an avatar, embedding
-// the stored (already normalized) liveportrait settings.
+// avatarInitPayload builds the exact queue payload for an avatar (legacy
+// avatar-init flow, kept for backward compatibility).
 func (h *AvatarHandler) avatarInitPayload(a models.Avatar) queue.AvatarInitPayload {
-	p := queue.AvatarInitPayload{AvatarID: a.ID, ImageS3Key: a.ImageS3Key}
-	if raw := strings.TrimSpace(a.LivePortraitSettings); raw != "" {
-		p.LivePortraitSettings = json.RawMessage(raw)
-	}
-	return p
+	return queue.AvatarInitPayload{AvatarID: a.ID, ImageS3Key: a.ImageS3Key}
 }
 
 // defaultSceneVideo returns the avatar's default scene + its default video
@@ -203,10 +204,10 @@ func (h *AvatarHandler) defaultSceneVideo(avatarID uint) (*models.SceneVideo, er
 
 // Create handles POST /api/avatars. It accepts multipart/form-data with
 // `name`, `image` (required) and `voice_id` (optional) fields, uploads the
-// image to S3, stores the record as `initializing` and enqueues the
-// LivePortrait base-video pre-processing job.
+// image to S3, creates the avatar plus its default scene, and marks it
+// `initializing` until at least one scene video exists (upload or generated).
 // Create handles POST /api/avatars.
-// @Summary  Create an avatar (multipart: name + image + optional persona fields)
+// @Summary  Create an avatar (multipart: name + image + optional persona fields; creates default scene)
 // @Tags     avatars
 // @Accept   multipart/form-data
 // @Produce  json
@@ -239,12 +240,6 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	lpRaw := strings.TrimSpace(c.PostForm("liveportrait_settings"))
-	lpData, err := marshalLivePortraitSettings(ParseLivePortraitSettings(lpRaw))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
 
 	imageHeader, err := c.FormFile("image")
 	if err != nil {
@@ -265,17 +260,23 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 		Persona:    persona,
 		VoiceID:    voiceID,
 		Status:     models.AvatarStatusInitializing,
-		LivePortraitSettings: lpData,
 	}
 	if err := h.db.Create(&avatar).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.avatar.save_failed", err.Error())})
 		return
 	}
 
-	// Notify the worker to pre-process the image into a silent base driving
-	// video (LivePortrait) and write the S3 key back via the webhook below.
-	if err := h.q.PushTo(c.Request.Context(), h.avatarInitQueueKey, h.avatarInitPayload(avatar)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.avatar.init_enqueue_failed", err.Error())})
+	// Videos are no longer generated at creation time: create the default
+	// scene so the avatar is ready to accept uploaded / generated videos, and
+	// the status flips to ready once the first video lands.
+	defaultScene := models.Scene{
+		AvatarID:   avatar.ID,
+		Title:      "默认场景",
+		CoverS3Key: imageKey,
+		IsDefault:  true,
+	}
+	if err := h.db.Create(&defaultScene).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -311,11 +312,10 @@ func (h *AvatarHandler) Get(c *gin.Context) {
 }
 
 type updateAvatarRequest struct {
-	Name                  string                          `json:"name"`
-	Category              string                          `json:"category"`
-	VoiceID               string                          `json:"voiceId"`
-	Persona               models.PersonaProfile           `json:"persona"`
-	LivePortraitSettings  *models.LivePortraitSettings    `json:"liveportraitSettings"`
+	Name     string                `json:"name"`
+	Category string                `json:"category"`
+	VoiceID  string                `json:"voiceId"`
+	Persona  models.PersonaProfile `json:"persona"`
 	// Legacy flat fields: old admin clients sent the persona profile at the
 	// top level; keep accepting them so an outdated build cannot wipe the
 	// stored persona with an empty object.
@@ -393,14 +393,6 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 	}
 	if b, err := json.Marshal(persona); err == nil {
 		avatar.Persona = string(b)
-	}
-	if req.LivePortraitSettings != nil {
-		lpData, err := marshalLivePortraitSettings(*req.LivePortraitSettings)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		avatar.LivePortraitSettings = lpData
 	}
 	if err := h.db.Save(&avatar).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -589,6 +581,7 @@ func (h *AvatarHandler) Delete(c *gin.Context) {
 			if err := h.db.Where("scene_id = ?", s.ID).Find(&vids).Error; err == nil {
 				for _, v := range vids {
 					_ = h.s3.Delete(ctx, v.S3Key)
+					_ = h.s3.Delete(ctx, v.SourceImageS3Key)
 				}
 			}
 			_ = h.db.Where("scene_id = ?", s.ID).Delete(&models.SceneVideo{}).Error
@@ -799,19 +792,17 @@ func (h *AvatarHandler) uploadFormFile(c *gin.Context, header *multipart.FileHea
 
 func toAvatarResponse(db *gorm.DB, a models.Avatar, s3 *storage.Client) avatarResponse {
 	liveSettings := ParseLiveSettings(a.LiveSettings)
-	livePortraitSettings := ParseLivePortraitSettings(a.LivePortraitSettings)
 	resp := avatarResponse{
-		ID:                   a.ID,
-		Name:                 a.Name,
-		ImageS3Key:           a.ImageS3Key,
-		ImageS3URL:           s3.PublicURL(a.ImageS3Key),
-		Category:             NormalizeCategory(a.Category),
-		Persona:              ParsePersona(a.Persona),
-		VoiceID:              a.VoiceID,
-		Status:               a.Status,
-		LiveSettings:         liveSettings,
-		LivePortraitSettings: livePortraitSettings,
-		CreatedAt:            a.CreatedAt,
+		ID:           a.ID,
+		Name:         a.Name,
+		ImageS3Key:   a.ImageS3Key,
+		ImageS3URL:   s3.PublicURL(a.ImageS3Key),
+		Category:     NormalizeCategory(a.Category),
+		Persona:      ParsePersona(a.Persona),
+		VoiceID:      a.VoiceID,
+		Status:       a.Status,
+		LiveSettings: liveSettings,
+		CreatedAt:    a.CreatedAt,
 	}
 	var scene models.Scene
 	if err := db.Where("avatar_id = ? AND is_default = ?", a.ID, true).

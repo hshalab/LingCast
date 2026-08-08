@@ -76,6 +76,12 @@ func Connect(dsn, ragURL string) (*gorm.DB, error) {
 	if err := migrateScenes(db); err != nil {
 		return nil, err
 	}
+	if err := migrateLivePortraitSettings(db); err != nil {
+		return nil, err
+	}
+	if err := migrateAvatarReadySemantics(db); err != nil {
+		return nil, err
+	}
 	if err := migrateGlobalKnowledge(db); err != nil {
 		return nil, err
 	}
@@ -416,4 +422,80 @@ func migrateScenes(db *gorm.DB) error {
 		}
 		return nil
 	})
+}
+
+// migrateLivePortraitSettings moves the per-avatar liveportrait_settings JSON
+// onto the avatar's default scene video (generation metadata), then drops the
+// avatar column: generation parameters now belong to scene videos, not avatars.
+func migrateLivePortraitSettings(db *gorm.DB) error {
+	// The column was removed from the Avatar struct, so GORM's
+	// Migrator().HasColumn(&models.Avatar{}, ...) can no longer see it; detect
+	// via information_schema instead.
+	var count int64
+	if err := db.Raw(
+		`SELECT COUNT(*) FROM information_schema.columns
+		 WHERE table_schema = DATABASE() AND table_name = 'avatars'
+		   AND column_name = 'liveportrait_settings'`,
+	).Scan(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		return nil // already migrated (or fresh schema)
+	}
+	type row struct {
+		ID                   uint
+		LivePortraitSettings string
+	}
+	var rows []row
+	if err := db.Raw(
+		`SELECT id, liveportrait_settings AS live_portrait_settings FROM avatars
+		 WHERE liveportrait_settings IS NOT NULL AND liveportrait_settings <> '' AND liveportrait_settings <> '{}'`,
+	).Scan(&rows).Error; err != nil {
+		return err
+	}
+	log.Printf("migrating %d avatar(s) liveportrait_settings -> scene videos", len(rows))
+	for _, r := range rows {
+		var scene models.Scene
+		if err := db.Where("avatar_id = ? AND is_default = ?", r.ID, true).
+			First(&scene).Error; err != nil {
+			log.Printf("avatar %d has no default scene; liveportrait settings skipped", r.ID)
+			continue // no default scene -> nowhere to attach the settings
+		}
+		if err := db.Model(&models.SceneVideo{}).
+			Where("scene_id = ? AND is_default = ?", scene.ID, true).
+			Updates(map[string]any{
+				"source":              models.SceneVideoSourceLivePortrait,
+				"generation_settings": r.LivePortraitSettings,
+			}).Error; err != nil {
+			return err
+		}
+		log.Printf("avatar %d: liveportrait settings -> default scene video", r.ID)
+	}
+	return db.Exec("ALTER TABLE avatars DROP COLUMN liveportrait_settings").Error
+}
+
+// migrateAvatarReadySemantics recomputes every avatar status under the new
+// rule: ready iff the avatar has at least one scene video in ready state.
+func migrateAvatarReadySemantics(db *gorm.DB) error {
+	var avatars []models.Avatar
+	if err := db.Select("id").Find(&avatars).Error; err != nil {
+		return err
+	}
+	for _, a := range avatars {
+		var count int64
+		if err := db.Model(&models.SceneVideo{}).
+			Where("avatar_id = ? AND status = ?", a.ID, models.SceneVideoStatusReady).
+			Count(&count).Error; err != nil {
+			return err
+		}
+		status := models.AvatarStatusInitializing
+		if count > 0 {
+			status = models.AvatarStatusReady
+		}
+		if err := db.Model(&models.Avatar{}).Where("id = ?", a.ID).
+			Update("status", status).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }

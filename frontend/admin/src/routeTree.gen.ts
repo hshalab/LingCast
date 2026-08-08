@@ -9,47 +9,48 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as ClerkRouteRouteImport } from './routes/clerk/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
-import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as AuthenticatedTaskCenterRouteImport } from './routes/_authenticated/task-center'
-import { Route as AuthenticatedScenesRouteImport } from './routes/_authenticated/scenes'
-import { Route as AuthenticatedLiveStudioRouteImport } from './routes/_authenticated/live-studio'
-import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
-import { Route as AuthenticatedChatLogsRouteImport } from './routes/_authenticated/chat-logs'
-import { Route as AuthenticatedBroadcastRouteImport } from './routes/_authenticated/broadcast'
-import { Route as AuthenticatedAvatarStudioRouteImport } from './routes/_authenticated/avatar-studio'
-import { Route as AuthenticatedAvatarLibraryRouteImport } from './routes/_authenticated/avatar-library'
-import { Route as errors503RouteImport } from './routes/(errors)/503'
-import { Route as errors500RouteImport } from './routes/(errors)/500'
-import { Route as errors404RouteImport } from './routes/(errors)/404'
-import { Route as errors403RouteImport } from './routes/(errors)/403'
-import { Route as errors401RouteImport } from './routes/(errors)/401'
-import { Route as authSignUpRouteImport } from './routes/(auth)/sign-up'
-import { Route as authSignIn2RouteImport } from './routes/(auth)/sign-in-2'
-import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
-import { Route as authOtpRouteImport } from './routes/(auth)/otp'
+import { Route as ClerkRouteRouteImport } from './routes/clerk/route'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
-import { Route as ClerkAuthenticatedRouteRouteImport } from './routes/clerk/_authenticated/route'
-import { Route as ClerkauthRouteRouteImport } from './routes/clerk/(auth)/route'
+import { Route as authOtpRouteImport } from './routes/(auth)/otp'
+import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
+import { Route as authSignIn2RouteImport } from './routes/(auth)/sign-in-2'
+import { Route as authSignUpRouteImport } from './routes/(auth)/sign-up'
+import { Route as errors401RouteImport } from './routes/(errors)/401'
+import { Route as errors403RouteImport } from './routes/(errors)/403'
+import { Route as errors404RouteImport } from './routes/(errors)/404'
+import { Route as errors500RouteImport } from './routes/(errors)/500'
+import { Route as errors503RouteImport } from './routes/(errors)/503'
+import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedAvatarLibraryRouteImport } from './routes/_authenticated/avatar-library'
+import { Route as AuthenticatedAvatarStudioRouteImport } from './routes/_authenticated/avatar-studio'
+import { Route as AuthenticatedBroadcastRouteImport } from './routes/_authenticated/broadcast'
+import { Route as AuthenticatedChatLogsRouteImport } from './routes/_authenticated/chat-logs'
+import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
+import { Route as AuthenticatedLiveStudioRouteImport } from './routes/_authenticated/live-studio'
+import { Route as AuthenticatedScenesRouteRouteImport } from './routes/_authenticated/scenes/route'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
-import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
-import { Route as AuthenticatedTasksIndexRouteImport } from './routes/_authenticated/tasks/index'
-import { Route as AuthenticatedKnowledgeIndexRouteImport } from './routes/_authenticated/knowledge/index'
-import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
-import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
+import { Route as AuthenticatedTaskCenterRouteImport } from './routes/_authenticated/task-center'
+import { Route as ClerkauthRouteRouteImport } from './routes/clerk/(auth)/route'
+import { Route as ClerkAuthenticatedRouteRouteImport } from './routes/clerk/_authenticated/route'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
-import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/clerk/_authenticated/user-management'
-import { Route as ClerkauthSignUpRouteImport } from './routes/clerk/(auth)/sign-up'
-import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-in'
-import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
-import { Route as AuthenticatedKnowledgeIdRouteImport } from './routes/_authenticated/knowledge.$id'
+import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
+import { Route as AuthenticatedKnowledgeIndexRouteImport } from './routes/_authenticated/knowledge/index'
+import { Route as AuthenticatedKnowledgeIdRouteImport } from './routes/_authenticated/knowledge.$id'
+import { Route as AuthenticatedScenesIndexRouteImport } from './routes/_authenticated/scenes/index'
+import { Route as AuthenticatedScenesAddVideoRouteImport } from './routes/_authenticated/scenes/add-video'
+import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
+import { Route as AuthenticatedTasksIndexRouteImport } from './routes/_authenticated/tasks/index'
+import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
+import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-in'
+import { Route as ClerkauthSignUpRouteImport } from './routes/clerk/(auth)/sign-up'
+import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/clerk/_authenticated/user-management'
 
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClerkRouteRoute = ClerkRouteRouteImport.update({
@@ -57,100 +58,9 @@ const ClerkRouteRoute = ClerkRouteRouteImport.update({
   path: '/clerk',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedTaskCenterRoute = AuthenticatedTaskCenterRouteImport.update({
-  id: '/task-center',
-  path: '/task-center',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedScenesRoute = AuthenticatedScenesRouteImport.update({
-  id: '/scenes',
-  path: '/scenes',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedLiveStudioRoute = AuthenticatedLiveStudioRouteImport.update({
-  id: '/live-studio',
-  path: '/live-studio',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedKnowledgeRoute = AuthenticatedKnowledgeRouteImport.update({
-  id: '/knowledge',
-  path: '/knowledge',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedChatLogsRoute = AuthenticatedChatLogsRouteImport.update({
-  id: '/chat-logs',
-  path: '/chat-logs',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedBroadcastRoute = AuthenticatedBroadcastRouteImport.update({
-  id: '/broadcast',
-  path: '/broadcast',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedAvatarStudioRoute =
-  AuthenticatedAvatarStudioRouteImport.update({
-    id: '/avatar-studio',
-    path: '/avatar-studio',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedAvatarLibraryRoute =
-  AuthenticatedAvatarLibraryRouteImport.update({
-    id: '/avatar-library',
-    path: '/avatar-library',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const errors503Route = errors503RouteImport.update({
-  id: '/(errors)/503',
-  path: '/503',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const errors500Route = errors500RouteImport.update({
-  id: '/(errors)/500',
-  path: '/500',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const errors404Route = errors404RouteImport.update({
-  id: '/(errors)/404',
-  path: '/404',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const errors403Route = errors403RouteImport.update({
-  id: '/(errors)/403',
-  path: '/403',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const errors401Route = errors401RouteImport.update({
-  id: '/(errors)/401',
-  path: '/401',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const authSignUpRoute = authSignUpRouteImport.update({
-  id: '/(auth)/sign-up',
-  path: '/sign-up',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const authSignIn2Route = authSignIn2RouteImport.update({
-  id: '/(auth)/sign-in-2',
-  path: '/sign-in-2',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const authSignInRoute = authSignInRouteImport.update({
-  id: '/(auth)/sign-in',
-  path: '/sign-in',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const authOtpRoute = authOtpRouteImport.update({
-  id: '/(auth)/otp',
-  path: '/otp',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const authForgotPasswordRoute = authForgotPasswordRouteImport.update({
@@ -158,35 +68,128 @@ const authForgotPasswordRoute = authForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ClerkAuthenticatedRouteRoute = ClerkAuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
-  getParentRoute: () => ClerkRouteRoute,
+const authOtpRoute = authOtpRouteImport.update({
+  id: '/(auth)/otp',
+  path: '/otp',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const ClerkauthRouteRoute = ClerkauthRouteRouteImport.update({
-  id: '/(auth)',
-  getParentRoute: () => ClerkRouteRoute,
+const authSignInRoute = authSignInRouteImport.update({
+  id: '/(auth)/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
 } as any)
+const authSignIn2Route = authSignIn2RouteImport.update({
+  id: '/(auth)/sign-in-2',
+  path: '/sign-in-2',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const authSignUpRoute = authSignUpRouteImport.update({
+  id: '/(auth)/sign-up',
+  path: '/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const errors401Route = errors401RouteImport.update({
+  id: '/(errors)/401',
+  path: '/401',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const errors403Route = errors403RouteImport.update({
+  id: '/(errors)/403',
+  path: '/403',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const errors404Route = errors404RouteImport.update({
+  id: '/(errors)/404',
+  path: '/404',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const errors500Route = errors500RouteImport.update({
+  id: '/(errors)/500',
+  path: '/500',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const errors503Route = errors503RouteImport.update({
+  id: '/(errors)/503',
+  path: '/503',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAvatarLibraryRoute =
+  AuthenticatedAvatarLibraryRouteImport.update({
+    id: '/avatar-library',
+    path: '/avatar-library',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAvatarStudioRoute =
+  AuthenticatedAvatarStudioRouteImport.update({
+    id: '/avatar-studio',
+    path: '/avatar-studio',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedBroadcastRoute = AuthenticatedBroadcastRouteImport.update({
+  id: '/broadcast',
+  path: '/broadcast',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedChatLogsRoute = AuthenticatedChatLogsRouteImport.update({
+  id: '/chat-logs',
+  path: '/chat-logs',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedKnowledgeRoute = AuthenticatedKnowledgeRouteImport.update({
+  id: '/knowledge',
+  path: '/knowledge',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedLiveStudioRoute = AuthenticatedLiveStudioRouteImport.update({
+  id: '/live-studio',
+  path: '/live-studio',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedScenesRouteRoute =
+  AuthenticatedScenesRouteRouteImport.update({
+    id: '/scenes',
+    path: '/scenes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsRouteRoute =
   AuthenticatedSettingsRouteRouteImport.update({
     id: '/settings',
     path: '/settings',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
-  id: '/users/',
-  path: '/users/',
+const AuthenticatedTaskCenterRoute = AuthenticatedTaskCenterRouteImport.update({
+  id: '/task-center',
+  path: '/task-center',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedTasksIndexRoute = AuthenticatedTasksIndexRouteImport.update({
-  id: '/tasks/',
-  path: '/tasks/',
+const ClerkauthRouteRoute = ClerkauthRouteRouteImport.update({
+  id: '/(auth)',
+  getParentRoute: () => ClerkRouteRoute,
+} as any)
+const ClerkAuthenticatedRouteRoute = ClerkAuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => ClerkRouteRoute,
+} as any)
+const AuthenticatedAppsIndexRoute = AuthenticatedAppsIndexRouteImport.update({
+  id: '/apps/',
+  path: '/apps/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedKnowledgeIndexRoute =
-  AuthenticatedKnowledgeIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => AuthenticatedKnowledgeRoute,
+const AuthenticatedChatsIndexRoute = AuthenticatedChatsIndexRouteImport.update({
+  id: '/chats/',
+  path: '/chats/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedErrorsErrorRoute =
+  AuthenticatedErrorsErrorRouteImport.update({
+    id: '/errors/$error',
+    path: '/errors/$error',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedHelpCenterIndexRoute =
   AuthenticatedHelpCenterIndexRouteImport.update({
@@ -194,37 +197,11 @@ const AuthenticatedHelpCenterIndexRoute =
     path: '/help-center/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedChatsIndexRoute = AuthenticatedChatsIndexRouteImport.update({
-  id: '/chats/',
-  path: '/chats/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedAppsIndexRoute = AuthenticatedAppsIndexRouteImport.update({
-  id: '/apps/',
-  path: '/apps/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const ClerkAuthenticatedUserManagementRoute =
-  ClerkAuthenticatedUserManagementRouteImport.update({
-    id: '/user-management',
-    path: '/user-management',
-    getParentRoute: () => ClerkAuthenticatedRouteRoute,
-  } as any)
-const ClerkauthSignUpRoute = ClerkauthSignUpRouteImport.update({
-  id: '/sign-up',
-  path: '/sign-up',
-  getParentRoute: () => ClerkauthRouteRoute,
-} as any)
-const ClerkauthSignInRoute = ClerkauthSignInRouteImport.update({
-  id: '/sign-in',
-  path: '/sign-in',
-  getParentRoute: () => ClerkauthRouteRoute,
-} as any)
-const AuthenticatedSettingsAccountRoute =
-  AuthenticatedSettingsAccountRouteImport.update({
-    id: '/account',
-    path: '/account',
-    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+const AuthenticatedKnowledgeIndexRoute =
+  AuthenticatedKnowledgeIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedKnowledgeRoute,
   } as any)
 const AuthenticatedKnowledgeIdRoute =
   AuthenticatedKnowledgeIdRouteImport.update({
@@ -232,17 +209,56 @@ const AuthenticatedKnowledgeIdRoute =
     path: '/$id',
     getParentRoute: () => AuthenticatedKnowledgeRoute,
   } as any)
-const AuthenticatedErrorsErrorRoute =
-  AuthenticatedErrorsErrorRouteImport.update({
-    id: '/errors/$error',
-    path: '/errors/$error',
-    getParentRoute: () => AuthenticatedRouteRoute,
+const AuthenticatedScenesIndexRoute =
+  AuthenticatedScenesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedScenesRouteRoute,
+  } as any)
+const AuthenticatedScenesAddVideoRoute =
+  AuthenticatedScenesAddVideoRouteImport.update({
+    id: '/add-video',
+    path: '/add-video',
+    getParentRoute: () => AuthenticatedScenesRouteRoute,
+  } as any)
+const AuthenticatedSettingsAccountRoute =
+  AuthenticatedSettingsAccountRouteImport.update({
+    id: '/account',
+    path: '/account',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+const AuthenticatedTasksIndexRoute = AuthenticatedTasksIndexRouteImport.update({
+  id: '/tasks/',
+  path: '/tasks/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
+  id: '/users/',
+  path: '/users/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ClerkauthSignInRoute = ClerkauthSignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => ClerkauthRouteRoute,
+} as any)
+const ClerkauthSignUpRoute = ClerkauthSignUpRouteImport.update({
+  id: '/sign-up',
+  path: '/sign-up',
+  getParentRoute: () => ClerkauthRouteRoute,
+} as any)
+const ClerkAuthenticatedUserManagementRoute =
+  ClerkAuthenticatedUserManagementRouteImport.update({
+    id: '/user-management',
+    path: '/user-management',
+    getParentRoute: () => ClerkAuthenticatedRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
-  '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
+  '/clerk': typeof ClerkauthRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/scenes': typeof AuthenticatedScenesRouteRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
   '/otp': typeof authOtpRoute
@@ -260,10 +276,10 @@ export interface FileRoutesByFullPath {
   '/chat-logs': typeof AuthenticatedChatLogsRoute
   '/knowledge': typeof AuthenticatedKnowledgeRouteWithChildren
   '/live-studio': typeof AuthenticatedLiveStudioRoute
-  '/scenes': typeof AuthenticatedScenesRoute
   '/task-center': typeof AuthenticatedTaskCenterRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/knowledge/$id': typeof AuthenticatedKnowledgeIdRoute
+  '/scenes/add-video': typeof AuthenticatedScenesAddVideoRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
@@ -272,11 +288,12 @@ export interface FileRoutesByFullPath {
   '/chats/': typeof AuthenticatedChatsIndexRoute
   '/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/knowledge/': typeof AuthenticatedKnowledgeIndexRoute
+  '/scenes/': typeof AuthenticatedScenesIndexRoute
   '/tasks/': typeof AuthenticatedTasksIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
 }
 export interface FileRoutesByTo {
-  '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
+  '/clerk': typeof ClerkauthRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
@@ -294,11 +311,11 @@ export interface FileRoutesByTo {
   '/broadcast': typeof AuthenticatedBroadcastRoute
   '/chat-logs': typeof AuthenticatedChatLogsRoute
   '/live-studio': typeof AuthenticatedLiveStudioRoute
-  '/scenes': typeof AuthenticatedScenesRoute
   '/task-center': typeof AuthenticatedTaskCenterRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/knowledge/$id': typeof AuthenticatedKnowledgeIdRoute
+  '/scenes/add-video': typeof AuthenticatedScenesAddVideoRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
@@ -307,6 +324,7 @@ export interface FileRoutesByTo {
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/knowledge': typeof AuthenticatedKnowledgeIndexRoute
+  '/scenes': typeof AuthenticatedScenesIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
 }
@@ -315,6 +333,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/clerk': typeof ClerkRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/_authenticated/scenes': typeof AuthenticatedScenesRouteRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/clerk/(auth)': typeof ClerkauthRouteRouteWithChildren
   '/clerk/_authenticated': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -334,11 +353,11 @@ export interface FileRoutesById {
   '/_authenticated/chat-logs': typeof AuthenticatedChatLogsRoute
   '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRouteWithChildren
   '/_authenticated/live-studio': typeof AuthenticatedLiveStudioRoute
-  '/_authenticated/scenes': typeof AuthenticatedScenesRoute
   '/_authenticated/task-center': typeof AuthenticatedTaskCenterRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/knowledge/$id': typeof AuthenticatedKnowledgeIdRoute
+  '/_authenticated/scenes/add-video': typeof AuthenticatedScenesAddVideoRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/clerk/(auth)/sign-in': typeof ClerkauthSignInRoute
   '/clerk/(auth)/sign-up': typeof ClerkauthSignUpRoute
@@ -347,6 +366,7 @@ export interface FileRoutesById {
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/knowledge/': typeof AuthenticatedKnowledgeIndexRoute
+  '/_authenticated/scenes/': typeof AuthenticatedScenesIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
 }
@@ -356,6 +376,7 @@ export interface FileRouteTypes {
     | '/'
     | '/clerk'
     | '/login'
+    | '/scenes'
     | '/settings'
     | '/forgot-password'
     | '/otp'
@@ -373,10 +394,10 @@ export interface FileRouteTypes {
     | '/chat-logs'
     | '/knowledge'
     | '/live-studio'
-    | '/scenes'
     | '/task-center'
     | '/errors/$error'
     | '/knowledge/$id'
+    | '/scenes/add-video'
     | '/settings/account'
     | '/clerk/sign-in'
     | '/clerk/sign-up'
@@ -385,6 +406,7 @@ export interface FileRouteTypes {
     | '/chats/'
     | '/help-center/'
     | '/knowledge/'
+    | '/scenes/'
     | '/tasks/'
     | '/users/'
   fileRoutesByTo: FileRoutesByTo
@@ -407,11 +429,11 @@ export interface FileRouteTypes {
     | '/broadcast'
     | '/chat-logs'
     | '/live-studio'
-    | '/scenes'
     | '/task-center'
     | '/'
     | '/errors/$error'
     | '/knowledge/$id'
+    | '/scenes/add-video'
     | '/settings/account'
     | '/clerk/sign-in'
     | '/clerk/sign-up'
@@ -420,6 +442,7 @@ export interface FileRouteTypes {
     | '/chats'
     | '/help-center'
     | '/knowledge'
+    | '/scenes'
     | '/tasks'
     | '/users'
   id:
@@ -427,6 +450,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/clerk'
     | '/login'
+    | '/_authenticated/scenes'
     | '/_authenticated/settings'
     | '/clerk/(auth)'
     | '/clerk/_authenticated'
@@ -446,11 +470,11 @@ export interface FileRouteTypes {
     | '/_authenticated/chat-logs'
     | '/_authenticated/knowledge'
     | '/_authenticated/live-studio'
-    | '/_authenticated/scenes'
     | '/_authenticated/task-center'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
     | '/_authenticated/knowledge/$id'
+    | '/_authenticated/scenes/add-video'
     | '/_authenticated/settings/account'
     | '/clerk/(auth)/sign-in'
     | '/clerk/(auth)/sign-up'
@@ -459,6 +483,7 @@ export interface FileRouteTypes {
     | '/_authenticated/chats/'
     | '/_authenticated/help-center/'
     | '/_authenticated/knowledge/'
+    | '/_authenticated/scenes/'
     | '/_authenticated/tasks/'
     | '/_authenticated/users/'
   fileRoutesById: FileRoutesById
@@ -481,11 +506,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clerk': {
@@ -495,137 +520,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClerkRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/': {
-      id: '/_authenticated/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/task-center': {
-      id: '/_authenticated/task-center'
-      path: '/task-center'
-      fullPath: '/task-center'
-      preLoaderRoute: typeof AuthenticatedTaskCenterRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/scenes': {
-      id: '/_authenticated/scenes'
-      path: '/scenes'
-      fullPath: '/scenes'
-      preLoaderRoute: typeof AuthenticatedScenesRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/live-studio': {
-      id: '/_authenticated/live-studio'
-      path: '/live-studio'
-      fullPath: '/live-studio'
-      preLoaderRoute: typeof AuthenticatedLiveStudioRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/knowledge': {
-      id: '/_authenticated/knowledge'
-      path: '/knowledge'
-      fullPath: '/knowledge'
-      preLoaderRoute: typeof AuthenticatedKnowledgeRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/chat-logs': {
-      id: '/_authenticated/chat-logs'
-      path: '/chat-logs'
-      fullPath: '/chat-logs'
-      preLoaderRoute: typeof AuthenticatedChatLogsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/broadcast': {
-      id: '/_authenticated/broadcast'
-      path: '/broadcast'
-      fullPath: '/broadcast'
-      preLoaderRoute: typeof AuthenticatedBroadcastRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/avatar-studio': {
-      id: '/_authenticated/avatar-studio'
-      path: '/avatar-studio'
-      fullPath: '/avatar-studio'
-      preLoaderRoute: typeof AuthenticatedAvatarStudioRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/avatar-library': {
-      id: '/_authenticated/avatar-library'
-      path: '/avatar-library'
-      fullPath: '/avatar-library'
-      preLoaderRoute: typeof AuthenticatedAvatarLibraryRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/(errors)/503': {
-      id: '/(errors)/503'
-      path: '/503'
-      fullPath: '/503'
-      preLoaderRoute: typeof errors503RouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(errors)/500': {
-      id: '/(errors)/500'
-      path: '/500'
-      fullPath: '/500'
-      preLoaderRoute: typeof errors500RouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(errors)/404': {
-      id: '/(errors)/404'
-      path: '/404'
-      fullPath: '/404'
-      preLoaderRoute: typeof errors404RouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(errors)/403': {
-      id: '/(errors)/403'
-      path: '/403'
-      fullPath: '/403'
-      preLoaderRoute: typeof errors403RouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(errors)/401': {
-      id: '/(errors)/401'
-      path: '/401'
-      fullPath: '/401'
-      preLoaderRoute: typeof errors401RouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(auth)/sign-up': {
-      id: '/(auth)/sign-up'
-      path: '/sign-up'
-      fullPath: '/sign-up'
-      preLoaderRoute: typeof authSignUpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(auth)/sign-in-2': {
-      id: '/(auth)/sign-in-2'
-      path: '/sign-in-2'
-      fullPath: '/sign-in-2'
-      preLoaderRoute: typeof authSignIn2RouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(auth)/sign-in': {
-      id: '/(auth)/sign-in'
-      path: '/sign-in'
-      fullPath: '/sign-in'
-      preLoaderRoute: typeof authSignInRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(auth)/otp': {
-      id: '/(auth)/otp'
-      path: '/otp'
-      fullPath: '/otp'
-      preLoaderRoute: typeof authOtpRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/(auth)/forgot-password': {
@@ -635,19 +534,124 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/clerk/_authenticated': {
-      id: '/clerk/_authenticated'
-      path: ''
-      fullPath: '/clerk'
-      preLoaderRoute: typeof ClerkAuthenticatedRouteRouteImport
-      parentRoute: typeof ClerkRouteRoute
+    '/(auth)/otp': {
+      id: '/(auth)/otp'
+      path: '/otp'
+      fullPath: '/otp'
+      preLoaderRoute: typeof authOtpRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/clerk/(auth)': {
-      id: '/clerk/(auth)'
-      path: ''
-      fullPath: '/clerk'
-      preLoaderRoute: typeof ClerkauthRouteRouteImport
-      parentRoute: typeof ClerkRouteRoute
+    '/(auth)/sign-in': {
+      id: '/(auth)/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof authSignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(auth)/sign-in-2': {
+      id: '/(auth)/sign-in-2'
+      path: '/sign-in-2'
+      fullPath: '/sign-in-2'
+      preLoaderRoute: typeof authSignIn2RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(auth)/sign-up': {
+      id: '/(auth)/sign-up'
+      path: '/sign-up'
+      fullPath: '/sign-up'
+      preLoaderRoute: typeof authSignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(errors)/401': {
+      id: '/(errors)/401'
+      path: '/401'
+      fullPath: '/401'
+      preLoaderRoute: typeof errors401RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(errors)/403': {
+      id: '/(errors)/403'
+      path: '/403'
+      fullPath: '/403'
+      preLoaderRoute: typeof errors403RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(errors)/404': {
+      id: '/(errors)/404'
+      path: '/404'
+      fullPath: '/404'
+      preLoaderRoute: typeof errors404RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(errors)/500': {
+      id: '/(errors)/500'
+      path: '/500'
+      fullPath: '/500'
+      preLoaderRoute: typeof errors500RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(errors)/503': {
+      id: '/(errors)/503'
+      path: '/503'
+      fullPath: '/503'
+      preLoaderRoute: typeof errors503RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/': {
+      id: '/_authenticated/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/avatar-library': {
+      id: '/_authenticated/avatar-library'
+      path: '/avatar-library'
+      fullPath: '/avatar-library'
+      preLoaderRoute: typeof AuthenticatedAvatarLibraryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/avatar-studio': {
+      id: '/_authenticated/avatar-studio'
+      path: '/avatar-studio'
+      fullPath: '/avatar-studio'
+      preLoaderRoute: typeof AuthenticatedAvatarStudioRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/broadcast': {
+      id: '/_authenticated/broadcast'
+      path: '/broadcast'
+      fullPath: '/broadcast'
+      preLoaderRoute: typeof AuthenticatedBroadcastRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/chat-logs': {
+      id: '/_authenticated/chat-logs'
+      path: '/chat-logs'
+      fullPath: '/chat-logs'
+      preLoaderRoute: typeof AuthenticatedChatLogsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/knowledge': {
+      id: '/_authenticated/knowledge'
+      path: '/knowledge'
+      fullPath: '/knowledge'
+      preLoaderRoute: typeof AuthenticatedKnowledgeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/live-studio': {
+      id: '/_authenticated/live-studio'
+      path: '/live-studio'
+      fullPath: '/live-studio'
+      preLoaderRoute: typeof AuthenticatedLiveStudioRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/scenes': {
+      id: '/_authenticated/scenes'
+      path: '/scenes'
+      fullPath: '/scenes'
+      preLoaderRoute: typeof AuthenticatedScenesRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
@@ -656,32 +660,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/users/': {
-      id: '/_authenticated/users/'
-      path: '/users'
-      fullPath: '/users/'
-      preLoaderRoute: typeof AuthenticatedUsersIndexRouteImport
+    '/_authenticated/task-center': {
+      id: '/_authenticated/task-center'
+      path: '/task-center'
+      fullPath: '/task-center'
+      preLoaderRoute: typeof AuthenticatedTaskCenterRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/tasks/': {
-      id: '/_authenticated/tasks/'
-      path: '/tasks'
-      fullPath: '/tasks/'
-      preLoaderRoute: typeof AuthenticatedTasksIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+    '/clerk/(auth)': {
+      id: '/clerk/(auth)'
+      path: ''
+      fullPath: '/clerk'
+      preLoaderRoute: typeof ClerkauthRouteRouteImport
+      parentRoute: typeof ClerkRouteRoute
     }
-    '/_authenticated/knowledge/': {
-      id: '/_authenticated/knowledge/'
-      path: '/'
-      fullPath: '/knowledge/'
-      preLoaderRoute: typeof AuthenticatedKnowledgeIndexRouteImport
-      parentRoute: typeof AuthenticatedKnowledgeRoute
+    '/clerk/_authenticated': {
+      id: '/clerk/_authenticated'
+      path: ''
+      fullPath: '/clerk'
+      preLoaderRoute: typeof ClerkAuthenticatedRouteRouteImport
+      parentRoute: typeof ClerkRouteRoute
     }
-    '/_authenticated/help-center/': {
-      id: '/_authenticated/help-center/'
-      path: '/help-center'
-      fullPath: '/help-center/'
-      preLoaderRoute: typeof AuthenticatedHelpCenterIndexRouteImport
+    '/_authenticated/apps/': {
+      id: '/_authenticated/apps/'
+      path: '/apps'
+      fullPath: '/apps/'
+      preLoaderRoute: typeof AuthenticatedAppsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/chats/': {
@@ -691,40 +695,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChatsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/apps/': {
-      id: '/_authenticated/apps/'
-      path: '/apps'
-      fullPath: '/apps/'
-      preLoaderRoute: typeof AuthenticatedAppsIndexRouteImport
+    '/_authenticated/errors/$error': {
+      id: '/_authenticated/errors/$error'
+      path: '/errors/$error'
+      fullPath: '/errors/$error'
+      preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/clerk/_authenticated/user-management': {
-      id: '/clerk/_authenticated/user-management'
-      path: '/user-management'
-      fullPath: '/clerk/user-management'
-      preLoaderRoute: typeof ClerkAuthenticatedUserManagementRouteImport
-      parentRoute: typeof ClerkAuthenticatedRouteRoute
+    '/_authenticated/help-center/': {
+      id: '/_authenticated/help-center/'
+      path: '/help-center'
+      fullPath: '/help-center/'
+      preLoaderRoute: typeof AuthenticatedHelpCenterIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/clerk/(auth)/sign-up': {
-      id: '/clerk/(auth)/sign-up'
-      path: '/sign-up'
-      fullPath: '/clerk/sign-up'
-      preLoaderRoute: typeof ClerkauthSignUpRouteImport
-      parentRoute: typeof ClerkauthRouteRoute
-    }
-    '/clerk/(auth)/sign-in': {
-      id: '/clerk/(auth)/sign-in'
-      path: '/sign-in'
-      fullPath: '/clerk/sign-in'
-      preLoaderRoute: typeof ClerkauthSignInRouteImport
-      parentRoute: typeof ClerkauthRouteRoute
-    }
-    '/_authenticated/settings/account': {
-      id: '/_authenticated/settings/account'
-      path: '/account'
-      fullPath: '/settings/account'
-      preLoaderRoute: typeof AuthenticatedSettingsAccountRouteImport
-      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    '/_authenticated/knowledge/': {
+      id: '/_authenticated/knowledge/'
+      path: '/'
+      fullPath: '/knowledge/'
+      preLoaderRoute: typeof AuthenticatedKnowledgeIndexRouteImport
+      parentRoute: typeof AuthenticatedKnowledgeRoute
     }
     '/_authenticated/knowledge/$id': {
       id: '/_authenticated/knowledge/$id'
@@ -733,15 +723,80 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedKnowledgeIdRouteImport
       parentRoute: typeof AuthenticatedKnowledgeRoute
     }
-    '/_authenticated/errors/$error': {
-      id: '/_authenticated/errors/$error'
-      path: '/errors/$error'
-      fullPath: '/errors/$error'
-      preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
+    '/_authenticated/scenes/': {
+      id: '/_authenticated/scenes/'
+      path: '/'
+      fullPath: '/scenes/'
+      preLoaderRoute: typeof AuthenticatedScenesIndexRouteImport
+      parentRoute: typeof AuthenticatedScenesRouteRoute
+    }
+    '/_authenticated/scenes/add-video': {
+      id: '/_authenticated/scenes/add-video'
+      path: '/add-video'
+      fullPath: '/scenes/add-video'
+      preLoaderRoute: typeof AuthenticatedScenesAddVideoRouteImport
+      parentRoute: typeof AuthenticatedScenesRouteRoute
+    }
+    '/_authenticated/settings/account': {
+      id: '/_authenticated/settings/account'
+      path: '/account'
+      fullPath: '/settings/account'
+      preLoaderRoute: typeof AuthenticatedSettingsAccountRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
+    '/_authenticated/tasks/': {
+      id: '/_authenticated/tasks/'
+      path: '/tasks'
+      fullPath: '/tasks/'
+      preLoaderRoute: typeof AuthenticatedTasksIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/users/': {
+      id: '/_authenticated/users/'
+      path: '/users'
+      fullPath: '/users/'
+      preLoaderRoute: typeof AuthenticatedUsersIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/clerk/(auth)/sign-in': {
+      id: '/clerk/(auth)/sign-in'
+      path: '/sign-in'
+      fullPath: '/clerk/sign-in'
+      preLoaderRoute: typeof ClerkauthSignInRouteImport
+      parentRoute: typeof ClerkauthRouteRoute
+    }
+    '/clerk/(auth)/sign-up': {
+      id: '/clerk/(auth)/sign-up'
+      path: '/sign-up'
+      fullPath: '/clerk/sign-up'
+      preLoaderRoute: typeof ClerkauthSignUpRouteImport
+      parentRoute: typeof ClerkauthRouteRoute
+    }
+    '/clerk/_authenticated/user-management': {
+      id: '/clerk/_authenticated/user-management'
+      path: '/user-management'
+      fullPath: '/clerk/user-management'
+      preLoaderRoute: typeof ClerkAuthenticatedUserManagementRouteImport
+      parentRoute: typeof ClerkAuthenticatedRouteRoute
     }
   }
 }
+
+interface AuthenticatedScenesRouteRouteChildren {
+  AuthenticatedScenesAddVideoRoute: typeof AuthenticatedScenesAddVideoRoute
+  AuthenticatedScenesIndexRoute: typeof AuthenticatedScenesIndexRoute
+}
+
+const AuthenticatedScenesRouteRouteChildren: AuthenticatedScenesRouteRouteChildren =
+  {
+    AuthenticatedScenesAddVideoRoute: AuthenticatedScenesAddVideoRoute,
+    AuthenticatedScenesIndexRoute: AuthenticatedScenesIndexRoute,
+  }
+
+const AuthenticatedScenesRouteRouteWithChildren =
+  AuthenticatedScenesRouteRoute._addFileChildren(
+    AuthenticatedScenesRouteRouteChildren,
+  )
 
 interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
@@ -774,6 +829,7 @@ const AuthenticatedKnowledgeRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedScenesRouteRoute: typeof AuthenticatedScenesRouteRouteWithChildren
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedAvatarLibraryRoute: typeof AuthenticatedAvatarLibraryRoute
   AuthenticatedAvatarStudioRoute: typeof AuthenticatedAvatarStudioRoute
@@ -781,7 +837,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChatLogsRoute: typeof AuthenticatedChatLogsRoute
   AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRouteWithChildren
   AuthenticatedLiveStudioRoute: typeof AuthenticatedLiveStudioRoute
-  AuthenticatedScenesRoute: typeof AuthenticatedScenesRoute
   AuthenticatedTaskCenterRoute: typeof AuthenticatedTaskCenterRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -793,6 +848,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedScenesRouteRoute: AuthenticatedScenesRouteRouteWithChildren,
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedAvatarLibraryRoute: AuthenticatedAvatarLibraryRoute,
   AuthenticatedAvatarStudioRoute: AuthenticatedAvatarStudioRoute,
@@ -800,7 +856,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChatLogsRoute: AuthenticatedChatLogsRoute,
   AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRouteWithChildren,
   AuthenticatedLiveStudioRoute: AuthenticatedLiveStudioRoute,
-  AuthenticatedScenesRoute: AuthenticatedScenesRoute,
   AuthenticatedTaskCenterRoute: AuthenticatedTaskCenterRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,

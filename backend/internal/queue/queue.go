@@ -42,9 +42,20 @@ type LiveControlPayload struct {
 // AvatarInitPayload tells the worker to pre-process a newly created avatar
 // into a silent base driving video (LivePortrait) and store it in S3.
 type AvatarInitPayload struct {
-	AvatarID             uint            `json:"avatarId"`
-	ImageS3Key           string          `json:"imageS3Key"`
-	LivePortraitSettings json.RawMessage `json:"livePortraitSettings,omitempty"`
+	AvatarID   uint   `json:"avatarId"`
+	ImageS3Key string `json:"imageS3Key"`
+}
+
+// VideoGenPayload tells the worker to generate a scene video through a
+// provider (liveportrait now; comfyui etc. later) and write the result back
+// to the scene_videos row via the completion webhook.
+type VideoGenPayload struct {
+	SceneVideoID     uint            `json:"sceneVideoId"`
+	AvatarID         uint            `json:"avatarId"`
+	SceneID          uint            `json:"sceneId"`
+	SourceImageS3Key string          `json:"sourceImageS3Key"`
+	Provider         string          `json:"provider"`
+	Settings         json.RawMessage `json:"settings,omitempty"`
 }
 
 // KnowledgeIngestPayload tells the Python RAG worker to extract, chunk and

@@ -38,8 +38,9 @@
 ## 3. 当前实现状态
 
 - ✅ Avatar Studio（创建）：形象名称/头像展示/图片/Edge-TTS 音色（localStorage 缓存，
-  默认 zh-CN-XiaoxiaoNeural）+ 人物设定（年龄/身高/体重/族裔/感情状态/性格），提交后
-  轮询 `GET /api/avatars/:id` 直到 ready。
+  默认 zh-CN-XiaoxiaoNeural）+ 人物设定（年龄/身高/体重/族裔/感情状态/性格）。
+  **创建数字人不再自动生成视频**：只建身份 + 默认场景，`ready` = 至少一个场景 +
+  至少一条视频（上传或生成均可），视频全部由用户在「场景」页添加。
 - ✅ Broadcast（离线播报）页面：选数字人 + 脚本 → 任务轮询 → 播放成品。
 - ✅ 场景（Scene）两级结构：一个数字人可有多个场景（标题/描述/封面），每个
   场景下 1-N 个驱动视频（视频 + 描述）；创建数字人时的 base 视频成为默认
@@ -120,11 +121,15 @@
   账号首次启动时按 env 播种到 `admin_users` 表，之后可通过
   `POST /api/admin/change-name|change-password` 修改并持久化（登录返回
   username + displayName，侧边栏显示 displayName）。
-- ✅ 两段式管线：创建时 `avatar_init` 队列 → LivePortrait 生成静音 24fps base 视频
-  上传 S3 并回写默认场景默认视频/`status`；使用时 **Edge-TTS**（`TTS_ENGINE=edge`，
-  零 GPU，默认）→ Wav2Lip ONNX（CoreML 优先）→ mux/推流。GPT-SoVITS 为**遗留可选**
-  引擎（代码仍在 `ai/tts_real.py`，权重不入库需自行下载）。LivePortrait 不再出现在
-  广播/直播循环里。
+- ✅ 视频生成独立化：`avatar_init` 为遗留流程（兼容旧任务）；新流程走
+  **video-gen 微服务**（`services/video-gen`，FastAPI，端口 8003）——Go 在
+  `scene_videos` 建 `generating` 记录并提交任务，宿主机 Worker 弹队列按
+  provider 渲染（`worker/ai/video_providers.py` 注册表：liveportrait 可用、
+  comfyui 预留），产物上 S3 后回调 `POST /api/scene-videos/:id/complete`。
+  生成参数挂在**场景视频**（`scene_videos.generation_settings`），不再属于数字人。
+  场景「添加视频」弹窗三 Tab：本地上传（文件+描述，必须描述）/ LivePortrait
+  （描述+源图+全部参数）/ 其他（预留）。使用时仍为 **Edge-TTS** → Wav2Lip ONNX →
+  mux/推流。
 - ✅ 直播管线 `stream_worker.py`（闲置/说话循环）：`POST /api/live/{id}/start`
   通知 Worker 打开**常驻 FFmpeg 管道**（闲置态喂所选场景的全部驱动视频 +
   numpy 静音音频，定时 N 秒顺序切换或随机切换；未配置时回退默认视频单循环）；
@@ -150,9 +155,11 @@
   wav2lip ONNX、创建软链接（一键可复现）。
 - ✅ 性能：16 秒视频口型阶段约 10 秒；CPU 线程数受限（`WAV2LIP_THREADS`，默认 4）。
 - ✅ 动画参数业务化：LivePortrait 全部可调参数（驱动速度/幅度/模式、动画区域、
-  人脸裁剪、输出 fps/crf/分辨率/时长/模板）存 `avatars.liveportrait_settings`
-  JSON，Avatar Studio「知识库」下方面板配置，随 `avatar_init` 任务负载下发，
-  **Worker 不再读 env**（仅仓库路径/设备等机器级配置仍走 env）。
+  人脸裁剪、输出 fps/crf/分辨率/时长/模板）存 `scene_videos.generation_settings`
+  JSON，在场景「LivePortrait」Tab 配置（`components/liveportrait-settings.tsx`，
+  按 Worker 上报设备自动推荐默认模板），随 video-gen 任务负载下发，
+  **Worker 不再读 env**（仅仓库路径/设备等机器级配置仍走 env）；旧
+  `avatars.liveportrait_settings` 启动时迁移到默认场景默认视频后删列。
 - ✅ 基础视频默认去眨眼：`renderer_real.py` 冻结眼部表情通道（`EYE_EXP_DIMS`
   取首帧值，`c_eyes/c_d_eyes_lst` 全帧复制首帧），保留耸肩/身体微晃（仅当
   `drivingSpeed != 1.0` 时生效；面板里改参数后需重试重新生成基础视频）。

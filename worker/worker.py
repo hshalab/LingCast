@@ -144,6 +144,9 @@ def load_config() -> dict:
         "avatar_init_key": os.environ.get(
             "AVATAR_INIT_QUEUE_KEY", "talking_avatar:avatar_init"
         ),
+        "video_gen_key": os.environ.get(
+            "VIDEO_GEN_QUEUE_KEY", "talking_avatar:video_gen"
+        ),
         "api_base_url": os.environ.get("API_BASE_URL", "http://api:8080"),
         "work_root": Path(os.environ.get("WORK_DIR", "/tmp/talking-avatar-worker")),
     }
@@ -396,6 +399,63 @@ def process_avatar_init(
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+def process_video_gen(
+    payload: dict,
+    storage: S3Storage,
+    callback: TaskCallback,
+    work_root: Path,
+) -> None:
+    """Generate a scene video through a provider and complete the webhook."""
+    scene_video_id = int(payload["sceneVideoId"])
+    provider = payload.get("provider", "liveportrait")
+    work_dir = work_root / f"vg-{scene_video_id}"
+    if work_dir.exists():
+        shutil.rmtree(work_dir, ignore_errors=True)
+    work_dir.mkdir(parents=True)
+    try:
+        from ai.video_providers import generate_video
+
+        current_progress = {"value": 0}
+
+        def on_progress(stage: str, progress: int | None, detail: str = "") -> None:
+            if progress is not None:
+                current_progress["value"] = max(
+                    current_progress["value"], progress
+                )
+            callback.update_scene_video_progress(
+                scene_video_id, stage, current_progress["value"], detail or ""
+            )
+
+        on_progress("download", 3, "")
+        image_path = work_dir / (
+            "source_image" + Path(payload["sourceImageS3Key"]).suffix
+        )
+        storage.download(payload["sourceImageS3Key"], image_path)
+        settings = payload.get("settings") or {}
+        output = generate_video(
+            provider, image_path, settings, work_dir, progress_cb=on_progress
+        )
+        on_progress("upload", 100, "")
+        key = f"scene_videos/{scene_video_id}.mp4"
+        storage.upload(key, output)
+        callback.complete_scene_video(scene_video_id, "ready", s3_key=key)
+        logger.info(
+            "scene video %s ready: %s (provider=%s)", scene_video_id, key, provider
+        )
+    except Exception:
+        logger.exception(
+            "scene video %s generation failed (provider=%s)", scene_video_id, provider
+        )
+        try:
+            callback.complete_scene_video(
+                scene_video_id, "failed", error="video generation failed"
+            )
+        except Exception:
+            logger.exception("failed to report scene video failure")
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
 def main() -> None:
     _load_local_env()
     _check_required_env()
@@ -437,12 +497,20 @@ def main() -> None:
 
     while True:
         try:
-            item = r.blpop([cfg["queue_key"], cfg["avatar_init_key"]], timeout=5)
+            item = r.blpop(
+                [cfg["queue_key"], cfg["avatar_init_key"], cfg["video_gen_key"]],
+                timeout=5,
+            )
             if item is None:
                 continue
 
             queue_name, raw = item
             payload = json.loads(raw)
+
+            if queue_name == cfg["video_gen_key"]:
+                logger.info("received video-gen payload: %s", payload)
+                process_video_gen(payload, storage, callback, cfg["work_root"])
+                continue
 
             if queue_name == cfg["avatar_init_key"]:
                 logger.info("received avatar init payload: %s", payload)

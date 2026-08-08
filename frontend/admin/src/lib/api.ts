@@ -19,7 +19,6 @@ export type Avatar = {
   persona?: Persona
   status: 'initializing' | 'ready' | 'failed' | 'skipped'
   liveSettings?: LiveSettings
-  livePortraitSettings?: LivePortraitSettings
   defaultVideoS3Url?: string
   initQueuePos?: number
   createdAt: string
@@ -37,6 +36,14 @@ export type SceneVideo = {
   s3Url: string
   description?: string
   isDefault: boolean
+  source: 'upload' | 'liveportrait' | string
+  status: 'ready' | 'generating' | 'failed' | string
+  errorMessage?: string
+  sourceImageS3Url?: string
+  generationSettings?: LivePortraitSettings
+  progress?: number
+  stage?: string
+  stageDetail?: string
 }
 
 export type Scene = {
@@ -264,6 +271,39 @@ export async function getKnowledgeSelection(
 
 export async function getAvatarDefaults(): Promise<AvatarDefaults> {
   const { data } = await api.get<AvatarDefaults>('/avatar-defaults')
+  return data
+}
+
+export async function generateSceneVideo(
+  sceneId: number,
+  input: {
+    description: string
+    image: File
+    settings: LivePortraitSettings
+    provider?: string
+  },
+): Promise<SceneVideo> {
+  const form = new FormData()
+  form.append('description', input.description)
+  form.append('image', input.image)
+  form.append('settings', JSON.stringify(input.settings))
+  form.append('provider', input.provider ?? 'liveportrait')
+  const { data } = await api.post<SceneVideo>(
+    `/scenes/${sceneId}/videos/generate`,
+    form,
+  )
+  return data
+}
+
+export async function updateSceneVideo(
+  sceneId: number,
+  videoId: number,
+  input: { description?: string; isDefault?: boolean },
+): Promise<SceneVideo> {
+  const { data } = await api.put<SceneVideo>(
+    `/scenes/${sceneId}/videos/${videoId}`,
+    input,
+  )
   return data
 }
 

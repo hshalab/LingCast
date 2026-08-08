@@ -13,7 +13,7 @@ import (
 // Everything here requires an admin session except the auth endpoints and a
 // few shared read endpoints the console reuses (live list / status).
 func RegisterAdmin(r *gin.Engine, cfg config.Config, deps *app.Deps) {
-	avatarHandler := admin.NewAvatarHandler(deps.DB, deps.S3, deps.Queue, cfg.AvatarInitQueueKey)
+	avatarHandler := admin.NewAvatarHandler(deps.DB, deps.S3, deps.Queue, cfg.AvatarInitQueueKey, cfg.VideoGenServiceURL)
 	knowledgeHandler := admin.NewKnowledgeHandler(deps.DB, deps.S3, cfg.EmbedServerURL)
 	taskHandler := admin.NewTaskHandler(deps.DB, deps.Queue, deps.S3)
 	chatHandler := live.NewChatHandler(deps.DB)
@@ -54,6 +54,8 @@ func RegisterAdmin(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 			protected.PUT("/scenes/:id", avatarHandler.UpdateScene)
 			protected.DELETE("/scenes/:id", avatarHandler.DeleteScene)
 			protected.POST("/scenes/:id/videos", avatarHandler.UploadSceneVideo)
+			protected.POST("/scenes/:id/videos/generate", avatarHandler.GenerateSceneVideo)
+			protected.PUT("/scenes/:id/videos/:vid", avatarHandler.UpdateSceneVideo)
 			protected.DELETE("/scenes/:id/videos/:vid", avatarHandler.DeleteSceneVideo)
 			// Knowledge base: avatar -> collection (知识库) -> documents (文档)
 			protected.POST("/knowledge-collections", knowledgeHandler.CreateCollection)

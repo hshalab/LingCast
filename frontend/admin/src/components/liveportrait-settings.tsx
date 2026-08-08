@@ -1,12 +1,5 @@
 import { Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -318,16 +311,11 @@ export function LivePortraitSettingsPanel({ value, onChange, disabled }: Props) 
   )
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className='text-base'>{t('studio.liveportraitTitle')}</CardTitle>
-        <CardDescription>{t('studio.liveportraitDesc')}</CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-5'>
-        <p className='text-xs text-muted-foreground'>{t('studio.liveportraitHint')}</p>
+    <div className='flex flex-col gap-5'>
+      <p className='text-xs text-muted-foreground'>{t('studio.liveportraitHint')}</p>
 
-        {/* 动作 / 推理 */}
-        <fieldset className='space-y-3' disabled={disabled}>
+      {/* 动作 / 推理 */}
+      <fieldset className='space-y-3' disabled={disabled}>
           <legend className='text-sm font-medium'>{t('studio.lpGroupMotion')}</legend>
           <div className='grid grid-cols-2 gap-3'>
             {MOTION_NUMBERS.map((spec) => (
@@ -402,10 +390,10 @@ export function LivePortraitSettingsPanel({ value, onChange, disabled }: Props) 
               </label>
             ))}
           </div>
-        </fieldset>
+      </fieldset>
 
-        {/* 裁剪 */}
-        <fieldset className='space-y-3' disabled={disabled}>
+      {/* 裁剪 */}
+      <fieldset className='space-y-3' disabled={disabled}>
           <legend className='text-sm font-medium'>{t('studio.lpGroupCrop')}</legend>
           <div className='grid grid-cols-2 gap-3'>
             {CROP_NUMBERS.map((spec) => (
@@ -418,10 +406,10 @@ export function LivePortraitSettingsPanel({ value, onChange, disabled }: Props) 
               />
             ))}
           </div>
-        </fieldset>
+      </fieldset>
 
-        {/* 输出 / 项目 */}
-        <fieldset className='space-y-3' disabled={disabled}>
+      {/* 输出 / 项目 */}
+      <fieldset className='space-y-3' disabled={disabled}>
           <legend className='text-sm font-medium'>{t('studio.lpGroupOutput')}</legend>
           <div className='grid grid-cols-2 gap-3'>
             <div className='col-span-2 flex flex-col gap-1.5'>
@@ -535,8 +523,7 @@ export function LivePortraitSettingsPanel({ value, onChange, disabled }: Props) 
               )}
             </div>
           </div>
-        </fieldset>
-      </CardContent>
-    </Card>
+      </fieldset>
+    </div>
   )
 }

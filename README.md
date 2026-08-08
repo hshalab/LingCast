@@ -34,9 +34,9 @@ Admin console `:8080` · Viewer app `:3000` · [Architecture doc](docs/技术需
 Traditional talking-head / live-streaming solutions either depend on expensive closed-source
 APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims for:
 
-- Run LivePortrait preprocessing **only once** when creating a digital human; afterwards,
-  broadcasts and live streams are lightweight inference (Edge-TTS + Wav2Lip ONNX) that work
-  even without a GPU.
+- Videos are added per-scene (upload or generated on demand); the LivePortrait preprocessing
+  runs once per generated scene video, then broadcasts and live streams are lightweight
+  inference (Edge-TTS + Wav2Lip ONNX) that work even without a GPU.
 - Viewer app out of the box: guest/account identities, persisted chat, and **DeepSeek LLM**
   real-time replies that actually speak.
 - Deployment friendly: Docker Compose boots the infrastructure with one command; the real AI
@@ -46,17 +46,19 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
 
 - [x] **Avatar Studio (create)**: persona name + preview + image upload + Edge-TTS voice picker
   (list cached in `localStorage`, default Chinese female voice Xiaoxiao), optional **persona
-  profile** (age/height/weight/ethnicity/relationship status/personality). Shows
-  "Generating base video…" after submit and polls the status.
+  profile** (age/height/weight/ethnicity/relationship status/personality). Avatar creation
+  no longer generates a video: the avatar is `ready` once at least one scene video exists.
 - [x] **Digital human editing**: the "Edit" button on a card jumps to Avatar Studio
   (`?edit=<id>`) pre-filled; saving performs a PUT update (the appearance image is kept);
   deletion is confirmed via the system AlertDialog.
 - [x] **Scene-based video library**: every digital human owns 1-N **scenes**
   (`scenes`, with cover/title/description) and each scene 1-N **driving videos**
-  (`scene_videos`, each with a description). The creation-time base video becomes the
-  default scene's default video (protected from deletion). The **Scene management**
-  page (`/scenes`) adds/edits scenes and batch-uploads videos; Broadcast (offline) and
-  Live Studio pick a scene + video from this library.
+  (`scene_videos`, each with a required description). The **Scene management** page
+  (`/scenes`) adds/edits scenes; the "Add video" dialog has three tabs — **Local upload**
+  (file + description), **LivePortrait** (description + source image + full parameter set,
+  submitted as an async job through the `video-gen` microservice) and **Other** (reserved
+  for future providers such as ComfyUI). Broadcast (offline) and Live Studio pick a scene +
+  video from this library.
 - [x] **Admin accounts**: after login you can change the display name and password in "Account
   settings" (persisted in the `admin_users` table, survives restarts).
 - [x] **Broadcast (offline announcement)**: pick a ready digital human + a scene/video
@@ -111,14 +113,16 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
   status etc. are answered per the persona.
 - [x] **Edge-TTS speech synthesis**: GPU-free cloud neural voices, selected by the avatar's
   `voice_id`; a sentence takes roughly 1-2s.
-- [x] **LivePortrait base video preprocessing**: a silent 24fps driving video is generated
-  once when creating a digital human.
+- [x] **Video generation microservice**: `services/video-gen` owns the provider registry and
+  Redis job queue; the host AI worker renders with the provider (LivePortrait now, ComfyUI
+  later), uploads to S3 and completes the scene video via the Go webhook.
 - [x] **Wav2Lip (ONNX) lip-sync**: mouth frames matched to speech on top of the pre-generated
   base video; ONNX + CoreML executors, CPU threads capped (default 4); short base videos
   loop automatically to cover scripts of any length.
-- [x] **Per-avatar LivePortrait tuning**: all inference/crop/output parameters are configured
-  in Avatar Studio (below the knowledge-base panel), stored on `avatars.liveportrait_settings`
-  and shipped to the worker inside the `avatar_init` task payload (no worker env knobs).
+- [x] **Per-scene-video LivePortrait tuning**: all inference/crop/output parameters are
+  configured in the scene "Add video → LivePortrait" tab, stored on
+  `scene_videos.generation_settings` and shipped with the video-gen job payload (no worker
+  env knobs); the default template follows the worker's reported hardware.
 - [x] **No-blinking base video**: with `drivingSpeed < 1` the eye expression channels of the
   driving template are frozen (no blinking), keeping shoulder shrugs / subtle body motion.
 - [x] **Digital human categories**: a category (chat/knowledge/entertainment/game/sales/other)

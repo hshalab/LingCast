@@ -13,7 +13,7 @@ import (
 // endpoints are public; this is where the viewer app and the live-chat
 // orchestrator live.
 func RegisterLive(r *gin.Engine, cfg config.Config, deps *app.Deps) {
-	avatarHandler := admin.NewAvatarHandler(deps.DB, deps.S3, deps.Queue, cfg.AvatarInitQueueKey)
+	avatarHandler := admin.NewAvatarHandler(deps.DB, deps.S3, deps.Queue, cfg.AvatarInitQueueKey, cfg.VideoGenServiceURL)
 	chatHandler := live.NewChatHandler(deps.DB)
 	liveHandler := live.NewLiveHandler(
 		deps.DB, deps.Queue, deps.S3,

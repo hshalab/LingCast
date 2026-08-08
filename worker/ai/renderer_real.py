@@ -102,6 +102,7 @@ class LivePortraitRenderer:
         models_dir: Path | None = None,
         driving: Path | None = None,
         device: str | None = None,
+        progress_cb=None,
     ):
         self.params = LivePortraitParams(settings)
         self.repo_dir = repo_dir or Path(
@@ -135,6 +136,7 @@ class LivePortraitRenderer:
         self.driving_speed = self.params.driving_speed
         self.driving_multiplier = self.params.driving_multiplier
         self.half = self.params.use_half_precision
+        self.progress_cb = progress_cb
 
         self._weights_base = self.models_dir / "liveportrait"
         self._check_environment()
@@ -159,6 +161,60 @@ class LivePortraitRenderer:
             w.setframerate(16000)
             w.writeframes(b"\x00\x00" * int(16000 * seconds))
         return self.render(image_path, silent, work_dir)
+
+    def _hook_pipeline_progress(self):
+        """Tap the LivePortrait pipeline's log()/track() to report model-load
+        stages and frame progress without modifying external code."""
+        if self.progress_cb is None:
+            return None
+        try:
+            from src import live_portrait_pipeline as lp
+        except Exception:
+            return None
+        orig_log, orig_track = lp.log, lp.track
+        state = {"last": 0}
+        cb = self.progress_cb
+
+        def hooked_log(msg, *args, **kwargs):
+            text = str(msg)
+            low = text.lower()
+            if ("load " in low and " from " in low) or "warmup" in low:
+                name = text.strip()
+                try:
+                    if "load " in low and " from " in low:
+                        name = text.split("Load ", 1)[1].split(" from", 1)[0].strip()
+                    elif " warmup" in low:
+                        name = text.split(" warmup", 1)[0].strip()
+                except Exception:
+                    pass
+                cb("load-models", None, name)
+            elif "the animated video consists of" in low:
+                cb("render", 0, "")
+            return orig_log(msg, *args, **kwargs)
+
+        def hooked_track(iterable, description="Working...", total=None, *args, **kwargs):
+            if "animating" in str(description).lower():
+                items = list(iterable)
+                n = total or len(items)
+                state["last"] = 0
+                for i, item in enumerate(items):
+                    yield item
+                    count = i + 1
+                    pct = int(count / n * 100) if n else 0
+                    if pct >= state["last"] + 5 or count == n:
+                        state["last"] = pct
+                        cb("render", pct, f"{count}/{n}")
+            else:
+                yield from orig_track(iterable, description, total, *args, **kwargs)
+
+        lp.log, lp.track = hooked_log, hooked_track
+        return (lp, orig_log, orig_track)
+
+    def _restore_pipeline_progress(self, patched) -> None:
+        if patched is None:
+            return
+        lp, orig_log, orig_track = patched
+        lp.log, lp.track = orig_log, orig_track
 
     def render(self, image_path: Path, tts_wav: Path, work_dir: Path) -> Path:
         """Animate the avatar image (blink/micro-motion template) and return a
@@ -262,7 +318,13 @@ class LivePortraitRenderer:
             self.driving_multiplier,
         )
         pipeline = LivePortraitPipeline(inference_cfg=inference_cfg, crop_cfg=crop_cfg)
-        wfp, _ = pipeline.execute(args)
+        patched = self._hook_pipeline_progress()
+        try:
+            wfp, _ = pipeline.execute(args)
+        finally:
+            self._restore_pipeline_progress(patched)
+        if self.progress_cb is not None:
+            self.progress_cb("render", 100, "")
         if not wfp or not Path(wfp).exists():
             raise RuntimeError(f"LivePortrait did not produce an output video ({wfp})")
 

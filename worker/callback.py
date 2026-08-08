@@ -83,3 +83,65 @@ class TaskCallback:
         raise RuntimeError(
             f"failed to notify avatar default-video after {self.retries} attempts: {last_exc}"
         )
+
+    def complete_scene_video(
+        self,
+        scene_video_id: int,
+        status: str,
+        s3_key: str = "",
+        error: str = "",
+    ) -> None:
+        """Report the scene-video generation result (ready/failed)."""
+        url = f"{self.api_base_url}/api/scene-videos/{scene_video_id}/complete"
+        payload = {"status": status}
+        if s3_key:
+            payload["s3Key"] = s3_key
+        if error:
+            payload["errorMessage"] = error
+
+        last_exc: Exception | None = None
+        for attempt in range(self.retries):
+            try:
+                resp = requests.post(url, json=payload, timeout=self.timeout)
+                resp.raise_for_status()
+                logger.info(
+                    "scene-video callback %s -> %s (%s)", url, resp.status_code, status
+                )
+                return
+            except requests.RequestException as exc:
+                last_exc = exc
+                logger.warning(
+                    "scene-video callback attempt %s/%s failed: %s",
+                    attempt + 1,
+                    self.retries,
+                    exc,
+                )
+                if attempt + 1 < self.retries:
+                    time.sleep(2**attempt)
+        raise RuntimeError(
+            f"failed to notify scene-video completion after {self.retries} attempts: {last_exc}"
+        )
+
+    def update_scene_video_progress(
+        self,
+        scene_video_id: int,
+        stage: str,
+        progress: int,
+        detail: str = "",
+    ) -> None:
+        """Report fine-grained generation progress (stage timeline).
+        Best-effort and non-fatal: a failed report must not slow rendering."""
+        url = f"{self.api_base_url}/api/scene-videos/{scene_video_id}/progress"
+        try:
+            resp = requests.post(
+                url,
+                json={
+                    "stage": stage,
+                    "progress": max(0, min(100, progress)),
+                    "detail": detail,
+                },
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            logger.debug("scene-video progress report failed (non-fatal): %s", exc)

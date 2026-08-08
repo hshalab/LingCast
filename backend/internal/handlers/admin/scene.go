@@ -14,12 +14,20 @@ import (
 )
 
 type sceneVideoItem struct {
-	ID          uint   `json:"id"`
-	SceneID     uint   `json:"sceneId"`
-	S3Key       string `json:"s3Key"`
-	S3URL       string `json:"s3Url"`
-	Description string `json:"description,omitempty"`
-	IsDefault   bool   `json:"isDefault"`
+	ID                  uint                            `json:"id"`
+	SceneID             uint                            `json:"sceneId"`
+	S3Key               string                          `json:"s3Key"`
+	S3URL               string                          `json:"s3Url"`
+	Description         string                          `json:"description,omitempty"`
+	IsDefault           bool                            `json:"isDefault"`
+	Source              string                          `json:"source"`
+	Status              string                          `json:"status"`
+	ErrorMessage        string                          `json:"errorMessage,omitempty"`
+	SourceImageS3URL    string                          `json:"sourceImageS3Url,omitempty"`
+	GenerationSettings  *models.LivePortraitSettings    `json:"generationSettings,omitempty"`
+	Progress            int                             `json:"progress"`
+	Stage               string                          `json:"stage,omitempty"`
+	StageDetail         string                          `json:"stageDetail,omitempty"`
 }
 
 type sceneItem struct {
@@ -48,15 +56,31 @@ func (h *AvatarHandler) toSceneItem(s models.Scene) sceneItem {
 	if err := h.db.Where("scene_id = ?", s.ID).Order("is_default DESC, id ASC").
 		Find(&videos).Error; err == nil {
 		for _, v := range videos {
-			item.Videos = append(item.Videos, sceneVideoItem{
-				ID:          v.ID,
-				SceneID:     v.SceneID,
-				S3Key:       v.S3Key,
-				S3URL:       h.s3.PublicURL(v.S3Key),
-				Description: v.Description,
-				IsDefault:   v.IsDefault,
-			})
+			item.Videos = append(item.Videos, h.toSceneVideoItem(v))
 		}
+	}
+	return item
+}
+
+func (h *AvatarHandler) toSceneVideoItem(v models.SceneVideo) sceneVideoItem {
+	item := sceneVideoItem{
+		ID:               v.ID,
+		SceneID:          v.SceneID,
+		S3Key:            v.S3Key,
+		S3URL:            h.s3.PublicURL(v.S3Key),
+		Description:      v.Description,
+		IsDefault:        v.IsDefault,
+		Source:           v.Source,
+		Status:           v.Status,
+		ErrorMessage:     v.ErrorMessage,
+		SourceImageS3URL: h.s3.PublicURL(v.SourceImageS3Key),
+		Progress:         v.Progress,
+		Stage:            v.Stage,
+		StageDetail:      v.StageDetail,
+	}
+	if v.Source != models.SceneVideoSourceUpload {
+		s := ParseLivePortraitSettings(v.GenerationSettings)
+		item.GenerationSettings = &s
 	}
 	return item
 }
@@ -266,25 +290,34 @@ func (h *AvatarHandler) UploadSceneVideo(c *gin.Context) {
 		return
 	}
 	desc := strings.TrimSpace(c.PostForm("description"))
+	if desc == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.scene.description_required")})
+		return
+	}
+	// 场景还没有默认视频时，第一条自动成为默认视频。
+	var defaultCount int64
+	if err := h.db.Model(&models.SceneVideo{}).
+		Where("scene_id = ? AND is_default = ?", scene.ID, true).
+		Count(&defaultCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	video := models.SceneVideo{
 		SceneID:     scene.ID,
 		AvatarID:    scene.AvatarID,
 		S3Key:       key,
 		Description: desc,
+		Source:      models.SceneVideoSourceUpload,
+		Status:      models.SceneVideoStatusReady,
+		IsDefault:   defaultCount == 0,
 	}
 	if err := h.db.Create(&video).Error; err != nil {
 		_ = h.s3.Delete(c.Request.Context(), key)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, sceneVideoItem{
-		ID:          video.ID,
-		SceneID:     video.SceneID,
-		S3Key:       video.S3Key,
-		S3URL:       h.s3.PublicURL(video.S3Key),
-		Description: video.Description,
-		IsDefault:   video.IsDefault,
-	})
+	h.recomputeAvatarStatus(video.AvatarID)
+	c.JSON(http.StatusCreated, h.toSceneVideoItem(video))
 }
 
 // DeleteSceneVideo handles DELETE /api/scenes/:id/videos/:vid (default video
@@ -325,5 +358,68 @@ func (h *AvatarHandler) DeleteSceneVideo(c *gin.Context) {
 		return
 	}
 	_ = h.s3.Delete(c.Request.Context(), video.S3Key)
+	_ = h.s3.Delete(c.Request.Context(), video.SourceImageS3Key)
+	h.recomputeAvatarStatus(video.AvatarID)
 	c.JSON(http.StatusOK, gin.H{"deleted": video.ID})
+}
+
+// UpdateSceneVideo handles PUT /api/scenes/:id/videos/:vid — edits a scene
+// video's description and/or promotes it to the scene's default video
+// (promoting unsets the previous default; the current default cannot be
+// demoted directly).
+func (h *AvatarHandler) UpdateSceneVideo(c *gin.Context) {
+	sceneID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || sceneID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
+		return
+	}
+	videoID, err := strconv.ParseUint(c.Param("vid"), 10, 64)
+	if err != nil || videoID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.avatar.invalid_id")})
+		return
+	}
+	var video models.SceneVideo
+	if err := h.db.Where("id = ? AND scene_id = ?", videoID, sceneID).First(&video).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": i18n.Tc(c, "err.avatar.video_not_found")})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	var req struct {
+		Description *string `json:"description"`
+		IsDefault   *bool   `json:"isDefault"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tcf(c, "err.invalid_request_detail", err.Error())})
+		return
+	}
+	if req.Description != nil {
+		desc := strings.TrimSpace(*req.Description)
+		if desc == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.scene.description_required")})
+			return
+		}
+		video.Description = desc
+	}
+	if req.IsDefault != nil {
+		if *req.IsDefault {
+			if err := h.db.Model(&models.SceneVideo{}).
+				Where("scene_id = ?", sceneID).
+				Update("is_default", false).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			video.IsDefault = true
+		} else if video.IsDefault {
+			c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.scene.default_video_protected")})
+			return
+		}
+	}
+	if err := h.db.Save(&video).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, h.toSceneVideoItem(video))
 }

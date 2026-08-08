@@ -29,6 +29,7 @@ type Config struct {
 	OpenAIModel         string
 	EmbedServerURL      string
 	TTSServiceURL       string
+	VideoGenServiceURL  string
 	AdminUsername       string
 	AdminPassword       string
 	TgBotToken          string
@@ -109,6 +110,7 @@ func Load() Config {
 		OpenAIModel:         env("OPENAI_MODEL", "deepseek-v4-flash"),
 		EmbedServerURL:      env("EMBED_SERVER_URL", "http://host.docker.internal:8090"),
 		TTSServiceURL:       env("TTS_SERVICE_URL", "http://service-tts:8002"),
+		VideoGenServiceURL:  env("VIDEO_GEN_SERVICE_URL", "http://service-video-gen:8003"),
 		AdminUsername:       env("ADMIN_USERNAME", "admin"),
 		AdminPassword:       env("ADMIN_PASSWORD", "admin123"),
 		TgBotToken:          os.Getenv("TG_BOT_TOKEN"),

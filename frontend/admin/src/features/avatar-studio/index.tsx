@@ -37,8 +37,8 @@ import {
 } from '@/components/ui/select'
 import {
   api,
-  getAvatarDefaults,
   getKnowledgeSelection,
+  listKnowledgeCollections,
   setKnowledgeSelection,
   type Avatar,
   type KnowledgeSelectionItem,
@@ -50,11 +50,6 @@ import {
   getCachedVoices,
   type EdgeVoice,
 } from './voices'
-import {
-  DEFAULT_LIVEPORTRAIT_SETTINGS,
-  LivePortraitSettingsPanel,
-} from './liveportrait-settings'
-import type { LivePortraitSettings } from '@/lib/api'
 
 function showApiError(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
@@ -112,9 +107,6 @@ export function AvatarStudio() {
   const [created, setCreated] = useState<Avatar | null>(null)
   const [initFailed, setInitFailed] = useState(false)
   const [collections, setCollections] = useState<KnowledgeSelectionItem[]>([])
-  const [lpSettings, setLpSettings] = useState<LivePortraitSettings>(
-    DEFAULT_LIVEPORTRAIT_SETTINGS,
-  )
 
   const selectedVoice = useMemo(
     () => voices.find((voice) => voice.id === voiceId) ?? voices[0],
@@ -140,7 +132,6 @@ export function AvatarStudio() {
         setEthnicity(data.persona?.ethnicity ?? '')
         setRelationshipStatus(data.persona?.relationshipStatus ?? '单身')
         setPersonality(data.persona?.personality ?? '')
-        setLpSettings(data.livePortraitSettings ?? DEFAULT_LIVEPORTRAIT_SETTINGS)
       })
       .catch(() => toast.error(t('studio.toastLoadFailed')))
   }, [editId])
@@ -148,7 +139,14 @@ export function AvatarStudio() {
   // 知识库多选：加载该数字人的知识库集合。
   useEffect(() => {
     if (!editId) {
-      setCollections([])
+      // 创建模式：列出全部知识库，勾选项在创建成功后统一绑定。
+      void listKnowledgeCollections()
+        .then((cols) =>
+          setCollections(
+            cols.map((c) => ({ id: c.id, name: c.name, enabled: false })),
+          ),
+        )
+        .catch(() => toast.error(t('studio.knowledgeLoadFailed')))
       return
     }
     void getKnowledgeSelection(Number(editId))
@@ -156,28 +154,12 @@ export function AvatarStudio() {
       .catch(() => toast.error(t('studio.knowledgeLoadFailed')))
   }, [editId])
 
-  // 创建模式：按 Worker 上报的硬件能力选择默认驱动模板。
-  useEffect(() => {
-    if (editId) return
-    void getAvatarDefaults()
-      .then((defaults) => {
-        if (defaults.drivingTemplate) {
-          setLpSettings((prev) => ({
-            ...prev,
-            drivingTemplate: defaults.drivingTemplate!,
-          }))
-        }
-      })
-      .catch(() => {
-        // 拉取失败时保持内置默认值（d1.pkl）。
-      })
-  }, [editId])
-
   const toggleCollection = async (col: KnowledgeSelectionItem, checked: boolean) => {
     const next = collections.map((c) =>
       c.id === col.id ? { ...c, enabled: checked } : c,
     )
     setCollections(next)
+    if (!editId) return // 创建模式：随创建提交统一保存
     const ids = next.filter((c) => c.enabled).map((c) => c.id)
     try {
       await setKnowledgeSelection(Number(editId), ids)
@@ -244,7 +226,6 @@ export function AvatarStudio() {
         name: name.trim(),
         category,
         voiceId,
-        liveportraitSettings: lpSettings,
         persona: {
           age: age ? Number(age) : null,
           heightCm: heightCm ? Number(heightCm) : null,
@@ -272,8 +253,13 @@ export function AvatarStudio() {
       form.append('ethnicity', ethnicity.trim())
       form.append('relationship_status', relationshipStatus)
       form.append('personality', personality.trim())
-      form.append('liveportrait_settings', JSON.stringify(lpSettings))
       const { data } = await api.post<Avatar>('/avatars', form)
+      const selectedIds = collections.filter((c) => c.enabled).map((c) => c.id)
+      if (selectedIds.length > 0) {
+        void setKnowledgeSelection(data.id, selectedIds).catch(() =>
+          toast.error(t('studio.knowledgeBindFailed')),
+        )
+      }
       setCreated(data)
       toast.info(t('studio.toastSubmitted'))
     } catch (error) {
@@ -330,8 +316,6 @@ export function AvatarStudio() {
 
         <form onSubmit={handleSubmit} className='flex flex-col gap-4'>
         <div className='grid gap-4 lg:grid-cols-2'>
-          {/* 左列：基础信息 + 人物设定 + 知识库 */}
-          <div className='flex flex-col gap-4'>
           <Card>
             <CardHeader>
               <CardTitle>
@@ -468,6 +452,8 @@ export function AvatarStudio() {
             </CardContent>
           </Card>
 
+          {/* 右列：人物设定 + 知识库（上下结构） */}
+          <div className='flex flex-col gap-4'>
           <Card>
             <CardHeader>
               <CardTitle>{t('studio.persona')}</CardTitle>
@@ -555,46 +541,36 @@ export function AvatarStudio() {
             </CardContent>
           </Card>
 
-          {/* 知识库多选面板（编辑模式） */}
-          {editing && (
-            <Card>
-              <CardHeader>
-                <CardTitle className='text-base'>{t('studio.knowledgeTitle')}</CardTitle>
-                <CardDescription>{t('studio.knowledgeDesc')}</CardDescription>
-              </CardHeader>
-              <CardContent className='flex flex-col gap-2'>
-                {collections.length === 0 ? (
-                  <p className='text-sm text-muted-foreground'>
-                    {t('studio.knowledgeNone')}
-                  </p>
-                ) : (
-                  collections.map((col) => (
-                    <label
-                      key={col.id}
-                      className='flex cursor-pointer items-center gap-2 text-sm'
-                    >
-                      <Checkbox
-                        checked={col.enabled}
-                        onCheckedChange={(v) => void toggleCollection(col, Boolean(v))}
-                      />
-                      <span className='truncate'>{col.name}</span>
-                    </label>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          )}
+          {/* 知识库多选面板（创建/编辑均可选） */}
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-base'>{t('studio.knowledgeTitle')}</CardTitle>
+              <CardDescription>{t('studio.knowledgeDesc')}</CardDescription>
+            </CardHeader>
+            <CardContent className='flex flex-col gap-2'>
+              {collections.length === 0 ? (
+                <p className='text-sm text-muted-foreground'>
+                  {t('studio.knowledgeNone')}
+                </p>
+              ) : (
+                collections.map((col) => (
+                  <label
+                    key={col.id}
+                    className='flex cursor-pointer items-center gap-2 text-sm'
+                  >
+                    <Checkbox
+                      checked={col.enabled}
+                      onCheckedChange={(v) => void toggleCollection(col, Boolean(v))}
+                    />
+                    <span className='truncate'>{col.name}</span>
+                  </label>
+                ))
+              )}
+            </CardContent>
+          </Card>
 
           </div>
 
-          {/* 右列：LivePortrait 参数面板（创建与编辑均可用） */}
-          <div className='flex flex-col gap-4'>
-          <LivePortraitSettingsPanel
-            value={lpSettings}
-            onChange={setLpSettings}
-            disabled={isInitializing}
-          />
-          </div>
         </div>
 
         {/* 提交按钮：横跨左右两个设定区域，避免歧义 */}

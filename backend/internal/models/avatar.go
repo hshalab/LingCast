@@ -11,6 +11,15 @@ const (
 
 const DefaultEdgeVoice = "zh-CN-XiaoxiaoNeural"
 
+// Scene video sources / generation states.
+const (
+	SceneVideoSourceUpload      = "upload"
+	SceneVideoSourceLivePortrait = "liveportrait"
+	SceneVideoStatusGenerating = "generating"
+	SceneVideoStatusReady      = "ready"
+	SceneVideoStatusFailed     = "failed"
+)
+
 type LiveSettings struct {
 	SubtitleEnabled  bool   `json:"subtitleEnabled"`
 	SubtitleFont     string `json:"subtitleFont"`
@@ -133,16 +142,15 @@ type PersonaProfile struct {
 }
 
 type Avatar struct {
-	ID                    uint      `gorm:"primaryKey" json:"id"`
-	Name                  string    `gorm:"size:255;not null" json:"name"`
-	ImageS3Key            string    `gorm:"size:512;not null" json:"imageS3Key"`
-	Category              string    `gorm:"size:32;not null;default:其他" json:"category"`
-	Persona               string    `gorm:"type:text;not null;default:'{}'" json:"-"`
-	VoiceID               string    `gorm:"size:64;not null;default:zh-CN-XiaoxiaoNeural" json:"voiceId"`
-	Status                string    `gorm:"size:32;not null;default:initializing;index" json:"status"`
-	LiveSettings          string    `gorm:"type:text;not null;default:'{}'" json:"-"`
-	LivePortraitSettings  string    `gorm:"type:text;not null;default:'{}'" json:"-"`
-	CreatedAt             time.Time `json:"createdAt"`
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	Name         string    `gorm:"size:255;not null" json:"name"`
+	ImageS3Key   string    `gorm:"size:512;not null" json:"imageS3Key"`
+	Category     string    `gorm:"size:32;not null;default:其他" json:"category"`
+	Persona      string    `gorm:"type:text;not null;default:'{}'" json:"-"`
+	VoiceID      string    `gorm:"size:64;not null;default:zh-CN-XiaoxiaoNeural" json:"voiceId"`
+	Status       string    `gorm:"size:32;not null;default:initializing;index" json:"status"`
+	LiveSettings string    `gorm:"type:text;not null;default:'{}'" json:"-"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 type Scene struct {
@@ -157,11 +165,19 @@ type Scene struct {
 }
 
 type SceneVideo struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	SceneID     uint      `gorm:"not null;index" json:"sceneId"`
-	AvatarID    uint      `gorm:"not null;index" json:"avatarId"`
-	S3Key       string    `gorm:"size:512;not null" json:"s3Key"`
-	Description string    `gorm:"size:255" json:"description,omitempty"`
-	IsDefault   bool      `gorm:"not null;default:false" json:"isDefault"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID                  uint      `gorm:"primaryKey" json:"id"`
+	SceneID             uint      `gorm:"not null;index" json:"sceneId"`
+	AvatarID            uint      `gorm:"not null;index" json:"avatarId"`
+	S3Key               string    `gorm:"size:512;not null" json:"s3Key"`
+	Description         string    `gorm:"size:255" json:"description,omitempty"`
+	IsDefault           bool      `gorm:"not null;default:false" json:"isDefault"`
+	Source              string    `gorm:"size:32;not null;default:upload" json:"source"`
+	SourceImageS3Key    string    `gorm:"size:512" json:"sourceImageS3Key,omitempty"`
+	GenerationSettings  string    `gorm:"type:text;not null;default:'{}'" json:"-"`
+	Status              string    `gorm:"size:32;not null;default:ready" json:"status"`
+	ErrorMessage        string    `gorm:"size:512" json:"errorMessage,omitempty"`
+	Progress            int       `gorm:"not null;default:0" json:"progress"`
+	Stage               string    `gorm:"size:32;not null;default:''" json:"stage,omitempty"`
+	StageDetail         string    `gorm:"size:255;not null;default:''" json:"stageDetail,omitempty"`
+	CreatedAt           time.Time `json:"createdAt"`
 }
