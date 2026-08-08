@@ -441,6 +441,7 @@ class LiveAvatarSession:
                     kind = None
 
                 if kind == "frame" and cur_seg is not None:
+                    self._write_frame(payload)
                     # Pre-buffer the first 0.5s of audio before the first frame
                     # (ffmpeg waits for every input's first packet; this also
                     # gives the AAC encoder runway against writer jitter).
@@ -448,11 +449,7 @@ class LiveAvatarSession:
                         pre = cur_seg.next_slice(half_sec_bytes)
                         if pre:
                             self.pipe.write_audio(pre)
-                    # Write the periodic audio slice BEFORE this frame: video
-                    # frames are ~2.7MB at 720x1280 and the pipe write can
-                    # block on ffmpeg backpressure for tens of ms. Writing
-                    # audio first means encoder starvation can never be caused
-                    # by a slow video write.
+                    # Write the periodic audio slice AFTER this frame.
                     if (
                         cur_seg.frames_written > 0
                         and cur_seg.frames_written % half_sec_frames == 0
@@ -461,7 +458,6 @@ class LiveAvatarSession:
                         audio = cur_seg.next_slice(half_sec_bytes)
                         if audio:
                             self.pipe.write_audio(audio)
-                    self._write_frame(payload)
                     cur_seg.frames_written += 1
                     if cur_seg.frames_written >= cur_seg.total_frames:
                         if cur_seg.pos < len(cur_seg.audio):
@@ -477,11 +473,11 @@ class LiveAvatarSession:
                             self._idle_frame_idx = self._talk_base_end
                             self._idle_elapsed_frames = 0
                 else:
-                    # Idle fallback: base animation + silence, never blocking.
+                    # Idle fallback: base animation + silence.
                     idle_count += 1
+                    self._write_frame(self._idle_frame())
                     if idle_count % half_sec_frames == 1:
                         self.pipe.write_audio(silence_slice)
-                    self._write_frame(self._idle_frame())
 
                 # Probe: actual work (pipe writes + subtitle overlay) and the
                 # real sleep; a loop over 45ms means we miss the 24fps cadence.

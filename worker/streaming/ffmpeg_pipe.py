@@ -97,6 +97,7 @@ class FFmpegPipe:
             self.ffmpeg_bin,
             "-y",
             "-loglevel", "warning",
+            "-thread_queue_size", "512",
             "-f", "rawvideo",
             "-pix_fmt", "bgr24",
             "-s", f"{self.width}x{self.height}",
@@ -197,13 +198,14 @@ class FFmpegPipe:
             ) from exc
 
     def write_audio(self, pcm16_bytes: bytes) -> None:
-        """Write mono 16kHz s16le PCM. No-op until FIFO write end is open."""
+        """Write mono 16kHz s16le PCM."""
         self._check_alive()
+        # Wait for the FIFO to be opened by the background thread.
+        import time
+        while self._audio_fh is None:
+            self._check_alive()
+            time.sleep(0.01)
         fh = self._audio_fh
-        if fh is None:
-            # FIFO not yet open — ffmpeg hasn't opened the read end yet.
-            # Silently skip; the watchdog will retry on the next tick.
-            return
         try:
             view = memoryview(pcm16_bytes)
             pos = 0
