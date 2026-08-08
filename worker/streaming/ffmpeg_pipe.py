@@ -4,31 +4,33 @@ The worker renders lip-synced frames in memory (Wav2Lip) and must push them
 to SRS without writing an MP4. We start a single ffmpeg process with two
 inputs:
 
-  - video: `-f rawvideo -pix_fmt bgr24 -s WxH -r FPS -i pipe:0` (stdin)
-  - audio: `-f s16le -ar 16000 -ac 1 -i <fifo_path>` (named FIFO)
+  - video: `-f rawvideo -pix_fmt bgr24 -s WxH -r FPS -i pipe:0`
+  - audio: `-f s16le -ar 16000 -ac 1 -i /dev/fd/<fd>`
 
-Using a named FIFO for audio avoids fd-inheritance issues in Docker
-containers where /dev/fd and pass_fds semantics may differ. Python opens
-the write end of the FIFO after ffmpeg opens the read end (the open() on
-both sides unblocks each other).
+The audio input is passed through `pass_fds` as file descriptor 3 and ffmpeg
+opens it via `/dev/fd/3` (works on both macOS and Linux). Two rules avoid pipe
+deadlocks:
 
-Two rules avoid pipe deadlocks:
-
-  - ffmpeg waits for the first packet of EVERY input before consuming, so
-    the first audio slice must be written before the first video frame.
-  - a whole chunk of audio written at once overflows ffmpeg's pre-video
-    input buffering and blocks; audio must be interleaved with video in
-    small slices (the stream worker writes half-second slices every
-    fps/2 frames).
+  - ffmpeg waits for the first packet of EVERY input before consuming, so the
+    first audio slice must be written before the first video frame.
+  - a whole chunk of audio written at once overflows ffmpeg's pre-video input
+    buffering and blocks; audio must be interleaved with video in small slices
+    (the stream worker writes half-second slices every `fps/2` frames).
 
 The muxer assigns timestamps from consumed frames/samples, so interleaving
 order does not affect A/V sync.
+
+Pacing: the stream worker's **watchdog writer thread** pushes exactly `fps`
+frames/second (and the matching per-frame audio slices) and the video input
+keeps ffmpeg `-re`, so ffmpeg consumes in real time and the muxer output is
+smooth even if the writer's wall-clock sleep jitters. The earlier "lag -> EOF"
+failure mode is gone because the watchdog falls back to base-animation frames
+the moment the ready queue is empty, so ffmpeg's video input never goes quiet.
 """
 
 import logging
 import os
 import subprocess
-import threading
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -67,51 +69,31 @@ class FFmpegPipe:
             os.environ.get("STREAM_FFMPEG_LOG", f"/tmp/ffmpeg_{stream_id}.log")
         )
         self.proc: subprocess.Popen | None = None
-        self._audio_fifo: str | None = None       # path to named FIFO
-        self._audio_fh: "typing.BinaryIO | None" = None  # write end
-        self._stderr_thread: threading.Thread | None = None
+        self._audio_fd: int | None = None
 
     # ------------------------------------------------------------------ #
     # Lifecycle
     # ------------------------------------------------------------------ #
     def start(self) -> None:
-        """Launch ffmpeg. Video arrives on stdin; audio via a named FIFO."""
+        """Launch ffmpeg. Video arrives on stdin; audio on fd 3."""
         if self.proc is not None:
             return
 
-        import typing
-
-        # Create a named FIFO for audio; ffmpeg opens it as a regular path,
-        # avoiding all fd-inheritance issues inside Docker containers.
-        fifo_dir = Path(f"/tmp/talking-avatar-worker/live-{self.stream_id}")
-        fifo_dir.mkdir(parents=True, exist_ok=True)
-        fifo_path = str(fifo_dir / "audio.fifo")
-        try:
-            os.remove(fifo_path)
-        except FileNotFoundError:
-            pass
-        os.mkfifo(fifo_path)
-        self._audio_fifo = fifo_path
-
+        audio_r, audio_w = os.pipe()
         cmd = [
             self.ffmpeg_bin,
             "-y",
             "-loglevel", "warning",
-            "-thread_queue_size", "512",
-            "-probesize", "32",
-            "-analyzeduration", "0",
+            "-re",
             "-f", "rawvideo",
             "-pix_fmt", "bgr24",
             "-s", f"{self.width}x{self.height}",
             "-r", str(self.fps),
             "-i", "pipe:0",
-            "-thread_queue_size", "512",
-            "-probesize", "32",
-            "-analyzeduration", "0",
             "-f", "s16le",
             "-ar", str(AUDIO_SAMPLE_RATE),
             "-ac", "1",
-            "-i", fifo_path,
+            "-i", f"/dev/fd/{audio_r}",
         ]
         cmd += [
             "-c:v", "libx264",
@@ -127,51 +109,21 @@ class FFmpegPipe:
             self.rtmp_url,
         ]
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_file = open(self.log_path, "wb")
         self.proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+            stderr=log_file,
+            pass_fds=(audio_r,),
         )
-
-        # Drain stderr in background so it never blocks ffmpeg, and log it.
-        def _drain_stderr():
-            assert self.proc is not None
-            for line in self.proc.stderr:  # type: ignore[union-attr]
-                decoded = line.decode(errors="replace").rstrip()
-                if decoded:
-                    logger.warning("[ffmpeg:%s] %s", self.stream_id, decoded)
-
-        self._stderr_thread = threading.Thread(
-            target=_drain_stderr, daemon=True, name=f"ffmpeg-stderr-{self.stream_id}"
-        )
-        self._stderr_thread.start()
-
-        # Open the FIFO write end in a background thread — open() on a FIFO
-        # blocks until the reader (ffmpeg) also opens it, so we must not block
-        # the caller. Once ffmpeg has opened the read end, the open() returns.
-        def _open_fifo():
-            try:
-                fh = open(fifo_path, "wb", buffering=0)
-                self._audio_fh = fh
-                logger.info(
-                    "ffmpeg pipe started for stream %s -> %s",
-                    self.stream_id,
-                    self.rtmp_url,
-                )
-            except Exception as exc:
-                logger.error("failed to open audio FIFO for %s: %s", self.stream_id, exc)
-
-        fifo_thread = threading.Thread(
-            target=_open_fifo, daemon=True, name=f"fifo-open-{self.stream_id}"
-        )
-        fifo_thread.start()
-
+        os.close(audio_r)
+        self._audio_fd = audio_w
         logger.info(
-            "ffmpeg launching for stream %s -> %s (audio FIFO: %s)",
+            "ffmpeg pipe started for stream %s -> %s (log %s)",
             self.stream_id,
             self.rtmp_url,
-            fifo_path,
+            self.log_path,
         )
 
     # ------------------------------------------------------------------ #
@@ -194,7 +146,6 @@ class FFmpegPipe:
         self._check_alive()
         try:
             self.proc.stdin.write(bgr_frame.tobytes())  # type: ignore[union-attr]
-            self.proc.stdin.flush()  # type: ignore[union-attr]
         except (BrokenPipeError, OSError) as exc:
             raise FFmpegPipeClosedError(
                 f"video pipe closed for stream {self.stream_id} "
@@ -202,25 +153,25 @@ class FFmpegPipe:
             ) from exc
 
     def write_audio(self, pcm16_bytes: bytes) -> None:
-        """Write mono 16kHz s16le PCM."""
+        """Write mono 16kHz s16le PCM in small pieces to avoid pipe deadlocks."""
         self._check_alive()
-        # Wait for the FIFO to be opened by the background thread.
-        import time
-        while self._audio_fh is None:
-            self._check_alive()
-            time.sleep(0.01)
-        fh = self._audio_fh
+        if self._audio_fd is None:
+            raise FFmpegPipeClosedError(
+                f"audio pipe for stream {self.stream_id} was never started"
+            )
         try:
             view = memoryview(pcm16_bytes)
             pos = 0
             while pos < len(view):
-                written = fh.write(view[pos : pos + _AUDIO_WRITE_CHUNK])  # type: ignore[arg-type]
-                if not written:
-                    raise OSError("ffmpeg audio FIFO closed early")
+                written = os.write(
+                    self._audio_fd, view[pos : pos + _AUDIO_WRITE_CHUNK]
+                )
+                if written <= 0:
+                    raise OSError("ffmpeg audio pipe closed early")
                 pos += written
         except (BrokenPipeError, OSError) as exc:
             raise FFmpegPipeClosedError(
-                f"audio FIFO closed for stream {self.stream_id} "
+                f"audio pipe closed for stream {self.stream_id} "
                 f"(ffmpeg log: {self.log_path})"
             ) from exc
 
@@ -233,18 +184,8 @@ class FFmpegPipe:
         try:
             if self.proc is not None and self.proc.stdin:
                 self.proc.stdin.close()
-            if self._audio_fh is not None:
-                try:
-                    self._audio_fh.close()
-                except OSError:
-                    pass
-                self._audio_fh = None
-            if self._audio_fifo is not None:
-                try:
-                    os.remove(self._audio_fifo)
-                except FileNotFoundError:
-                    pass
-                self._audio_fifo = None
+            if self._audio_fd is not None:
+                os.close(self._audio_fd)
             if self.proc is not None:
                 code = self.proc.wait(timeout=timeout)
                 if code != 0:
@@ -256,5 +197,5 @@ class FFmpegPipe:
                     )
         finally:
             self.proc = None
-            self._audio_fh = None
+            self._audio_fd = None
         return code

@@ -64,6 +64,9 @@ logger = logging.getLogger("stream_worker")
 # watchdog from 24fps to ~21.5fps and makes the player buffer. Sleeping the
 # bulk then spinning the last few ms holds the deadline precisely.
 PACING_BUSY_TAIL = 0.004
+# If the watchdog goes this long without successfully writing a frame (e.g.
+# ffmpeg's pipe deadlocks), treat the pipe as dead and rebuild the session.
+STALL_RECOVERY_SECONDS = 8.0
 
 
 def _read_video_frames(path):
@@ -201,6 +204,12 @@ class LiveAvatarSession:
         self._last_health_log = 0.0
         self._last_watchdog_warn = 0.0
         self._last_write_warn = 0.0
+        # Heartbeat for the recovery monitor: updated on every frame write.
+        self._last_tick = 0.0
+        self.payload: dict | None = None
+        self._sessions_ref: dict | None = None
+        self._storage = None
+        self._work_root: Path | None = None
 
     # ------------------------------------------------------------------ #
     # Setup
@@ -276,6 +285,25 @@ class LiveAvatarSession:
             )
 
         h, w = self.base_frames[0].shape[:2]
+        # Preload the subtitle renderer + CJK font BEFORE the pipe starts.
+        # Loading STHeiti Medium.ttc and rendering the first overlay takes
+        # ~4.8s; doing it at talk time stalls the 24fps pipe for >5s and SRS
+        # kicks the publish (publish timeout 5000ms).
+        try:
+            if self._subtitle_enabled():
+                renderer = self._make_subtitle_renderer()
+                warmup = np.zeros((h, w, 3), dtype=np.uint8)
+                renderer.draw(warmup, "预热字幕")
+                logger.info(
+                    "avatar %s subtitle renderer warmed up",
+                    self.avatar_id,
+                )
+        except Exception:
+            logger.exception(
+                "avatar %s subtitle warmup failed (will retry lazily)",
+                self.avatar_id,
+            )
+
         self.pipe = FFmpegPipe(
             stream_id=self.stream_id,
             width=w,
@@ -391,6 +419,55 @@ class LiveAvatarSession:
             name=f"feed-{self.stream_id}",
         )
         self._feed_thread.start()
+        threading.Thread(
+            target=self._recovery_monitor,
+            args=(r,),
+            daemon=True,
+            name=f"recover-{self.stream_id}",
+        ).start()
+
+    def _recovery_monitor(self, r: redis.Redis) -> None:
+        """Rebuild the pipe if the watchdog stops making progress.
+
+        A blocked pipe write would otherwise freeze the stream forever (SRS
+        eventually kicks the publish). When the heartbeat stalls, kill ffmpeg
+        (unblocks the writer via EPIPE), drop the dead session and re-run the
+        session setup with the stored control payload so the stream resumes.
+        """
+        while self._running and not self._dead:
+            if self._last_tick and time.monotonic() - self._last_tick > STALL_RECOVERY_SECONDS:
+                stalled = time.monotonic() - self._last_tick
+                logger.error(
+                    "avatar %s watchdog stalled %.0fs without a frame — "
+                    "rebuilding the live pipe",
+                    self.avatar_id,
+                    stalled,
+                )
+                self._dead = True
+                self._running = False
+                try:
+                    self.pipe.stop(timeout=3)
+                except Exception:
+                    pass
+                if self._sessions_ref is not None:
+                    self._sessions_ref.pop(self.avatar_id, None)
+                if self.payload and self._storage is not None and self._work_root is not None:
+                    try:
+                        _setup_session(
+                            self.payload,
+                            self.stream_id,
+                            self._storage,
+                            self._work_root,
+                            self.fps,
+                            self._sessions_ref or {},
+                            r,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "avatar %s auto-rebuild failed", self.avatar_id
+                        )
+                return
+            time.sleep(2)
 
     # ------------------------------------------------------------------ #
     # Watchdog writer thread (continuous 24fps consumer)
@@ -441,7 +518,6 @@ class LiveAvatarSession:
                     kind = None
 
                 if kind == "frame" and cur_seg is not None:
-                    self._write_frame(payload)
                     # Pre-buffer the first 0.5s of audio before the first frame
                     # (ffmpeg waits for every input's first packet; this also
                     # gives the AAC encoder runway against writer jitter).
@@ -449,7 +525,11 @@ class LiveAvatarSession:
                         pre = cur_seg.next_slice(half_sec_bytes)
                         if pre:
                             self.pipe.write_audio(pre)
-                    # Write the periodic audio slice AFTER this frame.
+                    # Write the periodic audio slice BEFORE this frame: video
+                    # frames are ~2.7MB at 720x1280 and the pipe write can
+                    # block on ffmpeg backpressure for tens of ms. Writing
+                    # audio first means encoder starvation can never be caused
+                    # by a slow video write.
                     if (
                         cur_seg.frames_written > 0
                         and cur_seg.frames_written % half_sec_frames == 0
@@ -458,6 +538,8 @@ class LiveAvatarSession:
                         audio = cur_seg.next_slice(half_sec_bytes)
                         if audio:
                             self.pipe.write_audio(audio)
+                    self._write_frame(payload)
+                    self._last_tick = time.monotonic()
                     cur_seg.frames_written += 1
                     if cur_seg.frames_written >= cur_seg.total_frames:
                         if cur_seg.pos < len(cur_seg.audio):
@@ -475,9 +557,10 @@ class LiveAvatarSession:
                 else:
                     # Idle fallback: base animation + silence.
                     idle_count += 1
-                    self._write_frame(self._idle_frame())
                     if idle_count % half_sec_frames == 1:
                         self.pipe.write_audio(silence_slice)
+                    self._write_frame(self._idle_frame())
+                    self._last_tick = time.monotonic()
 
                 # Probe: actual work (pipe writes + subtitle overlay) and the
                 # real sleep; a loop over 45ms means we miss the 24fps cadence.
@@ -1049,6 +1132,11 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> 
             idle_video_keys=idle_keys,
         )
         session.setup()
+        # Stash what is needed to auto-rebuild the session if the pipe stalls.
+        session.payload = payload
+        session._sessions_ref = sessions
+        session._storage = storage
+        session._work_root = work_root
         sessions[avatar_id] = session
         session.start(r)
     except SystemExit:

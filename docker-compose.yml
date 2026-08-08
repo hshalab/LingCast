@@ -438,10 +438,16 @@ services:
   srs:
     image: ossrs/srs:5
     restart: unless-stopped
+    environment:
+      # Publish normal timeout (ms): default 5000 kicks the publisher on any
+      # ~5s stall; 30000 tolerates transient pipe stalls (cold font load,
+      # heavy producer tick) so the stream resumes instead of dying.
+      SRS_VHOST_PUBLISH_NORMAL_TIMEOUT: "30000"
     ports:
       - "1935:1935"   # RTMP ingest (host worker -> rtmp://localhost:1935/live/<id>)
     volumes:
       - srs-data:/usr/local/srs/objs
+      - ./infra/srs.conf:/usr/local/srs/conf/srs.conf:ro
 
   # ---- Public entry point (the only host-published service) ----
   frontend-admin:
