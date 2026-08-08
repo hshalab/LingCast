@@ -1013,7 +1013,7 @@ def _setup_session(payload, stream_id, storage, work_root, fps, sessions, r) -> 
         work_dir = work_root / f"live-{stream_id}"
         if work_dir.exists():
             shutil.rmtree(work_dir, ignore_errors=True)
-        work_dir.mkdir(parents=True)
+        work_dir.mkdir(parents=True, exist_ok=True)
         image_path = work_dir / ("image" + Path(payload["imageS3Key"]).suffix)
         storage.download(payload["imageS3Key"], image_path)
         idle_keys = payload.get("idleVideos") or []
