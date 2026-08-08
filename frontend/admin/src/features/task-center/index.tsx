@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api, type Avatar, type BroadcastTask } from '@/lib/api'
 import { TaskProgress } from '@/components/task-progress'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { VideoPlayerDialog } from '@/components/video-player-dialog'
 
 function showApiError(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
@@ -93,6 +94,7 @@ export function TaskCenter() {
   const [selectedAvatars, setSelectedAvatars] = useState<Set<number>>(new Set())
   const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set())
   const [deleteTaskTarget, setDeleteTaskTarget] = useState<BroadcastTask | null>(null)
+  const [previewAvatar, setPreviewAvatar] = useState<Avatar | null>(null)
   const locale = i18n.language === 'en' ? 'en-US' : 'zh-CN'
 
   const load = useCallback(async () => {
@@ -351,14 +353,19 @@ export function TaskCenter() {
                             </TableCell>
                             <TableCell className='text-right'>
                               <div className='flex justify-end gap-1'>
-                                <Button asChild variant='ghost' size='sm'>
-                                  <Link
-                                    to='/avatar-library'
-                                    search={{ avatarId: String(avatar.id) }}
-                                  >
-                                    <Eye className='size-3.5' />
-                                    {t('task.view')}
-                                  </Link>
+                                <Button
+                                  variant='ghost'
+                                  size='sm'
+                                  onClick={() => {
+                                    if (avatar.defaultVideoS3Url) {
+                                      setPreviewAvatar(avatar)
+                                    } else {
+                                      toast.info(t('task.avatarNoVideo'))
+                                    }
+                                  }}
+                                >
+                                  <Eye className='size-3.5' />
+                                  {t('task.view')}
                                 </Button>
                                 {avatar.status === 'initializing' && (
                                   <Button
@@ -625,6 +632,16 @@ export function TaskCenter() {
               )
             }
           }}
+        />
+        <VideoPlayerDialog
+          open={previewAvatar !== null}
+          url={previewAvatar?.defaultVideoS3Url}
+          title={
+            previewAvatar
+              ? `${previewAvatar.name} · ${t('task.avatarPreviewTitle')}`
+              : undefined
+          }
+          onClose={() => setPreviewAvatar(null)}
         />
       </Main>
     </>

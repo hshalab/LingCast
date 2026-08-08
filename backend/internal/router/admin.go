@@ -36,6 +36,7 @@ func RegisterAdmin(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 		api.GET("/live", liveHandler.ListSessions)
 		api.GET("/live/:avatarID/status", liveHandler.Status)
 		api.GET("/avatars/:id", avatarHandler.Get)
+		api.GET("/avatar-defaults", admin.AvatarDefaults(deps.Redis))
 
 		// ---- Protected: admin-only operations ----
 		protected := api.Group("", adminHandler.RequireAdmin())

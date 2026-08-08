@@ -28,6 +28,8 @@ func RegisterScheduler(r *gin.Engine, cfg config.Config, deps *app.Deps) {
 		api.POST("/avatars/:id/default-video", avatarHandler.UpdateDefaultVideo)
 		// Internal webhook used by the Python AI worker.
 		api.POST("/tasks/:id/status", taskHandler.UpdateStatus)
+		// Worker startup capability report (device -> recommended defaults).
+		api.POST("/worker/capability", admin.ReportWorkerCapability(deps.Redis))
 		// Internal endpoint used by stream_worker to restore active live sessions.
 		api.GET("/live", liveHandler.ListSessions)
 	}

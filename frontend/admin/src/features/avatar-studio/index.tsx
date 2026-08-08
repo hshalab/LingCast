@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/select'
 import {
   api,
+  getAvatarDefaults,
   getKnowledgeSelection,
   setKnowledgeSelection,
   type Avatar,
@@ -49,6 +50,11 @@ import {
   getCachedVoices,
   type EdgeVoice,
 } from './voices'
+import {
+  DEFAULT_LIVEPORTRAIT_SETTINGS,
+  LivePortraitSettingsPanel,
+} from './liveportrait-settings'
+import type { LivePortraitSettings } from '@/lib/api'
 
 function showApiError(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
@@ -106,6 +112,9 @@ export function AvatarStudio() {
   const [created, setCreated] = useState<Avatar | null>(null)
   const [initFailed, setInitFailed] = useState(false)
   const [collections, setCollections] = useState<KnowledgeSelectionItem[]>([])
+  const [lpSettings, setLpSettings] = useState<LivePortraitSettings>(
+    DEFAULT_LIVEPORTRAIT_SETTINGS,
+  )
 
   const selectedVoice = useMemo(
     () => voices.find((voice) => voice.id === voiceId) ?? voices[0],
@@ -131,6 +140,7 @@ export function AvatarStudio() {
         setEthnicity(data.persona?.ethnicity ?? '')
         setRelationshipStatus(data.persona?.relationshipStatus ?? '单身')
         setPersonality(data.persona?.personality ?? '')
+        setLpSettings(data.livePortraitSettings ?? DEFAULT_LIVEPORTRAIT_SETTINGS)
       })
       .catch(() => toast.error(t('studio.toastLoadFailed')))
   }, [editId])
@@ -144,6 +154,23 @@ export function AvatarStudio() {
     void getKnowledgeSelection(Number(editId))
       .then(setCollections)
       .catch(() => toast.error(t('studio.knowledgeLoadFailed')))
+  }, [editId])
+
+  // 创建模式：按 Worker 上报的硬件能力选择默认驱动模板。
+  useEffect(() => {
+    if (editId) return
+    void getAvatarDefaults()
+      .then((defaults) => {
+        if (defaults.drivingTemplate) {
+          setLpSettings((prev) => ({
+            ...prev,
+            drivingTemplate: defaults.drivingTemplate!,
+          }))
+        }
+      })
+      .catch(() => {
+        // 拉取失败时保持内置默认值（d1.pkl）。
+      })
   }, [editId])
 
   const toggleCollection = async (col: KnowledgeSelectionItem, checked: boolean) => {
@@ -217,6 +244,7 @@ export function AvatarStudio() {
         name: name.trim(),
         category,
         voiceId,
+        liveportraitSettings: lpSettings,
         persona: {
           age: age ? Number(age) : null,
           heightCm: heightCm ? Number(heightCm) : null,
@@ -244,6 +272,7 @@ export function AvatarStudio() {
       form.append('ethnicity', ethnicity.trim())
       form.append('relationship_status', relationshipStatus)
       form.append('personality', personality.trim())
+      form.append('liveportrait_settings', JSON.stringify(lpSettings))
       const { data } = await api.post<Avatar>('/avatars', form)
       setCreated(data)
       toast.info(t('studio.toastSubmitted'))
@@ -301,6 +330,8 @@ export function AvatarStudio() {
 
         <form onSubmit={handleSubmit} className='flex flex-col gap-4'>
         <div className='grid gap-4 lg:grid-cols-2'>
+          {/* 左列：基础信息 + 人物设定 + 知识库 */}
+          <div className='flex flex-col gap-4'>
           <Card>
             <CardHeader>
               <CardTitle>
@@ -437,8 +468,6 @@ export function AvatarStudio() {
             </CardContent>
           </Card>
 
-          {/* 右列：人物设定 + 知识库多选（平级面板） */}
-          <div className='flex flex-col gap-4'>
           <Card>
             <CardHeader>
               <CardTitle>{t('studio.persona')}</CardTitle>
@@ -555,6 +584,16 @@ export function AvatarStudio() {
               </CardContent>
             </Card>
           )}
+
+          </div>
+
+          {/* 右列：LivePortrait 参数面板（创建与编辑均可用） */}
+          <div className='flex flex-col gap-4'>
+          <LivePortraitSettingsPanel
+            value={lpSettings}
+            onChange={setLpSettings}
+            disabled={isInitializing}
+          />
           </div>
         </div>
 

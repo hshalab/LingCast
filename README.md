@@ -116,11 +116,11 @@ APIs or require high-end GPUs and complex voice-cloning pipelines. LingCast aims
 - [x] **Wav2Lip (ONNX) lip-sync**: mouth frames matched to speech on top of the pre-generated
   base video; ONNX + CoreML executors, CPU threads capped (default 4); short base videos
   loop automatically to cover scripts of any length.
-- [x] **Adjustable animation tempo**: swappable driving template and playback-speed / motion-
-  amplitude knobs (see the `LIVEPORTRAIT_DRIVING*` parameters under Configuration).
-- [x] **No-blinking base video**: the eye expression channels of the driving template are
-  frozen (no blinking), keeping shoulder shrugs / subtle body motion roughly every 3s
-  (`LIVEPORTRAIT_DRIVING_SPEED=0.2`).
+- [x] **Per-avatar LivePortrait tuning**: all inference/crop/output parameters are configured
+  in Avatar Studio (below the knowledge-base panel), stored on `avatars.liveportrait_settings`
+  and shipped to the worker inside the `avatar_init` task payload (no worker env knobs).
+- [x] **No-blinking base video**: with `drivingSpeed < 1` the eye expression channels of the
+  driving template are frozen (no blinking), keeping shoulder shrugs / subtle body motion.
 - [x] **Digital human categories**: a category (chat/knowledge/entertainment/game/sales/other)
   can be picked when creating; the viewer home filters live streams by category.
 - [x] **i18n (Chinese/English)**: the admin console and viewer app both ship Chinese and

@@ -149,11 +149,13 @@
 - ✅ `worker/download_models.py --models all`：克隆外部代码、下载权重、导出
   wav2lip ONNX、创建软链接（一键可复现）。
 - ✅ 性能：16 秒视频口型阶段约 10 秒；CPU 线程数受限（`WAV2LIP_THREADS`，默认 4）。
-- ✅ 动画节奏可调：默认驱动模板 d5.pkl，另有 `LIVEPORTRAIT_DRIVING_SPEED` /
-  `LIVEPORTRAIT_DRIVING_MULTIPLIER` 两个旋钮。
+- ✅ 动画参数业务化：LivePortrait 全部可调参数（驱动速度/幅度/模式、动画区域、
+  人脸裁剪、输出 fps/crf/分辨率/时长/模板）存 `avatars.liveportrait_settings`
+  JSON，Avatar Studio「知识库」下方面板配置，随 `avatar_init` 任务负载下发，
+  **Worker 不再读 env**（仅仓库路径/设备等机器级配置仍走 env）。
 - ✅ 基础视频默认去眨眼：`renderer_real.py` 冻结眼部表情通道（`EYE_EXP_DIMS`
-  取首帧值，`c_eyes/c_d_eyes_lst` 全帧复制首帧），保留耸肩/身体微晃；
-  `.env.local` 设 `LIVEPORTRAIT_DRIVING_SPEED=0.2`（约 3s 一次耸肩）。
+  取首帧值，`c_eyes/c_d_eyes_lst` 全帧复制首帧），保留耸肩/身体微晃（仅当
+  `drivingSpeed != 1.0` 时生效；面板里改参数后需重试重新生成基础视频）。
 - ✅ 播报成品预览：`broadcast/index.tsx` 状态卡片用 `VideoPlayerDialog`
   （xgplayer 封装），9:16 竖版最大 720×1080，模态窗播放。
 - ✅ 人脸修复（Wav2Lip 口型变形）：`worker/ai/enhancer.py` 双轨 ONNX 增强器——

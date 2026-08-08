@@ -42,6 +42,7 @@ type avatarResponse struct {
 	Status            string                `json:"status"`
 	InitQueuePos      *int                  `json:"initQueuePos,omitempty"`
 	LiveSettings      models.LiveSettings   `json:"liveSettings"`
+	LivePortraitSettings models.LivePortraitSettings `json:"livePortraitSettings"`
 	DefaultVideoS3URL *string               `json:"defaultVideoS3Url,omitempty"`
 	CreatedAt         time.Time             `json:"createdAt"`
 }
@@ -74,6 +75,113 @@ func ParsePersona(raw string) models.PersonaProfile {
 		return p
 	}
 	_ = json.Unmarshal([]byte(raw), &p)
+	return p
+}
+
+// normalizeLivePortraitSettings clamps every field into a valid range and
+// falls back to defaults for missing/zero values, so garbage from an old
+// client or hand-edited JSON cannot crash the worker.
+func normalizeLivePortraitSettings(s models.LivePortraitSettings) models.LivePortraitSettings {
+	d := models.DefaultLivePortraitSettings()
+	if s.DrivingSpeed <= 0 || s.DrivingSpeed > 4 {
+		s.DrivingSpeed = d.DrivingSpeed
+	}
+	if s.DrivingMultiplier < 0 || s.DrivingMultiplier > 3 {
+		s.DrivingMultiplier = d.DrivingMultiplier
+	}
+	if s.DrivingOption != "pose-friendly" {
+		s.DrivingOption = "expression-friendly"
+	}
+	switch s.AnimationRegion {
+	case "exp", "pose", "lip", "eyes", "all":
+	default:
+		s.AnimationRegion = "all"
+	}
+	if s.DrivingSmoothObservationVariance < 0 {
+		s.DrivingSmoothObservationVariance = d.DrivingSmoothObservationVariance
+	}
+	if s.DetThresh <= 0 || s.DetThresh > 1 {
+		s.DetThresh = d.DetThresh
+	}
+	if s.Scale < 1 || s.Scale > 6 {
+		s.Scale = d.Scale
+	}
+	if s.VxRatio < -1 || s.VxRatio > 1 {
+		s.VxRatio = d.VxRatio
+	}
+	if s.VyRatio < -1 || s.VyRatio > 1 {
+		s.VyRatio = d.VyRatio
+	}
+	if s.SourceMaxDim < 128 || s.SourceMaxDim > 8192 {
+		s.SourceMaxDim = d.SourceMaxDim
+	}
+	if s.SourceDivision < 1 || s.SourceDivision > 16 {
+		s.SourceDivision = d.SourceDivision
+	}
+	if s.ScaleCropDrivingVideo < 1 || s.ScaleCropDrivingVideo > 6 {
+		s.ScaleCropDrivingVideo = d.ScaleCropDrivingVideo
+	}
+	if s.VxRatioCropDrivingVideo < -1 || s.VxRatioCropDrivingVideo > 1 {
+		s.VxRatioCropDrivingVideo = d.VxRatioCropDrivingVideo
+	}
+	if s.VyRatioCropDrivingVideo < -1 || s.VyRatioCropDrivingVideo > 1 {
+		s.VyRatioCropDrivingVideo = d.VyRatioCropDrivingVideo
+	}
+	if s.OutputFPS <= 0 || s.OutputFPS > 60 {
+		s.OutputFPS = d.OutputFPS
+	}
+	if s.CRF < 0 || s.CRF > 51 {
+		s.CRF = d.CRF
+	}
+	if s.OutputFormat != "gif" {
+		s.OutputFormat = "mp4"
+	}
+	if s.BaseSeconds <= 0 || s.BaseSeconds > 300 {
+		s.BaseSeconds = d.BaseSeconds
+	}
+	if s.OutputWidth < 64 || s.OutputWidth > 4096 {
+		s.OutputWidth = d.OutputWidth
+	}
+	if s.OutputHeight < 64 || s.OutputHeight > 4096 {
+		s.OutputHeight = d.OutputHeight
+	}
+	s.DrivingTemplate = strings.TrimSpace(filepath.Base(s.DrivingTemplate))
+	if s.DrivingTemplate == "" || s.DrivingTemplate == "." || s.DrivingTemplate == "/" {
+		s.DrivingTemplate = d.DrivingTemplate
+	}
+	return s
+}
+
+// ParseLivePortraitSettings decodes the avatar's JSON liveportrait settings,
+// falling back to defaults for missing/invalid content.
+func ParseLivePortraitSettings(raw string) models.LivePortraitSettings {
+	s := models.DefaultLivePortraitSettings()
+	if strings.TrimSpace(raw) != "" {
+		if err := json.Unmarshal([]byte(raw), &s); err != nil {
+			return s
+		}
+	}
+	return normalizeLivePortraitSettings(s)
+}
+
+// marshalLivePortraitSettings serializes normalized settings for storage and
+// for the avatar_init queue payload (identity must be stable so Skip/Delete
+// can LRem the exact queued string).
+func marshalLivePortraitSettings(s models.LivePortraitSettings) (string, error) {
+	b, err := json.Marshal(normalizeLivePortraitSettings(s))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// avatarInitPayload builds the exact queue payload for an avatar, embedding
+// the stored (already normalized) liveportrait settings.
+func (h *AvatarHandler) avatarInitPayload(a models.Avatar) queue.AvatarInitPayload {
+	p := queue.AvatarInitPayload{AvatarID: a.ID, ImageS3Key: a.ImageS3Key}
+	if raw := strings.TrimSpace(a.LivePortraitSettings); raw != "" {
+		p.LivePortraitSettings = json.RawMessage(raw)
+	}
 	return p
 }
 
@@ -131,6 +239,12 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	lpRaw := strings.TrimSpace(c.PostForm("liveportrait_settings"))
+	lpData, err := marshalLivePortraitSettings(ParseLivePortraitSettings(lpRaw))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	imageHeader, err := c.FormFile("image")
 	if err != nil {
@@ -151,6 +265,7 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 		Persona:    persona,
 		VoiceID:    voiceID,
 		Status:     models.AvatarStatusInitializing,
+		LivePortraitSettings: lpData,
 	}
 	if err := h.db.Create(&avatar).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.avatar.save_failed", err.Error())})
@@ -159,11 +274,7 @@ func (h *AvatarHandler) Create(c *gin.Context) {
 
 	// Notify the worker to pre-process the image into a silent base driving
 	// video (LivePortrait) and write the S3 key back via the webhook below.
-	init := queue.AvatarInitPayload{
-		AvatarID:   avatar.ID,
-		ImageS3Key: imageKey,
-	}
-	if err := h.q.PushTo(c.Request.Context(), h.avatarInitQueueKey, init); err != nil {
+	if err := h.q.PushTo(c.Request.Context(), h.avatarInitQueueKey, h.avatarInitPayload(avatar)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.avatar.init_enqueue_failed", err.Error())})
 		return
 	}
@@ -200,10 +311,11 @@ func (h *AvatarHandler) Get(c *gin.Context) {
 }
 
 type updateAvatarRequest struct {
-	Name     string                `json:"name"`
-	Category string                `json:"category"`
-	VoiceID  string                `json:"voiceId"`
-	Persona  models.PersonaProfile `json:"persona"`
+	Name                  string                          `json:"name"`
+	Category              string                          `json:"category"`
+	VoiceID               string                          `json:"voiceId"`
+	Persona               models.PersonaProfile           `json:"persona"`
+	LivePortraitSettings  *models.LivePortraitSettings    `json:"liveportraitSettings"`
 	// Legacy flat fields: old admin clients sent the persona profile at the
 	// top level; keep accepting them so an outdated build cannot wipe the
 	// stored persona with an empty object.
@@ -281,6 +393,14 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 	}
 	if b, err := json.Marshal(persona); err == nil {
 		avatar.Persona = string(b)
+	}
+	if req.LivePortraitSettings != nil {
+		lpData, err := marshalLivePortraitSettings(*req.LivePortraitSettings)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		avatar.LivePortraitSettings = lpData
 	}
 	if err := h.db.Save(&avatar).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -478,10 +598,7 @@ func (h *AvatarHandler) Delete(c *gin.Context) {
 		}
 	}
 	_ = h.db.Where("avatar_id = ?", avatar.ID).Delete(&models.Scene{}).Error
-	if raw, err := json.Marshal(queue.AvatarInitPayload{
-		AvatarID:   avatar.ID,
-		ImageS3Key: avatar.ImageS3Key,
-	}); err == nil {
+	if raw, err := json.Marshal(h.avatarInitPayload(avatar)); err == nil {
 		_ = h.q.Remove(ctx, h.avatarInitQueueKey, string(raw))
 	}
 	_ = h.q.DeleteKey(ctx, fmt.Sprintf("live_queue:%d", avatar.ID))
@@ -549,10 +666,7 @@ func (h *AvatarHandler) Retry(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.q.PushTo(c.Request.Context(), h.avatarInitQueueKey, queue.AvatarInitPayload{
-		AvatarID:   avatar.ID,
-		ImageS3Key: avatar.ImageS3Key,
-	}); err != nil {
+	if err := h.q.PushTo(c.Request.Context(), h.avatarInitQueueKey, h.avatarInitPayload(avatar)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": i18n.Tcf(c, "err.task.enqueue_retry_failed", err.Error())})
 		return
 	}
@@ -593,10 +707,7 @@ func (h *AvatarHandler) Skip(c *gin.Context) {
 		return
 	}
 	// Remove any pending queue payload so the worker won't pick it up.
-	if raw, err := json.Marshal(queue.AvatarInitPayload{
-		AvatarID:   avatar.ID,
-		ImageS3Key: avatar.ImageS3Key,
-	}); err == nil {
+	if raw, err := json.Marshal(h.avatarInitPayload(avatar)); err == nil {
 		_ = h.q.Remove(c.Request.Context(), h.avatarInitQueueKey, string(raw))
 	}
 	c.JSON(http.StatusOK, toAvatarResponse(h.db, avatar, h.s3))
@@ -688,17 +799,19 @@ func (h *AvatarHandler) uploadFormFile(c *gin.Context, header *multipart.FileHea
 
 func toAvatarResponse(db *gorm.DB, a models.Avatar, s3 *storage.Client) avatarResponse {
 	liveSettings := ParseLiveSettings(a.LiveSettings)
+	livePortraitSettings := ParseLivePortraitSettings(a.LivePortraitSettings)
 	resp := avatarResponse{
-		ID:           a.ID,
-		Name:         a.Name,
-		ImageS3Key:   a.ImageS3Key,
-		ImageS3URL:   s3.PublicURL(a.ImageS3Key),
-		Category:     NormalizeCategory(a.Category),
-		Persona:      ParsePersona(a.Persona),
-		VoiceID:      a.VoiceID,
-		Status:       a.Status,
-		LiveSettings: liveSettings,
-		CreatedAt:    a.CreatedAt,
+		ID:                   a.ID,
+		Name:                 a.Name,
+		ImageS3Key:           a.ImageS3Key,
+		ImageS3URL:           s3.PublicURL(a.ImageS3Key),
+		Category:             NormalizeCategory(a.Category),
+		Persona:              ParsePersona(a.Persona),
+		VoiceID:              a.VoiceID,
+		Status:               a.Status,
+		LiveSettings:         liveSettings,
+		LivePortraitSettings: livePortraitSettings,
+		CreatedAt:            a.CreatedAt,
 	}
 	var scene models.Scene
 	if err := db.Where("avatar_id = ? AND is_default = ?", a.ID, true).

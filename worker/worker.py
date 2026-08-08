@@ -9,6 +9,7 @@ from hashlib import md5
 from pathlib import Path
 
 import redis
+import requests
 
 from ai.base import TaskInputs
 from ai.factory import create_pipeline
@@ -64,6 +65,32 @@ def _ensure_nltk_resources() -> None:
             nltk.download(name, quiet=True)
         except Exception as exc:
             logger.warning("nltk download %s failed: %s", name, exc)
+
+
+def _report_worker_capability(api_base: str) -> None:
+    """Tell the backend which inference device this worker runs on, so the
+    admin console can pick a hardware-appropriate default driving template.
+    Non-fatal: a failed report must never stop the worker."""
+    try:
+        from hardware import device_from_env
+
+        device = device_from_env("LIVEPORTRAIT") or "cpu"
+    except Exception:
+        device = "cpu"
+    url = f"{api_base.rstrip('/')}/api/worker/capability"
+    try:
+        resp = requests.post(
+            url,
+            json={"device": device, "cpus": os.cpu_count() or 1},
+            timeout=5,
+        )
+        logger.info(
+            "worker capability reported: device=%s -> HTTP %s",
+            device,
+            resp.status_code,
+        )
+    except Exception as exc:
+        logger.warning("worker capability report failed (non-fatal): %s", exc)
 
 
 def _load_local_env(env_file: Path | None = None) -> None:
@@ -355,13 +382,14 @@ def process_avatar_init(
 
         from ai.renderer_real import LivePortraitRenderer
 
-        renderer = LivePortraitRenderer()
-        seconds = float(os.environ.get("LIVEPORTRAIT_BASE_SECONDS", "10"))
-        base_video = renderer.render_base(image_path, work_dir, seconds=seconds)
+        # Tuning parameters now travel with the task payload (avatar
+        # liveportraitSettings) instead of worker environment variables.
+        renderer = LivePortraitRenderer(settings=payload.get("livePortraitSettings"))
+        base_video = renderer.render_base(image_path, work_dir)
         key = f"base_videos/{avatar_id}.mp4"
         storage.upload(key, base_video)
         callback.update_avatar_default_video(avatar_id, key, status="ready")
-        logger.info("avatar %s base video ready: %s (%.1fs)", avatar_id, key, seconds)
+        logger.info("avatar %s base video ready: %s", avatar_id, key)
     except Exception:
         logger.exception("avatar %s base video preprocess failed", avatar_id)
     finally:
@@ -374,6 +402,7 @@ def main() -> None:
     if os.environ.get("TTS_ENGINE", "edge") == "gpt-sovits":
         _ensure_nltk_resources()
     cfg = load_config()
+    _report_worker_capability(cfg["api_base_url"])
     storage = S3Storage()
     pipeline = create_pipeline(os.environ.get("AI_MODE", "mock"))
     callback = TaskCallback(cfg["api_base_url"])

@@ -42,8 +42,9 @@ type LiveControlPayload struct {
 // AvatarInitPayload tells the worker to pre-process a newly created avatar
 // into a silent base driving video (LivePortrait) and store it in S3.
 type AvatarInitPayload struct {
-	AvatarID   uint   `json:"avatarId"`
-	ImageS3Key string `json:"imageS3Key"`
+	AvatarID             uint            `json:"avatarId"`
+	ImageS3Key           string          `json:"imageS3Key"`
+	LivePortraitSettings json.RawMessage `json:"livePortraitSettings,omitempty"`
 }
 
 // KnowledgeIngestPayload tells the Python RAG worker to extract, chunk and

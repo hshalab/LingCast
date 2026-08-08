@@ -19,9 +19,15 @@ export type Avatar = {
   persona?: Persona
   status: 'initializing' | 'ready' | 'failed' | 'skipped'
   liveSettings?: LiveSettings
+  livePortraitSettings?: LivePortraitSettings
   defaultVideoS3Url?: string
   initQueuePos?: number
   createdAt: string
+}
+
+export type AvatarDefaults = {
+  device?: string
+  drivingTemplate?: string
 }
 
 export type SceneVideo = {
@@ -53,6 +59,41 @@ export type LiveSettings = {
   idleSceneId?: number
   idleSwitchMode?: 'interval' | 'random'
   idleSwitchSeconds?: number
+}
+
+export type LivePortraitSettings = {
+  drivingSpeed: number
+  drivingMultiplier: number
+  drivingOption: 'expression-friendly' | 'pose-friendly'
+  animationRegion: 'all' | 'exp' | 'pose' | 'lip' | 'eyes'
+  useHalfPrecision: boolean
+  flagCropDrivingVideo: boolean
+  flagNormalizeLip: boolean
+  flagEyeRetargeting: boolean
+  flagLipRetargeting: boolean
+  flagSourceVideoEyeRetargeting: boolean
+  flagStitching: boolean
+  flagRelativeMotion: boolean
+  flagPasteback: boolean
+  flagDoCrop: boolean
+  flagDoRot: boolean
+  drivingSmoothObservationVariance: number
+  detThresh: number
+  scale: number
+  vxRatio: number
+  vyRatio: number
+  sourceMaxDim: number
+  sourceDivision: number
+  scaleCropDrivingVideo: number
+  vxRatioCropDrivingVideo: number
+  vyRatioCropDrivingVideo: number
+  outputFps: number
+  crf: number
+  outputFormat: 'mp4' | 'gif'
+  baseSeconds: number
+  outputWidth: number
+  outputHeight: number
+  drivingTemplate: string
 }
 
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed'
@@ -219,6 +260,11 @@ export async function getKnowledgeSelection(
     `/avatars/${avatarId}/knowledge-selection`,
   )
   return data.data
+}
+
+export async function getAvatarDefaults(): Promise<AvatarDefaults> {
+  const { data } = await api.get<AvatarDefaults>('/avatar-defaults')
+  return data
 }
 
 export async function setKnowledgeSelection(

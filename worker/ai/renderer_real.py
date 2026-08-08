@@ -11,15 +11,12 @@ input. For phoneme-accurate audio-driven lip sync, a dedicated lip-sync model
 (e.g. Wav2Lip) can be added as a post-stage; the renderer interface makes that
 a drop-in change.
 
-Motion feel is controlled by the driving template plus two knobs:
-  - LIVEPORTRAIT_DRIVING: which .pkl template drives the animation (default
-    d1.pkl: idle eyes/shoulders with NO mouth movement; pair it with
-    LIVEPORTRAIT_DRIVING_SPEED ~0.6 so the 0.5s cycle is not frantic).
-  - LIVEPORTRAIT_DRIVING_SPEED: temporal playback speed (1.0 = original;
-    0.5 = half speed / 2x slower). The template's motion features are
-    interpolated in time, so blinks and shoulder motion become calmer.
-  - LIVEPORTRAIT_DRIVING_MULTIPLIER: motion amplitude (1.0 = original;
-    0.7 = subtler gestures), passed to LivePortrait's driving_multiplier.
+Motion feel is controlled by the driving template plus per-avatar tuning
+parameters (LivePortrait inference/crop/output knobs). The tuning values no
+longer come from environment variables: they are passed explicitly in the
+`settings` dict (the avatar's `liveportraitSettings` JSON from the business
+layer). Only machine-level paths (repo/models dir, device) still come from
+the environment.
 """
 
 import logging
@@ -36,16 +33,77 @@ logger = logging.getLogger(__name__)
 WORKER_ROOT = Path(__file__).resolve().parent.parent
 
 
+def _num(data: dict, key: str, default: float) -> float:
+    try:
+        return float(data.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _int(data: dict, key: str, default: int) -> int:
+    try:
+        return int(data.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+class LivePortraitParams:
+    """Explicit per-avatar rendering parameters (no env reads).
+
+    Missing keys fall back to the defaults the renderer used before settings
+    became business data, so `{}` behaves exactly like the old default env.
+    """
+
+    def __init__(self, settings: dict | None = None):
+        s = settings or {}
+        self.driving_speed = _num(s, "drivingSpeed", 1.0)
+        self.driving_multiplier = _num(s, "drivingMultiplier", 1.0)
+        self.driving_option = s.get("drivingOption") or "expression-friendly"
+        self.animation_region = s.get("animationRegion") or "all"
+        self.use_half_precision = bool(s.get("useHalfPrecision", True))
+        self.flag_crop_driving_video = bool(s.get("flagCropDrivingVideo", False))
+        self.flag_normalize_lip = bool(s.get("flagNormalizeLip", False))
+        self.flag_eye_retargeting = bool(s.get("flagEyeRetargeting", False))
+        self.flag_lip_retargeting = bool(s.get("flagLipRetargeting", False))
+        self.flag_source_video_eye_retargeting = bool(
+            s.get("flagSourceVideoEyeRetargeting", False)
+        )
+        self.flag_stitching = bool(s.get("flagStitching", True))
+        self.flag_relative_motion = bool(s.get("flagRelativeMotion", True))
+        self.flag_pasteback = bool(s.get("flagPasteback", True))
+        self.flag_do_crop = bool(s.get("flagDoCrop", True))
+        self.flag_do_rot = bool(s.get("flagDoRot", True))
+        self.driving_smooth_observation_variance = _num(
+            s, "drivingSmoothObservationVariance", 3e-7
+        )
+        self.det_thresh = _num(s, "detThresh", 0.15)
+        self.scale = _num(s, "scale", 2.3)
+        self.vx_ratio = _num(s, "vxRatio", 0.0)
+        self.vy_ratio = _num(s, "vyRatio", -0.125)
+        self.source_max_dim = _int(s, "sourceMaxDim", 1280)
+        self.source_division = _int(s, "sourceDivision", 2)
+        self.scale_crop_driving_video = _num(s, "scaleCropDrivingVideo", 2.2)
+        self.vx_ratio_crop_driving_video = _num(s, "vxRatioCropDrivingVideo", 0.0)
+        self.vy_ratio_crop_driving_video = _num(s, "vyRatioCropDrivingVideo", -0.1)
+        self.output_fps = _int(s, "outputFps", 24)
+        self.crf = _int(s, "crf", 15)
+        self.output_format = s.get("outputFormat") or "mp4"
+        self.base_seconds = _num(s, "baseSeconds", 4.0)
+        self.output_width = _int(s, "outputWidth", 720)
+        self.output_height = _int(s, "outputHeight", 1280)
+        self.driving_template = (s.get("drivingTemplate") or "").strip()
+
+
 class LivePortraitRenderer:
     def __init__(
         self,
+        settings: dict | None = None,
         repo_dir: Path | None = None,
         models_dir: Path | None = None,
         driving: Path | None = None,
         device: str | None = None,
-        output_fps: int | None = None,
-        half: bool | None = None,
     ):
+        self.params = LivePortraitParams(settings)
         self.repo_dir = repo_dir or Path(
             os.environ.get("LIVEPORTRAIT_REPO", WORKER_ROOT / "external" / "LivePortrait")
         )
@@ -54,25 +112,29 @@ class LivePortraitRenderer:
                 "LIVEPORTRAIT_MODELS_DIR", WORKER_ROOT / "models" / "liveportrait"
             )
         )
-        self.driving = driving or Path(
+        default_driving = Path(
             os.environ.get(
                 "LIVEPORTRAIT_DRIVING",
                 self.repo_dir / "assets" / "examples" / "driving" / "d1.pkl",
             )
         )
+        if driving is not None:
+            self.driving = Path(driving)
+        elif self.params.driving_template:
+            self.driving = (
+                self.repo_dir
+                / "assets"
+                / "examples"
+                / "driving"
+                / Path(self.params.driving_template).name
+            )
+        else:
+            self.driving = default_driving
         self.device = device or device_from_env("LIVEPORTRAIT") or "cpu"
-        self.output_fps = output_fps or int(os.environ.get("LIVEPORTRAIT_OUTPUT_FPS", "24"))
-        self.driving_speed = float(
-            os.environ.get("LIVEPORTRAIT_DRIVING_SPEED", "1.0")
-        )
-        self.driving_multiplier = float(
-            os.environ.get("LIVEPORTRAIT_DRIVING_MULTIPLIER", "1.0")
-        )
-        self.half = (
-            half
-            if half is not None
-            else os.environ.get("LIVEPORTRAIT_HALF", "").lower() == "true"
-        )
+        self.output_fps = self.params.output_fps
+        self.driving_speed = self.params.driving_speed
+        self.driving_multiplier = self.params.driving_multiplier
+        self.half = self.params.use_half_precision
 
         self._weights_base = self.models_dir / "liveportrait"
         self._check_environment()
@@ -80,7 +142,7 @@ class LivePortraitRenderer:
     # ------------------------------------------------------------------ #
     # Renderer interface
     # ------------------------------------------------------------------ #
-    def render_base(self, image_path: Path, work_dir: Path, seconds: float = 10.0) -> Path:
+    def render_base(self, image_path: Path, work_dir: Path, seconds: float | None = None) -> Path:
         """Pre-process a static avatar image into a silent base driving video.
 
         Runs LivePortrait once with the default driving template and returns a
@@ -88,6 +150,7 @@ class LivePortraitRenderer:
         preprocessing step: neither the offline nor the live pipeline calls
         LivePortrait at inference time anymore.
         """
+        seconds = self.params.base_seconds if seconds is None else seconds
         silent = work_dir / "silent_base.wav"
         silent.parent.mkdir(parents=True, exist_ok=True)
         with wave.open(str(silent), "wb") as w:
@@ -111,8 +174,10 @@ class LivePortraitRenderer:
         if not self.driving.exists():
             raise FileNotFoundError(
                 f"driving input not found: {self.driving}\n"
-                "Set LIVEPORTRAIT_DRIVING to a driving video or a .pkl motion "
-                "template from the LivePortrait repo (assets/examples/driving)."
+                "Pick a .pkl template that exists in the LivePortrait repo "
+                "(assets/examples/driving) via the avatar's "
+                "liveportraitSettings.drivingTemplate, or set "
+                "LIVEPORTRAIT_DRIVING for the default path."
             )
 
         sys.path.insert(0, str(self.repo_dir))
@@ -143,10 +208,40 @@ class LivePortraitRenderer:
             device_id=0,
             flag_force_cpu=(self.device == "cpu"),
             flag_use_half_precision=self.half,
+            driving_option=self.params.driving_option,
+            driving_multiplier=self.params.driving_multiplier,
+            driving_smooth_observation_variance=(
+                self.params.driving_smooth_observation_variance
+            ),
+            animation_region=self.params.animation_region,
+            flag_crop_driving_video=self.params.flag_crop_driving_video,
+            flag_normalize_lip=self.params.flag_normalize_lip,
+            flag_eye_retargeting=self.params.flag_eye_retargeting,
+            flag_lip_retargeting=self.params.flag_lip_retargeting,
+            flag_source_video_eye_retargeting=(
+                self.params.flag_source_video_eye_retargeting
+            ),
+            flag_stitching=self.params.flag_stitching,
+            flag_relative_motion=self.params.flag_relative_motion,
+            flag_pasteback=self.params.flag_pasteback,
+            flag_do_crop=self.params.flag_do_crop,
+            flag_do_rot=self.params.flag_do_rot,
+            det_thresh=self.params.det_thresh,
+            scale=self.params.scale,
+            vx_ratio=self.params.vx_ratio,
+            vy_ratio=self.params.vy_ratio,
+            source_max_dim=self.params.source_max_dim,
+            source_division=self.params.source_division,
+            scale_crop_driving_video=self.params.scale_crop_driving_video,
+            vx_ratio_crop_driving_video=self.params.vx_ratio_crop_driving_video,
+            vy_ratio_crop_driving_video=self.params.vy_ratio_crop_driving_video,
         )
 
         inference_cfg = partial_fields(InferenceConfig, args.__dict__)
         crop_cfg = partial_fields(CropConfig, args.__dict__)
+        inference_cfg.output_fps = self.params.output_fps
+        inference_cfg.crf = self.params.crf
+        inference_cfg.output_format = self.params.output_format
 
         inference_cfg.checkpoint_F = str(self._weights_base / "base_models" / "appearance_feature_extractor.pth")
         inference_cfg.checkpoint_M = str(self._weights_base / "base_models" / "motion_extractor.pth")
@@ -297,8 +392,8 @@ class LivePortraitRenderer:
         """
         final = work_dir / "base_video.mp4"
         duration = self._audio_duration(tts_wav)
-        width = int(os.environ.get("LIVEPORTRAIT_OUTPUT_WIDTH", "720"))
-        height = int(os.environ.get("LIVEPORTRAIT_OUTPUT_HEIGHT", "1280"))
+        width = self.params.output_width
+        height = self.params.output_height
         vf = (
             f"scale={width}:{height}:force_original_aspect_ratio=increase,"
             f"crop={width}:{height}"
