@@ -670,6 +670,7 @@ func (h *LiveHandler) Message(c *gin.Context) {
 // failure is logged and degrades gracefully (the viewer still sees their own
 // message via history polling; the bot simply stays silent on this one).
 func (h *LiveHandler) processChatReply(ctx context.Context, lang, userText string, avatar models.Avatar, userID uint) {
+	t0 := time.Now()
 	reply, ragFacts := h.llmChat(ctx, lang, userText, avatar)
 	chunks := splitSentences(reply)
 	if len(chunks) == 0 {
@@ -704,20 +705,23 @@ func (h *LiveHandler) processChatReply(ctx context.Context, lang, userText strin
 	historyKey := liveHistoryKey(avatar.ID)
 	for _, chunk := range chunks {
 		clean, actionKey := parseActionTag(chunk)
-		entry := clean
+		payload := map[string]any{
+			"text": clean,
+			"ts":   time.Now().UnixMilli(), // worker 用 queue age 计算端到端延迟
+		}
 		if actionKey != "" {
-			if b, err := json.Marshal(map[string]any{
-				"text":              clean,
-				"base_video_s3_key": actionKey,
-			}); err == nil {
-				entry = string(b)
-			}
+			payload["base_video_s3_key"] = actionKey
+		}
+		entry := clean
+		if b, err := json.Marshal(payload); err == nil {
+			entry = string(b)
 		}
 		_ = h.q.RPushList(ctx, key, entry)
 		_ = h.q.RPushList(ctx, historyKey, clean)
 	}
 	_ = h.q.TrimList(ctx, historyKey, -200, -1)
-	log.Printf("[live] avatar %d bot reply queued (%d chunks)", avatar.ID, len(chunks))
+	log.Printf("[live] avatar %d bot reply queued (%d chunks) in %dms",
+		avatar.ID, len(chunks), time.Since(t0).Milliseconds())
 }
 
 // Chat implements POST /api/live/chat — the live-chat orchestrator. It runs
@@ -749,6 +753,7 @@ func (h *LiveHandler) processChatReply(ctx context.Context, lang, userText strin
 // @Success  200 {object} map[string]any
 // @Router   /live/chat [post]
 func (h *LiveHandler) Chat(c *gin.Context) {
+	turnStart := time.Now()
 	var req liveChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.SessionID == 0 || strings.TrimSpace(req.Text) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Tc(c, "err.live.text_required")})
@@ -827,6 +832,7 @@ func (h *LiveHandler) Chat(c *gin.Context) {
 	collector := &sentenceCollector{}
 	sentences := make([]string, 0, 8)
 	var reply strings.Builder
+	tStream := time.Now()
 	for stream.Next() {
 		event := stream.Current()
 		delta := event.AsResponseOutputTextDelta()
@@ -845,21 +851,28 @@ func (h *LiveHandler) Chat(c *gin.Context) {
 	if err := stream.Err(); err != nil {
 		log.Printf("[chat] LLM stream error (partial reply kept): %v", err)
 	}
+	llmStreamMs := time.Since(tStream).Milliseconds()
 	sentences = append(sentences, collector.flush()...)
 
 	// ---- 4. Ordered TTS synthesis + queueing (serial => strict order) ----
 	queued := 0
+	var ttsEnqueueTotal time.Duration
 	for _, sentence := range sentences {
 		if ctx.Err() != nil {
 			log.Printf("[chat] client disconnected; %d/%d sentences queued", queued, len(sentences))
 			return
 		}
 		clean, actionKey := parseActionTag(sentence)
+		tSent := time.Now()
 		if err := h.synthesizeAndEnqueue(ctx, avatar, clean, actionKey); err != nil {
 			// One bad sentence must not crash the whole turn.
 			log.Printf("[chat] sentence skipped (%v): %q", err, clean)
 			continue
 		}
+		sentMs := time.Since(tSent).Milliseconds()
+		ttsEnqueueTotal += time.Since(tSent)
+		log.Printf("[chat] avatar %d sentence %d TTS+enqueue took %dms",
+			avatar.ID, queued+1, sentMs)
 		queued++
 	}
 
@@ -879,6 +892,9 @@ func (h *LiveHandler) Chat(c *gin.Context) {
 		RAGHit:     len(ragFacts) > 0,
 		RAGSources: ragJSON,
 	})
+	log.Printf("[chat] avatar %d turn: llm_stream=%dms tts_enqueue_total=%dms total=%dms sentences=%d queued=%d",
+		avatar.ID, llmStreamMs, ttsEnqueueTotal.Milliseconds(),
+		time.Since(turnStart).Milliseconds(), len(sentences), queued)
 
 	c.JSON(http.StatusOK, liveChatResponse{
 		Status:    "success",
@@ -968,15 +984,20 @@ func (h *LiveHandler) llmChat(ctx context.Context, lang, userText string, avatar
 		return userText, nil
 	}
 
+	tStart := time.Now()
 	client := openai.NewClient(
 		option.WithBaseURL(strings.TrimRight(h.openAIBaseURL, "/")),
 		option.WithAPIKey(h.openAIAPIKey),
 	)
 	memory := h.recentMessages(avatar.ID, 10)
+	memMs := time.Since(tStart).Milliseconds()
+	tRag := time.Now()
 	ragFacts := h.retrieveKnowledge(ctx, avatar.ID, userText, 500*time.Millisecond)
+	ragMs := time.Since(tRag).Milliseconds()
 	if len(ragFacts) > 0 {
 		log.Printf("[rag] avatar %d retrieved %d fact(s)", avatar.ID, len(ragFacts))
 	}
+	tLLM := time.Now()
 	resp, err := client.Responses.New(ctx, responses.ResponseNewParams{
 		Model: h.openAIModel,
 		Instructions: openai.String(chatSystemPrompt(avatar, lang, memory, ragFacts,
@@ -989,10 +1010,13 @@ func (h *LiveHandler) llmChat(ctx context.Context, lang, userText string, avatar
 		log.Printf("[llm] request failed: %v", err)
 		return userText, ragFacts
 	}
+	llmMs := time.Since(tLLM).Milliseconds()
 	reply := strings.TrimSpace(resp.OutputText())
 	if reply == "" {
 		return userText, ragFacts
 	}
+	log.Printf("[live] avatar %d llm nodes: memory=%dms rag=%dms llm=%dms total=%dms",
+		avatar.ID, memMs, ragMs, llmMs, time.Since(tStart).Milliseconds())
 	log.Printf("[llm] %s -> %s", userText, reply)
 	return reply, ragFacts
 }

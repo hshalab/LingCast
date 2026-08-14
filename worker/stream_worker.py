@@ -98,8 +98,8 @@ def _read_video_frames(path):
     return Wav2LipOnnxLipSync._read_frames(path)
 
 
-def parse_live_message(raw: str) -> tuple[str, str | None, str | None]:
-    """Parse one live_queue entry into (text, tts_s3_key, base_video_s3_key).
+def parse_live_message(raw: str) -> tuple[str, str | None, str | None, int]:
+    """Parse one live_queue entry into (text, tts_s3_key, base_video_s3_key, ts_ms).
 
     The queue carries plain-text sentences (the legacy/current producer) or
     JSON messages from the S3-shared-storage architecture:
@@ -107,20 +107,22 @@ def parse_live_message(raw: str) -> tuple[str, str | None, str | None]:
     The optional `base_video_s3_key` selects a specific action video to
     lip-sync THIS sentence against (agentic action selection); when absent the
     session falls back to the currently displayed idle clip.
+    `ts_ms` is the backend enqueue wall-clock (ms) used to measure queue age.
     """
     raw = (raw or "").strip()
     if not raw:
-        return "", None, None
+        return "", None, None, 0
     try:
         obj = json.loads(raw)
         if isinstance(obj, dict):
             text = str(obj.get("text") or obj.get("content") or "")
             tts_key = str(obj.get("tts_s3_key") or "").strip() or None
             base_key = str(obj.get("base_video_s3_key") or "").strip() or None
-            return text, tts_key, base_key
+            ts_ms = int(obj.get("ts") or 0)
+            return text, tts_key, base_key, ts_ms
     except (json.JSONDecodeError, TypeError):
         pass
-    return raw, None, None
+    return raw, None, None, 0
 
 
 class _TalkingSegment:
@@ -388,13 +390,14 @@ class LiveAvatarSession:
         text: str,
         tts_s3_key: str | None = None,
         base_video_key: str | None = None,
+        queued_ts: int = 0,
     ) -> bool:
         """Kick off a producer-side TTS job (synthesize or S3 download)."""
         if self._tts_thread is not None and self._tts_thread.is_alive():
             return False
         self._tts_thread = threading.Thread(
             target=self._run_tts,
-            args=(text, tts_s3_key, base_video_key),
+            args=(text, tts_s3_key, base_video_key, queued_ts),
             daemon=True,
             name=f"tts-{self.stream_id}",
         )
@@ -406,6 +409,7 @@ class LiveAvatarSession:
         text: str,
         tts_s3_key: str | None = None,
         base_video_key: str | None = None,
+        queued_ts: int = 0,
     ) -> None:
         """Synthesize locally or download a shared TTS wav from S3.
 
@@ -413,6 +417,7 @@ class LiveAvatarSession:
         block the watchdog writer thread. The resulting wav is handed to the
         frame producer, which removes it once Wav2Lip has consumed it.
         """
+        t_job = time.perf_counter()
         try:
             out = self.work_dir / f"chunk_{int(time.time() * 1000)}.wav"
             if tts_s3_key:
@@ -443,10 +448,18 @@ class LiveAvatarSession:
                 )
             wav = out
             logger.info("avatar %s TTS ready (%.1fs): %s", self.avatar_id, _wav_duration(wav), text)
-            self._tts_results.put((text, wav, base_video_key))
+            logger.info(
+                "[CHAIN] avatar %s TTS total %.0fms (queue_age %.0fms) audio %.1fs : %.28s",
+                self.avatar_id,
+                (time.perf_counter() - t_job) * 1000.0,
+                time.time() * 1000.0 - queued_ts if queued_ts else 0.0,
+                _wav_duration(wav),
+                text,
+            )
+            self._tts_results.put((text, wav, base_video_key, time.perf_counter()))
         except Exception:
             logger.exception("avatar %s TTS failed for: %s", self.avatar_id, text)
-            self._tts_results.put((text, None, base_video_key))
+            self._tts_results.put((text, None, base_video_key, time.perf_counter()))
 
     def _get_tts(self):
         if self.tts is None:
@@ -545,6 +558,7 @@ class LiveAvatarSession:
         silence_slice = b"\x00\x00" * (half_sec_bytes // 2)
         idle_count = 0
         cur_seg: _TalkingSegment | None = None
+        seg_start_ts: float | None = None
         next_tick = time.perf_counter()
         logger.info("avatar %s watchdog writer started @ %.3fs/frame", self.avatar_id, interval)
         try:
@@ -567,6 +581,7 @@ class LiveAvatarSession:
                 if kind == "seg" and payload is not None:
                     cur_seg = payload
                     self._subtitle_text = payload.text
+                    seg_start_ts = time.perf_counter()
                     kind = None  # this tick still writes an idle frame
 
                 if kind == "seg_end":
@@ -574,9 +589,17 @@ class LiveAvatarSession:
                     # current segment and fall back to idle immediately.
                     cur_seg = None
                     self._subtitle_text = ""
+                    seg_start_ts = None
                     kind = None
 
                 if kind == "frame" and cur_seg is not None:
+                    if cur_seg.frames_written == 0 and seg_start_ts is not None:
+                        logger.info(
+                            "[CHAIN] avatar %s seg->first talking frame %.0fms",
+                            self.avatar_id,
+                            (time.perf_counter() - seg_start_ts) * 1000.0,
+                        )
+                        seg_start_ts = None
                     # Pre-buffer the first 0.5s of audio before the first frame
                     # (ffmpeg waits for every input's first packet; this also
                     # gives the AAC encoder runway against writer jitter).
@@ -830,14 +853,20 @@ class LiveAvatarSession:
         ) and not self._pending.full():
             raw = r.lpop(self.queue_key)
             if raw:
-                text, tts_s3_key, base_video_key = parse_live_message(raw)
+                text, tts_s3_key, base_video_key, queued_ts = parse_live_message(raw)
                 if text or tts_s3_key:
-                    self.maybe_start_tts(text, tts_s3_key, base_video_key)
+                    if queued_ts:
+                        logger.info(
+                            "[CHAIN] avatar %s queue age %.0fms (backend push -> worker pop)",
+                            self.avatar_id,
+                            time.time() * 1000.0 - queued_ts,
+                        )
+                    self.maybe_start_tts(text, tts_s3_key, base_video_key, queued_ts)
 
         # 2) Move finished TTS results into the producer's pending queue.
         try:
-            text, wav, base_video_key = self._tts_results.get_nowait()
-            self._pending.put((text, wav, base_video_key))
+            text, wav, base_video_key, tts_ready_ts = self._tts_results.get_nowait()
+            self._pending.put((text, wav, base_video_key, tts_ready_ts))
         except queue_mod.Empty:
             pass
 
@@ -845,10 +874,10 @@ class LiveAvatarSession:
         if (
             self._produce_thread is None or not self._produce_thread.is_alive()
         ) and not self._pending.empty():
-            text, wav, base_video_key = self._pending.get_nowait()
+            text, wav, base_video_key, tts_ready_ts = self._pending.get_nowait()
             self._produce_thread = threading.Thread(
                 target=self._produce_segment,
-                args=(text, wav, base_video_key),
+                args=(text, wav, base_video_key, tts_ready_ts),
                 daemon=True,
                 name=f"produce-{self.stream_id}",
             )
@@ -888,7 +917,13 @@ class LiveAvatarSession:
     # ------------------------------------------------------------------ #
     # Inference producer (async; Wav2Lip in small batches)
     # ------------------------------------------------------------------ #
-    def _produce_segment(self, text: str, wav, base_video_key: str | None = None) -> None:
+    def _produce_segment(
+        self,
+        text: str,
+        wav,
+        base_video_key: str | None = None,
+        tts_ready_ts: float | None = None,
+    ) -> None:
         """Lip-sync `wav` in small batches and push frames to the writer queue.
 
         Runs on its own thread so it never blocks the 24fps writer. The segment
@@ -899,6 +934,13 @@ class LiveAvatarSession:
         if wav is None:
             logger.warning("avatar %s chunk skipped (TTS failed)", self.avatar_id)
             return
+        t_prod = time.perf_counter()
+        if tts_ready_ts:
+            logger.info(
+                "[CHAIN] avatar %s TTS ready -> producer started %.0fms",
+                self.avatar_id,
+                (t_prod - tts_ready_ts) * 1000.0,
+            )
         try:
             # Probe: NumPy/SciPy audio + mel pre-processing (before ONNX).
             t_pre = time.perf_counter()
@@ -931,7 +973,10 @@ class LiveAvatarSession:
                 wav, base_slice, self.fps, timing=_timing
             )
             pushed = 0
+            t_first = None
             for frame in frames:
+                if t_first is None:
+                    t_first = time.perf_counter()
                 self._talk_queue.put(("frame", frame))
                 pushed += 1
             inf_ms = (time.perf_counter() - t_inf) * 1000.0
@@ -945,6 +990,13 @@ class LiveAvatarSession:
                 stage_ms.get("face_detect", 0.0),
                 stage_ms.get("preprocess", 0.0),
                 stage_ms.get("onnx_batch", 0.0),
+            )
+            logger.info(
+                "[CHAIN] avatar %s produce: first-frame %.0fms total %.0fms (%d frames)",
+                self.avatar_id,
+                (t_first - t_prod) * 1000.0 if t_first else 0.0,
+                (time.perf_counter() - t_prod) * 1000.0,
+                pushed,
             )
             logger.info(
                 "avatar %s talking segment queued: %d frames (%.1fs speech)",
